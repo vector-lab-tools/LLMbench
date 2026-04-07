@@ -89,9 +89,6 @@ export function ProviderSettingsProvider({
   const getSlotLabel = useCallback(
     (panel: "A" | "B") => {
       const slot = slots[panel];
-      if (!slot.apiKey && slot.provider !== "ollama") {
-        return "Not configured";
-      }
       return getModelDisplayName(slot.provider, slot.customModelId || slot.model);
     },
     [slots]

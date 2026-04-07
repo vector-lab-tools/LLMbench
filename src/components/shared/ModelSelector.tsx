@@ -17,12 +17,9 @@ export function ModelSelector({ value, onChange, disabled }: ModelSelectorProps)
   const slotAConfigured = isSlotConfigured("A");
   const slotBConfigured = isSlotConfigured("B");
 
-  const labelA = slotAConfigured ? getSlotLabel("A") : "Not configured";
-  const labelB = slotBConfigured ? getSlotLabel("B") : "Not configured";
-
   const options: { id: PanelSelection; label: string; available: boolean }[] = [
-    { id: "A", label: `A: ${labelA}`, available: slotAConfigured },
-    { id: "B", label: `B: ${labelB}`, available: slotBConfigured },
+    { id: "A", label: `A: ${getSlotLabel("A")}`, available: slotAConfigured },
+    { id: "B", label: `B: ${getSlotLabel("B")}`, available: slotBConfigured },
     { id: "both", label: "Both", available: slotAConfigured || slotBConfigured },
   ];
 

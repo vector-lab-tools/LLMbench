@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { computeTokenEntropy } from "@/lib/metrics/text-metrics";
 import type { TokenLogprob } from "@/types/analysis";
 
 interface TokenHeatmapProps {
@@ -10,8 +11,6 @@ interface TokenHeatmapProps {
 }
 
 function logprobToColor(logprob: number, isDark: boolean): string {
-  // logprob is negative; closer to 0 = higher confidence
-  // Map to a 0-1 scale where 0 = certain, 1 = very uncertain
   const uncertainty = Math.min(1, Math.abs(logprob) / 5);
 
   if (isDark) {
@@ -51,6 +50,8 @@ export function TokenHeatmap({ tokens, isDark }: TokenHeatmapProps) {
 
   const activeIndex = pinnedIndex ?? hoveredIndex;
 
+  const activeToken = activeIndex !== null ? tokens[activeIndex] : null;
+
   return (
     <div className="space-y-4">
       {/* Heatmap text */}
@@ -67,58 +68,121 @@ export function TokenHeatmap({ tokens, isDark }: TokenHeatmapProps) {
             onMouseEnter={() => setHoveredIndex(i)}
             onMouseLeave={() => setHoveredIndex(null)}
             onClick={() => setPinnedIndex(pinnedIndex === i ? null : i)}
-            title={`p=${Math.exp(token.logprob).toFixed(4)} (logprob=${token.logprob.toFixed(3)})`}
           >
             {token.token}
           </span>
         ))}
       </div>
 
-      {/* Tooltip/detail for active token */}
-      {activeIndex !== null && tokens[activeIndex] && (
+      {/* Detail panel for active token */}
+      {activeToken !== null && activeIndex !== null && (
         <div className="bg-card border border-parchment rounded-sm p-4 shadow-sm">
-          <div className="flex items-center gap-4 mb-3">
-            <div>
-              <span className="text-caption text-muted-foreground">Token</span>
-              <div className="text-body-sm font-mono font-bold text-foreground">
-                &ldquo;{tokens[activeIndex].token}&rdquo;
-              </div>
-            </div>
-            <div>
-              <span className="text-caption text-muted-foreground">Probability</span>
-              <div className="text-body-sm font-mono text-foreground tabular-nums">
-                {(Math.exp(tokens[activeIndex].logprob) * 100).toFixed(2)}%
-              </div>
-            </div>
-            <div>
-              <span className="text-caption text-muted-foreground">Log Prob</span>
-              <div className="text-body-sm font-mono text-foreground tabular-nums">
-                {tokens[activeIndex].logprob.toFixed(4)}
-              </div>
-            </div>
-            <div>
-              <span className="text-caption text-muted-foreground">Position</span>
-              <div className="text-body-sm font-mono text-foreground tabular-nums">
-                {activeIndex + 1} / {tokens.length}
-              </div>
-            </div>
+          {/* Header row: position, entropy, context */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 pb-3 border-b border-parchment/50">
+            <span className="text-caption text-muted-foreground">
+              Position <span className="font-mono text-foreground">{activeIndex + 1}</span>
+              <span className="text-muted-foreground/60"> / {tokens.length}</span>
+            </span>
+            <span className="text-caption text-muted-foreground">
+              Entropy:{" "}
+              <span className="font-mono text-foreground">
+                {computeTokenEntropy(activeToken).toFixed(3)} bits
+              </span>
+            </span>
+            <span className="text-caption text-muted-foreground">
+              Chosen probability:{" "}
+              <span className="font-mono text-foreground">
+                {(Math.exp(activeToken.logprob) * 100).toFixed(2)}%
+              </span>
+            </span>
+            {/* Context: up to 3 tokens before and after */}
+            {(activeIndex > 0 || activeIndex < tokens.length - 1) && (
+              <span className="text-caption text-muted-foreground font-mono">
+                …{tokens.slice(Math.max(0, activeIndex - 3), activeIndex).map(t => t.token).join("")}
+                <span className="text-burgundy font-bold not-italic">[{activeToken.token}]</span>
+                {tokens.slice(activeIndex + 1, activeIndex + 4).map(t => t.token).join("")}…
+              </span>
+            )}
           </div>
 
-          {/* Top alternatives */}
-          {tokens[activeIndex].topAlternatives.length > 0 && (
-            <div>
-              <span className="text-caption text-muted-foreground">Alternative tokens (the dice not rolled):</span>
-              <div className="mt-1 flex flex-wrap gap-2">
-                {tokens[activeIndex].topAlternatives.map((alt, j) => (
-                  <div key={j} className="bg-muted/50 rounded px-2 py-1 text-caption">
-                    <span className="font-mono text-foreground">&ldquo;{alt.token}&rdquo;</span>
-                    <span className="text-muted-foreground ml-1.5">
-                      {(Math.exp(alt.logprob) * 100).toFixed(2)}%
-                    </span>
-                  </div>
-                ))}
-              </div>
+          {/* Probability bar chart */}
+          <div className="space-y-1.5">
+            <div className="text-caption text-muted-foreground mb-2">
+              Probability distribution — tokens not rolled:
             </div>
+            {/* Chosen token first */}
+            {(() => {
+              const chosen = { token: activeToken.token, logprob: activeToken.logprob };
+              const alternatives = activeToken.topAlternatives;
+              const allEntries = [chosen, ...alternatives];
+              const maxProb = Math.exp(chosen.logprob); // chosen is always highest
+              const totalShown = allEntries.reduce((s, e) => s + Math.exp(e.logprob), 0);
+              const otherPct = Math.max(0, 100 - totalShown * 100);
+
+              return (
+                <>
+                  {allEntries.map((entry, j) => {
+                    const prob = Math.exp(entry.logprob);
+                    const barWidth = maxProb > 0 ? (prob / maxProb) * 100 : 0;
+                    const isChosen = j === 0;
+                    return (
+                      <div key={j} className={cn(
+                        "flex items-center gap-2 rounded-sm px-2 py-1",
+                        isChosen ? "bg-burgundy/8" : "hover:bg-cream/50"
+                      )}>
+                        <span className="text-caption text-muted-foreground w-4 tabular-nums text-right shrink-0">
+                          {j + 1}
+                        </span>
+                        <span className={cn(
+                          "text-caption font-mono w-24 truncate shrink-0",
+                          isChosen ? "text-burgundy font-semibold" : "text-foreground"
+                        )}>
+                          &ldquo;{entry.token || "\\n"}&rdquo;
+                        </span>
+                        {/* Bar */}
+                        <div className="flex-1 h-3 bg-muted/40 rounded-full overflow-hidden">
+                          <div
+                            className={cn(
+                              "h-full rounded-full transition-all",
+                              isChosen ? "bg-burgundy/60" : "bg-muted-foreground/30"
+                            )}
+                            style={{ width: `${barWidth}%` }}
+                          />
+                        </div>
+                        <span className="text-caption tabular-nums text-muted-foreground w-12 text-right shrink-0">
+                          {(prob * 100).toFixed(2)}%
+                        </span>
+                        {isChosen && (
+                          <span className="text-[10px] text-burgundy/70 shrink-0">chosen</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {otherPct > 0.5 && (
+                    <div className="flex items-center gap-2 px-2 py-1 text-caption text-muted-foreground/60">
+                      <span className="w-4 shrink-0" />
+                      <span className="font-mono w-24 shrink-0 italic">other</span>
+                      <div className="flex-1 h-3 bg-muted/20 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-muted-foreground/15"
+                          style={{ width: `${(otherPct / 100 / maxProb) * 100}%` }}
+                        />
+                      </div>
+                      <span className="w-12 text-right shrink-0 tabular-nums">
+                        {otherPct.toFixed(1)}%
+                      </span>
+                      <span className="w-12 shrink-0" />
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+
+          {pinnedIndex !== null && (
+            <p className="text-[10px] text-muted-foreground/60 mt-3">
+              Click the token again to unpin, or click another token to switch.
+            </p>
           )}
         </div>
       )}
@@ -138,6 +202,9 @@ export function TokenHeatmap({ tokens, isDark }: TokenHeatmapProps) {
           <span className={cn("w-4 h-3 rounded-sm", isDark ? "bg-red-900/60" : "bg-red-200")} />
           <span>Low</span>
         </div>
+        <span className="text-muted-foreground/60 ml-2">
+          Click a token to pin its probability distribution
+        </span>
       </div>
     </div>
   );

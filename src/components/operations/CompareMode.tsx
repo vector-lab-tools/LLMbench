@@ -805,7 +805,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
       </div>
 
       {/* Dual panels */}
-      <div className="flex-1 flex flex-col md:flex-row min-h-0">
+      <div className="flex-1 flex flex-col md:flex-row min-h-[180px]">
         <AnnotatedPanelDisplay
           panel="A"
           result={resultA}
@@ -850,7 +850,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
         const metricsB = computeTextMetrics(textB);
         const overlap = computeWordOverlap(textA, textB);
         return (
-          <div className="border-t border-border">
+          <div className="border-t border-border shrink-0 max-h-[45vh] overflow-y-auto">
             <DeepDive label="Deep Dive" summary={`${overlap.shared.length} shared words, ${(overlap.jaccardSimilarity * 100).toFixed(0)}% Jaccard`}>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
                 <MetricBox label="Jaccard Similarity" value={`${(overlap.jaccardSimilarity * 100).toFixed(1)}%`} />
