@@ -2,7 +2,7 @@
 
 **A comparative close reading workbench for Large Language Model outputs**
 
-LLMbench is a web-based research tool that enables scholars and researchers to subject AI-generated text to the kind of sustained hermeneutic scrutiny that has long been applied to literary, philosophical, and computational texts. It sends a single prompt to two LLMs simultaneously, displays their responses in side-by-side annotatable panels, and provides a layered annotation system for building interpretive readings across both outputs.
+LLMbench is a web-based research tool that enables scholars and researchers to subject AI-generated text to the kind of sustained hermeneutic scrutiny that has long been applied to literary, philosophical, and computational texts. It sends prompts to one or two LLMs, displays their responses in annotatable panels, and provides analytical modes for empirically investigating model behaviour: stochastic variation, prompt sensitivity, temperature gradients, token probabilities, and cross-model divergence.
 
 The tool is designed for humanistic inquiry into LLM behaviour, not engineering evaluation. Where existing comparison tools (Google PAIR's LLM Comparator, Chatbot Arena, LMSYS) measure win rates, safety metrics, and benchmark performance, LLMbench treats the outputs as texts to be read, annotated, and interpreted.
 
@@ -18,21 +18,41 @@ LLMbench emerges from the convergence of three research programmes.
 
 ## What It Does
 
+### Compare Mode
+
 - **Dual-panel comparison.** Send a prompt to two LLM providers simultaneously. Responses appear in side-by-side panels with full provenance metadata (model name, temperature, response time, word count).
 
 - **Six-type annotation system.** Each panel supports independent inline annotations with typed categories: observation, question, metaphor, pattern, context, and critique. Annotations appear as colour-coded inline widgets with gutter markers, adapted from the CCS-WB annotation infrastructure.
 
-- **Display controls.** Configurable prose font (Source Serif 4, Libre Baskerville, Inter, System Default), font size, annotation brightness, line highlighting intensity, and dark mode.
+- **Visual word diff.** Toggle a word-level diff view that highlights textual differences between the two outputs with synchronised scrolling.
 
-- **Multi-provider support.** Anthropic (Claude), OpenAI (GPT), Google (Gemini), Ollama (local models), and any OpenAI-compatible endpoint. API keys are stored in the browser only, never sent to a server.
+- **Export.** Comparisons export as structured JSON, formatted plain text, or side-by-side landscape PDF with coloured annotation badges and optional diff highlighting.
 
-- **Visual word diff.** Toggle a word-level diff view that highlights textual differences between the two outputs. Unique words are colour-coded (red for Panel A, green for Panel B) with synchronised scrolling and line numbers. Diff highlighting carries through to PDF export.
+### Analyse Modes
 
-- **Export.** Comparisons export as structured JSON (with word counts), formatted plain text, or side-by-side landscape PDF with coloured annotation badges and optional diff highlighting.
+- **Stochastic Variation.** Sends the same prompt to the same model(s) multiple times to empirically demonstrate how identical inputs produce different outputs through probabilistic sampling ("prompt salting"). Configurable run count (3-20). Reports word count variation, vocabulary diversity, and pairwise word overlap across runs.
 
-- **Dynamic model configuration.** Available models are defined in a [`models.md`](public/models.md) file in the public directory. Add new models by editing the Markdown file and refreshing the browser, with no rebuild required. Every provider includes a "Custom Model" option for entering any model ID directly.
+- **Temperature Gradient.** Runs the same prompt across a range of temperature settings (0.0, 0.3, 0.7, 1.0, 1.5, 2.0) to visualise how sampling temperature affects output determinism and creativity.
 
-- **Local persistence.** Comparisons save to browser localStorage. Name, load, and manage multiple comparison sessions.
+- **Prompt Sensitivity.** Tests how minor prompt changes affect model outputs. Auto-generates variations (adding "please", changing punctuation, rephrasing as question, adding "step by step", etc.) with support for custom user-defined variations.
+
+- **Token Probabilities.** Visualises per-token probability distributions with a colour-coded heatmap. Hover over tokens to see the alternative choices the model considered at each position. Includes Deep Dive token table with CSV export. Supported by Google Gemini and OpenAI.
+
+- **Cross-Model Divergence.** Quantitative comparison with Jaccard similarity, vocabulary overlap analysis, structural metrics, and response time comparison.
+
+### General Features
+
+- **Single or dual model.** All modes work with one or two models. Configure just Panel A for single-model analysis, or both panels for side-by-side comparison.
+
+- **Multi-provider support.** Anthropic (Claude), OpenAI (GPT), Google (Gemini), Ollama (local models), and any OpenAI-compatible endpoint. API keys are stored persistently in the browser, never sent to a server.
+
+- **Deep Dive.** Every result card has a collapsible Deep Dive panel revealing detailed analysis: full text, token tables, vocabulary comparisons, and CSV export.
+
+- **Display controls.** Configurable prose font, font size, annotation brightness, line highlighting intensity, and dark mode.
+
+- **Dynamic model configuration.** Available models are defined in a [`models.md`](public/models.md) file. Add new models by editing the Markdown file and refreshing, with no rebuild required.
+
+- **Local persistence.** Comparisons and API keys save to browser localStorage.
 
 ## Design Rationale
 
@@ -80,25 +100,37 @@ Open [http://localhost:3000](http://localhost:3000). Click the gear icon to conf
 
 ```
 public/
-  models.md              # Editable model definitions (no rebuild needed)
+  models.md                    # Editable model definitions (no rebuild needed)
 src/
   app/
-    api/generate/        # Fan-out API route (dispatches to both providers)
-    page.tsx             # Main workspace UI
+    api/generate/              # Fan-out API route (dual-panel comparison)
+    api/analyse/
+      stochastic/              # N-run stochastic variation endpoint
+      temperature/             # Temperature gradient endpoint
+      sensitivity/             # Prompt sensitivity endpoint
+      logprobs/                # Token probabilities endpoint (Google/OpenAI)
+      divergence/              # Quantitative divergence endpoint
+    page.tsx                   # Mode-switching shell
   components/
-    annotations/         # CodeMirror annotation system (adapted from CCS-WB)
-    settings/            # Provider configuration modal
-    workspace/           # ProsePanel, DiffPanel, theme
-  context/               # Provider settings (localStorage-persisted)
-  hooks/                 # Annotations, local storage, prompt dispatch
+    layout/TabNav.tsx          # Two-tier tab navigation (Compare / Analyse)
+    operations/                # Mode components (CompareMode, StochasticMode, etc.)
+    annotations/               # CodeMirror annotation system (adapted from CCS-WB)
+    settings/                  # Provider configuration modal
+    shared/                    # DeepDive, ResultCard, MetricBox
+    viz/                       # TokenHeatmap (logprobs visualisation)
+    workspace/                 # ProsePanel, DiffPanel, theme
+  context/                     # Provider settings (localStorage-persisted)
+  hooks/                       # Annotations, local storage, prompt dispatch
   lib/
-    ai/                  # Unified AI client, provider configs, model loader
-    diff/                # Word-level diff computation
-    export/              # JSON, text, PDF export
-  types/                 # TypeScript types for annotations, comparisons, settings
+    ai/                        # Unified AI client, provider configs, model loader
+    diff/                      # Word-level diff computation
+    export/                    # JSON, text, PDF export
+    metrics/                   # Text metrics (word overlap, Jaccard, entropy)
+    prompts/                   # Prompt variation generator
+  types/                       # TypeScript types for modes, analysis, annotations
 ```
 
-The fan-out API route receives a prompt and dispatches it simultaneously to both configured providers using `Promise.allSettled`, ensuring that a failure in one provider does not block the other. Each response carries provenance metadata (model identifier, temperature, response time) that is displayed in the panel header and preserved in exports.
+The architecture follows the Manifold Atlas pattern: a thin `page.tsx` manages mode state and conditionally renders standalone mode components. Each analysis mode dispatches to its own API route, which handles one or both provider slots in parallel using `Promise.allSettled`.
 
 ## Tech Stack
 
@@ -106,6 +138,7 @@ The fan-out API route receives a prompt and dispatches it simultaneously to both
 - **CodeMirror 6** for prose display and annotation
 - **Tailwind CSS v3** with an editorial colour palette (ivory, cream, parchment, burgundy, gold)
 - **Vercel AI SDK** with Anthropic, OpenAI, and Google providers
+- **@google/generative-ai** for token probability (logprobs) support
 - **jsPDF** for PDF export
 - **diff** for word-level text comparison
 - **localStorage** for persistence (Supabase preparation layer exists for future cloud sync)
@@ -113,6 +146,7 @@ The fan-out API route receives a prompt and dispatches it simultaneously to both
 ## Roadmap
 
 - [ ] Cross-panel annotation linking (connecting annotations across Panel A and Panel B)
+- [ ] Embedding-based semantic similarity in divergence mode
 - [ ] Prompt history browser
 - [ ] Supabase cloud persistence and sharing
 - [ ] Streaming responses

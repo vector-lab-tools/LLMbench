@@ -1,992 +1,184 @@
 "use client";
 
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import {
-  Send,
-  Settings,
-  SplitSquareHorizontal,
-  Loader2,
-  AlertCircle,
-  Clock,
-  Cpu,
-  MessageSquarePlus,
-  Save,
-  Download,
-  FolderOpen,
-  FilePlus,
-  Check,
-  Trash2,
-  ChevronDown,
-  SlidersHorizontal,
-  Minus,
-  Plus,
-  FileJson,
-  FileText,
-  FileType,
-  X,
-  Moon,
-  Sun,
-  GitCompareArrows,
-} from "lucide-react";
+import { useState } from "react";
+import { SplitSquareHorizontal, Settings, HelpCircle, X } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
-import {
-  usePromptDispatch,
-  isPanelOutput,
-  type PanelResult,
-} from "@/hooks/usePromptDispatch";
-import { useAnnotations } from "@/hooks/useAnnotations";
-import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { TabNav, type TabId } from "@/components/layout/TabNav";
 import ProviderSettings from "@/components/settings/ProviderSettings";
-import { ProsePanel } from "@/components/workspace/ProsePanel";
-import {
-  FONT_OPTIONS,
-  type FontOptionId,
-  getFontCss,
-} from "@/components/workspace/cm-theme";
-import {
-  exportAsJSON,
-  exportAsText,
-  exportAsPDF,
-  downloadFile,
-  type PdfDiffData,
-} from "@/lib/export/comparison-export";
-import { DiffRenderedText } from "@/components/workspace/DiffPanel";
-import { computeWordDiff, type DiffSegment } from "@/lib/diff/word-diff";
-import {
-  DEFAULT_ANNOTATION_DISPLAY_SETTINGS,
-  type AnnotationDisplaySettings,
-  type AnnotationBrightness,
-  type LineHighlightIntensity,
-} from "@/components/annotations/cm-annotations";
-import type {
-  LineAnnotationType,
-  SavedComparison,
-  ComparisonOutput,
-} from "@/types";
+import CompareMode from "@/components/operations/CompareMode";
+import StochasticMode from "@/components/operations/StochasticMode";
+import TemperatureMode from "@/components/operations/TemperatureMode";
+import SensitivityMode from "@/components/operations/SensitivityMode";
+import LogprobsMode from "@/components/operations/LogprobsMode";
+import DivergenceMode from "@/components/operations/DivergenceMode";
+import { APP_VERSION } from "@/lib/version";
 
-// ---------- helpers ----------
-
-function panelResultToOutput(
-  result: PanelResult | null
-): ComparisonOutput | null {
-  if (!result) return null;
-  if (isPanelOutput(result)) {
-    return { text: result.text, provenance: result.provenance };
-  }
-  return { text: "", provenance: result.provenance, error: result.error };
-}
-
-function outputToPanelResult(
-  output: ComparisonOutput | null
-): PanelResult | null {
-  if (!output) return null;
-  if (output.error) {
-    return { error: output.error, provenance: output.provenance };
-  }
-  return { text: output.text, provenance: output.provenance };
-}
-
-// ---------- panel display ----------
-
-type AnnotationState = ReturnType<typeof useAnnotations>;
-
-const PANEL_TINT = {
-  A: "bg-blue-50/30 dark:bg-blue-950/10",
-  B: "bg-amber-50/30 dark:bg-amber-950/10",
-} as const;
-
-const PANEL_HEADER_TINT = {
-  A: "bg-blue-50/50 dark:bg-blue-950/20",
-  B: "bg-amber-50/50 dark:bg-amber-950/20",
-} as const;
-
-function wordCount(text: string): number {
-  return text.trim().split(/\s+/).filter(Boolean).length;
-}
-
-function AnnotatedPanelDisplay({
-  panel,
-  result,
-  isLoading,
-  slotLabel,
-  ann,
-  fontSize,
-  displaySettings,
-  proseFontFamily,
-  annotationFontFamily,
-  annotationFontSize,
-  isDark,
-  diffSegments,
-  diffUniqueCount,
-  bodyScrollRef,
-}: {
-  panel: "A" | "B";
-  result: PanelResult | null;
-  isLoading: boolean;
-  slotLabel: string;
-  ann: AnnotationState;
-  fontSize: number;
-  displaySettings: AnnotationDisplaySettings;
-  proseFontFamily: string;
-  annotationFontFamily: string;
-  annotationFontSize: number;
-  isDark: boolean;
-  diffSegments?: DiffSegment[];
-  diffUniqueCount?: number;
-  bodyScrollRef?: React.RefObject<HTMLDivElement | null>;
-}) {
-  const editCallbacks = useMemo(
-    () => ({
-      onSubmit: (type: LineAnnotationType, content: string) =>
-        ann.submitAnnotation(type, content),
-      onCancel: ann.cancelEdit,
-    }),
-    [ann.submitAnnotation, ann.cancelEdit]
-  );
-
-  const provenance = result?.provenance ?? null;
-  let outputText: string | null = null;
-  let errorText: string | null = null;
-  if (result) {
-    if (isPanelOutput(result)) {
-      outputText = result.text;
-    } else {
-      errorText = result.error;
-    }
-  }
-  const wc = outputText !== null ? wordCount(outputText) : null;
-
-  return (
-    <div className={`flex-1 flex flex-col border-border ${PANEL_TINT[panel]}`}>
-      {/* Header - always visible */}
-      <div className={`px-4 py-2 border-b border-border ${PANEL_HEADER_TINT[panel]} flex items-center gap-3`}>
-        {errorText && <AlertCircle className="w-3.5 h-3.5 text-red-500" />}
-        {isLoading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
-        <span className="text-caption font-medium text-foreground">
-          Panel {panel}
-        </span>
-        {provenance ? (
-          <>
-            <span className="text-caption text-burgundy font-medium">
-              {provenance.modelDisplayName}
-            </span>
-            {outputText !== null && (
-              <>
-                <div className="flex items-center gap-1 text-caption text-muted-foreground">
-                  <Cpu className="w-3 h-3" />
-                  <span>t={provenance.temperature.toFixed(1)}</span>
-                </div>
-                <div className="flex items-center gap-1 text-caption text-muted-foreground">
-                  <Clock className="w-3 h-3" />
-                  <span>
-                    {(provenance.responseTimeMs / 1000).toFixed(1)}s
-                  </span>
-                </div>
-                <span className="text-caption text-muted-foreground">
-                  {wc!.toLocaleString()} words
-                </span>
-                {diffSegments && diffUniqueCount !== undefined && (
-                  <div className="flex items-center gap-1 text-caption">
-                    <span className={`inline-block w-2 h-2 rounded-sm ${
-                      panel === "A"
-                        ? "bg-red-300 dark:bg-red-700"
-                        : "bg-green-300 dark:bg-green-700"
-                    }`} />
-                    <span className={
-                      panel === "A"
-                        ? "text-red-600 dark:text-red-400"
-                        : "text-green-600 dark:text-green-400"
-                    }>
-                      {diffUniqueCount} unique
-                    </span>
-                  </div>
-                )}
-              </>
-            )}
-          </>
-        ) : (
-          <span className="text-caption text-muted-foreground italic">
-            {slotLabel || "No LLM set"}
-          </span>
-        )}
-        {ann.annotations.length > 0 && (
-          <div className="flex items-center gap-1 text-caption text-muted-foreground ml-auto">
-            <MessageSquarePlus className="w-3 h-3" />
-            <span>{ann.annotations.length}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Body */}
-      {isLoading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center text-muted-foreground">
-            <Loader2 className="w-8 h-8 mx-auto mb-3 animate-spin opacity-40" />
-            <p className="text-body-sm">Generating...</p>
-          </div>
-        </div>
-      ) : errorText ? (
-        <div className="flex-1 flex items-center justify-center p-6">
-          <div className="text-center text-red-500/80 max-w-md">
-            <AlertCircle className="w-8 h-8 mx-auto mb-3 opacity-60" />
-            <p className="text-body-sm">{errorText}</p>
-          </div>
-        </div>
-      ) : diffSegments && outputText !== null ? (
-        <div ref={bodyScrollRef} className="flex-1 min-h-0 overflow-y-auto">
-          <DiffRenderedText
-            segments={diffSegments}
-            fontSize={fontSize}
-            fontFamily={proseFontFamily}
-          />
-        </div>
-      ) : outputText !== null ? (
-        <div className="flex-1 min-h-0">
-          <ProsePanel
-            value={outputText}
-            fontSize={fontSize}
-            isDark={isDark}
-            proseFontFamily={proseFontFamily}
-            annotationFontFamily={annotationFontFamily}
-            annotationFontSize={annotationFontSize}
-            annotations={ann.annotations}
-            onLineClick={ann.startAnnotation}
-            onEditAnnotation={ann.startEditAnnotation}
-            onDeleteAnnotation={ann.deleteAnnotation}
-            inlineEditState={ann.editState}
-            inlineEditCallbacks={editCallbacks}
-            annotationDisplaySettings={displaySettings}
-          />
-        </div>
-      ) : (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center text-muted-foreground">
-            <SplitSquareHorizontal className="w-12 h-12 mx-auto mb-4 opacity-20" />
-            <p className="text-body-sm">
-              Send a prompt to generate output.
-            </p>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------- main page ----------
+const MODE_LABELS: Record<TabId, string> = {
+  compare: "Dual Panel",
+  stochastic: "Stochastic Variation",
+  sensitivity: "Prompt Sensitivity",
+  temperature: "Temperature Gradient",
+  logprobs: "Token Probabilities",
+  divergence: "Cross-Model Divergence",
+};
 
 export default function Home() {
-  const [prompt, setPrompt] = useState("");
-  const { getSlotLabel, setShowSettings } = useProviderSettings();
-  const {
-    isLoading,
-    loadingA,
-    loadingB,
-    resultA,
-    resultB,
-    error,
-    dispatch,
-    reset,
-    loadState,
-  } = usePromptDispatch();
-
-  // Lifted annotation state (parent owns so we can save/load/export)
-  const annA = useAnnotations("panel-A");
-  const annB = useAnnotations("panel-B");
-
-  // Persistence
-  const { comparisons, saveComparison, deleteComparison } = useLocalStorage();
-
-  // Comparison metadata
-  const [comparisonId, setComparisonId] = useState<string | null>(null);
-  const [comparisonName, setComparisonName] = useState("Untitled Comparison");
-  const [comparisonCreatedAt, setComparisonCreatedAt] = useState<string | null>(
-    null
-  );
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saved">("idle");
-
-  // Display settings
-  const [proseFontSize, setProseFontSize] = useState(14);
-  const [annDisplaySettings, setAnnDisplaySettings] =
-    useState<AnnotationDisplaySettings>(DEFAULT_ANNOTATION_DISPLAY_SETTINGS);
-  const [proseFontFamily, setProseFontFamily] = useState<FontOptionId>("source-serif");
-  const [annotationFontFamily, setAnnotationFontFamily] = useState<FontOptionId>("system");
-  const [annotationFontSize, setAnnotationFontSize] = useState(11);
+  const [activeTab, setActiveTab] = useState<TabId>("compare");
   const [isDark, setIsDark] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const { setShowSettings } = useProviderSettings();
 
-  // Dropdown / modal visibility
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-  const [showDisplaySettings, setShowDisplaySettings] = useState(false);
-  const [showDiff, setShowDiff] = useState(false);
-
-  const hasContent = resultA !== null || resultB !== null;
-  const hasBothOutputs =
-    resultA !== null &&
-    isPanelOutput(resultA) &&
-    resultB !== null &&
-    isPanelOutput(resultB);
-
-  // Word diff computation
-  const diffResult = useMemo(() => {
-    if (!showDiff || !hasBothOutputs) return null;
-    return computeWordDiff(
-      (resultA as { text: string }).text,
-      (resultB as { text: string }).text
-    );
-  }, [showDiff, hasBothOutputs, resultA, resultB]);
-
-  const diffUniqueA = diffResult
-    ? diffResult.segmentsA.filter((s) => s.type === "removed").length
-    : 0;
-  const diffUniqueB = diffResult
-    ? diffResult.segmentsB.filter((s) => s.type === "added").length
-    : 0;
-
-  // Synchronised scrolling for diff mode
-  const diffScrollARef = useRef<HTMLDivElement>(null);
-  const diffScrollBRef = useRef<HTMLDivElement>(null);
-  const diffSyncing = useRef(false);
-
-  useEffect(() => {
-    if (!showDiff) return;
-    const elA = diffScrollARef.current;
-    const elB = diffScrollBRef.current;
-    if (!elA || !elB) return;
-
-    function handleScrollA() {
-      if (diffSyncing.current) return;
-      diffSyncing.current = true;
-      const ratio = elA!.scrollTop / (elA!.scrollHeight - elA!.clientHeight || 1);
-      elB!.scrollTop = ratio * (elB!.scrollHeight - elB!.clientHeight || 1);
-      diffSyncing.current = false;
-    }
-    function handleScrollB() {
-      if (diffSyncing.current) return;
-      diffSyncing.current = true;
-      const ratio = elB!.scrollTop / (elB!.scrollHeight - elB!.clientHeight || 1);
-      elA!.scrollTop = ratio * (elA!.scrollHeight - elA!.clientHeight || 1);
-      diffSyncing.current = false;
-    }
-
-    elA.addEventListener("scroll", handleScrollA);
-    elB.addEventListener("scroll", handleScrollB);
-    return () => {
-      elA.removeEventListener("scroll", handleScrollA);
-      elB.removeEventListener("scroll", handleScrollB);
-    };
-  }, [showDiff]);
-
-  // Click-outside handling for dropdowns
-  const historyRef = useRef<HTMLDivElement>(null);
-  const displaySettingsRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (
-        historyRef.current &&
-        !historyRef.current.contains(e.target as Node)
-      ) {
-        setShowHistory(false);
-      }
-      if (
-        displaySettingsRef.current &&
-        !displaySettingsRef.current.contains(e.target as Node)
-      ) {
-        setShowDisplaySettings(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // Build a SavedComparison from current state
-  const buildComparison = useCallback((): SavedComparison => {
-    const now = new Date().toISOString();
-    const id = comparisonId ?? crypto.randomUUID();
-    return {
-      id,
-      name: comparisonName,
-      prompt: prompt || "",
-      outputA: panelResultToOutput(resultA),
-      outputB: panelResultToOutput(resultB),
-      annotationsA: annA.annotations,
-      annotationsB: annB.annotations,
-      createdAt: comparisonCreatedAt ?? now,
-      updatedAt: now,
-    };
-  }, [
-    comparisonId,
-    comparisonName,
-    comparisonCreatedAt,
-    prompt,
-    resultA,
-    resultB,
-    annA.annotations,
-    annB.annotations,
-  ]);
-
-  // ---- actions ----
-
-  const handleSend = () => {
-    if (!prompt.trim() || isLoading) return;
-    // New prompt → new comparison context
-    setComparisonId(null);
-    setComparisonCreatedAt(null);
-    annA.setAllAnnotations([]);
-    annB.setAllAnnotations([]);
-    dispatch(prompt);
+  const toggleDark = () => {
+    const next = !isDark;
+    setIsDark(next);
+    document.documentElement.classList.toggle("dark", next);
   };
-
-  const handleSave = useCallback(() => {
-    const comparison = buildComparison();
-    if (!comparisonId) {
-      setComparisonId(comparison.id);
-      setComparisonCreatedAt(comparison.createdAt);
-    }
-    saveComparison(comparison);
-    setSaveStatus("saved");
-    setTimeout(() => setSaveStatus("idle"), 2000);
-  }, [buildComparison, comparisonId, saveComparison]);
-
-  const handleLoad = useCallback(
-    (comparison: SavedComparison) => {
-      setComparisonId(comparison.id);
-      setComparisonName(comparison.name);
-      setComparisonCreatedAt(comparison.createdAt);
-      setPrompt(comparison.prompt);
-      loadState(
-        comparison.prompt,
-        outputToPanelResult(comparison.outputA),
-        outputToPanelResult(comparison.outputB)
-      );
-      annA.setAllAnnotations(comparison.annotationsA);
-      annB.setAllAnnotations(comparison.annotationsB);
-      setShowHistory(false);
-      setSaveStatus("idle");
-    },
-    [loadState, annA, annB]
-  );
-
-  const handleNew = useCallback(() => {
-    setComparisonId(null);
-    setComparisonName("Untitled Comparison");
-    setComparisonCreatedAt(null);
-    setPrompt("");
-    reset();
-    annA.setAllAnnotations([]);
-    annB.setAllAnnotations([]);
-    setSaveStatus("idle");
-  }, [reset, annA, annB]);
-
-  const safeFilename = useCallback(
-    (ext: string) =>
-      `${comparisonName.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.${ext}`,
-    [comparisonName]
-  );
-
-  const handleExportJSON = useCallback(() => {
-    const comparison = buildComparison();
-    downloadFile(exportAsJSON(comparison), safeFilename("json"), "application/json");
-    setShowExportModal(false);
-  }, [buildComparison, safeFilename]);
-
-  const handleExportText = useCallback(() => {
-    const comparison = buildComparison();
-    downloadFile(exportAsText(comparison), safeFilename("txt"), "text/plain");
-    setShowExportModal(false);
-  }, [buildComparison, safeFilename]);
-
-  const handleExportPDF = useCallback(() => {
-    const comparison = buildComparison();
-    const pdfDiff: PdfDiffData | undefined = diffResult
-      ? { segmentsA: diffResult.segmentsA, segmentsB: diffResult.segmentsB }
-      : undefined;
-    exportAsPDF(comparison, pdfDiff);
-    setShowExportModal(false);
-  }, [buildComparison, diffResult]);
-
-  const handleDeleteSaved = useCallback(
-    (id: string) => {
-      deleteComparison(id);
-      if (comparisonId === id) {
-        setComparisonId(null);
-      }
-    },
-    [deleteComparison, comparisonId]
-  );
 
   return (
     <div className="flex flex-col h-screen bg-background">
-      {/* Integrated header + toolbar */}
-      <header className="px-4 py-2 border-b border-border bg-cream/30 flex flex-wrap items-center gap-2 md:gap-3">
-        <div className="flex items-center gap-2 mr-1">
+      {/* Header */}
+      <header className="px-4 py-2 border-b border-border bg-cream/30 flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <SplitSquareHorizontal className="w-4 h-4 text-burgundy" />
           <h1 className="font-display text-body-sm font-bold text-foreground">
             LLMbench
           </h1>
         </div>
+        <div className="h-4 w-px bg-parchment" />
+        <span className="text-caption text-muted-foreground">
+          {MODE_LABELS[activeTab]}
+        </span>
+        <div className="flex-1" />
+        <button
+          onClick={() => setShowHelp(true)}
+          className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5"
+          title="About LLMbench"
+        >
+          <HelpCircle className="w-3.5 h-3.5" />
+          <span>Help</span>
+        </button>
+        <button
+          onClick={() => setShowSettings(true)}
+          className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5"
+          title="Provider settings"
+        >
+          <Settings className="w-3.5 h-3.5" />
+          <span>Settings</span>
+        </button>
+      </header>
 
-        <div className="h-4 w-px bg-parchment mx-0.5" />
+      {/* Tab navigation */}
+      <TabNav activeTab={activeTab} onTabChange={setActiveTab} />
 
-        {/* Comparison name */}
-        <input
-            type="text"
-            value={comparisonName}
-            onChange={(e) => {
-              setComparisonName(e.target.value);
-              setSaveStatus("idle");
-            }}
-            className="text-body-sm bg-transparent border-b border-transparent hover:border-border focus:border-burgundy focus:outline-none px-1 py-0.5 text-foreground min-w-[200px]"
-            placeholder="Comparison name..."
-          />
-
-          {/* Save */}
-          <button
-            onClick={handleSave}
-            disabled={!hasContent}
-            className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Save comparison"
-          >
-            {saveStatus === "saved" ? (
-              <Check className="w-3.5 h-3.5 text-green-500" />
-            ) : (
-              <Save className="w-3.5 h-3.5" />
-            )}
-            <span>{saveStatus === "saved" ? "Saved" : "Save"}</span>
-          </button>
-
-          {/* New */}
-          <button
-            onClick={handleNew}
-            className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5"
-            title="New comparison"
-          >
-            <FilePlus className="w-3.5 h-3.5" />
-            <span>New</span>
-          </button>
-
-          <div className="h-4 w-px bg-parchment mx-1" />
-
-          {/* Export button (opens modal) */}
-          <button
-            onClick={() => setShowExportModal(true)}
-            disabled={!hasContent}
-            className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Export comparison"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Export</span>
-          </button>
-
-          <div className="h-4 w-px bg-parchment mx-1" />
-
-          {/* Display settings popover */}
-          <div className="relative" ref={displaySettingsRef}>
-            <button
-              onClick={() => setShowDisplaySettings(!showDisplaySettings)}
-              className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5"
-              title="Display settings"
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              <span>Display</span>
-            </button>
-            {showDisplaySettings && (
-              <div className="absolute top-full left-0 mt-1 bg-popover w-64 rounded shadow-xl border border-parchment/50 p-3 z-50">
-                <div className="text-caption font-medium text-foreground mb-2">Display Settings</div>
-
-                {/* Dark mode toggle */}
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-caption text-muted-foreground">Dark mode</span>
-                  <button
-                    onClick={() => {
-                      const next = !isDark;
-                      setIsDark(next);
-                      document.documentElement.classList.toggle("dark", next);
-                    }}
-                    className="p-0.5 rounded border border-parchment bg-card hover:bg-cream"
-                  >
-                    {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-
-                <div className="h-px bg-parchment/50 my-2" />
-
-                {/* LLM Output section */}
-                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">LLM Output</div>
-
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-caption text-muted-foreground">Font</span>
-                  <select
-                    value={proseFontFamily}
-                    onChange={(e) => setProseFontFamily(e.target.value as FontOptionId)}
-                    className="text-caption bg-card border border-parchment rounded px-1 py-0.5 max-w-[130px]"
-                  >
-                    {FONT_OPTIONS.map((f) => (
-                      <option key={f.id} value={f.id}>{f.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-caption text-muted-foreground">Size</span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setProseFontSize((s) => Math.max(10, s - 1))}
-                      className="p-0.5 rounded border border-parchment bg-card hover:bg-cream"
-                    >
-                      <Minus className="w-3 h-3" />
-                    </button>
-                    <span className="text-caption w-6 text-center">{proseFontSize}</span>
-                    <button
-                      onClick={() => setProseFontSize((s) => Math.min(24, s + 1))}
-                      className="p-0.5 rounded border border-parchment bg-card hover:bg-cream"
-                    >
-                      <Plus className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="h-px bg-parchment/50 my-2" />
-
-                {/* Annotations section */}
-                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Annotations</div>
-
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-caption text-muted-foreground">Font</span>
-                  <select
-                    value={annotationFontFamily}
-                    onChange={(e) => setAnnotationFontFamily(e.target.value as FontOptionId)}
-                    className="text-caption bg-card border border-parchment rounded px-1 py-0.5 max-w-[130px]"
-                  >
-                    {FONT_OPTIONS.map((f) => (
-                      <option key={f.id} value={f.id}>{f.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-caption text-muted-foreground">Size</span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setAnnotationFontSize((s) => Math.max(8, s - 1))}
-                      className="p-0.5 rounded border border-parchment bg-card hover:bg-cream"
-                    >
-                      <Minus className="w-3 h-3" />
-                    </button>
-                    <span className="text-caption w-6 text-center">{annotationFontSize}</span>
-                    <button
-                      onClick={() => setAnnotationFontSize((s) => Math.min(16, s + 1))}
-                      className="p-0.5 rounded border border-parchment bg-card hover:bg-cream"
-                    >
-                      <Plus className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-caption text-muted-foreground">Brightness</span>
-                  <select
-                    value={annDisplaySettings.brightness}
-                    onChange={(e) =>
-                      setAnnDisplaySettings((s) => ({
-                        ...s,
-                        brightness: e.target.value as AnnotationBrightness,
-                      }))
-                    }
-                    className="text-caption bg-card border border-parchment rounded px-1 py-0.5"
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="full">Full</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-caption text-muted-foreground">Type badge</span>
-                  <input
-                    type="checkbox"
-                    checked={annDisplaySettings.showBadge}
-                    onChange={(e) =>
-                      setAnnDisplaySettings((s) => ({
-                        ...s,
-                        showBadge: e.target.checked,
-                      }))
-                    }
-                    className="accent-burgundy"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-caption text-muted-foreground">Line highlight</span>
-                  <select
-                    value={annDisplaySettings.lineHighlightIntensity}
-                    onChange={(e) =>
-                      setAnnDisplaySettings((s) => ({
-                        ...s,
-                        lineHighlightIntensity: e.target.value as LineHighlightIntensity,
-                      }))
-                    }
-                    className="text-caption bg-card border border-parchment rounded px-1 py-0.5"
-                  >
-                    <option value="off">Off</option>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="full">Full</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-caption text-muted-foreground">Pill background</span>
-                  <input
-                    type="checkbox"
-                    checked={annDisplaySettings.showPillBackground}
-                    onChange={(e) =>
-                      setAnnDisplaySettings((s) => ({
-                        ...s,
-                        showPillBackground: e.target.checked,
-                      }))
-                    }
-                    className="accent-burgundy"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="h-4 w-px bg-parchment mx-1" />
-
-          {/* Diff toggle */}
-          <button
-            onClick={() => setShowDiff((d) => !d)}
-            disabled={!hasBothOutputs}
-            className={`px-2 py-1 text-caption flex items-center gap-1.5 rounded-sm transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
-              showDiff
-                ? "bg-burgundy/90 text-white dark:bg-burgundy/80"
-                : "btn-editorial-ghost"
-            }`}
-            title="Toggle word diff view"
-          >
-            <GitCompareArrows className="w-3.5 h-3.5" />
-            <span>{showDiff ? "Diff On" : "Diff"}</span>
-          </button>
-
-          <div className="flex-1" />
-
-          {/* History dropdown */}
-          <div className="relative" ref={historyRef}>
-            <button
-              onClick={() => setShowHistory(!showHistory)}
-              className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5"
-              title="Saved comparisons"
-            >
-              <FolderOpen className="w-3.5 h-3.5" />
-              <span>History ({comparisons.length})</span>
-              <ChevronDown className="w-3 h-3" />
-            </button>
-            {showHistory && (
-              <div className="absolute top-full right-0 mt-1 bg-card border border-border rounded-md shadow-lg z-50 min-w-[300px] max-h-[400px] overflow-y-auto">
-                {comparisons.length === 0 ? (
-                  <div className="px-4 py-3 text-body-sm text-muted-foreground">
-                    No saved comparisons yet.
-                  </div>
-                ) : (
-                  comparisons.map((c) => (
-                    <div
-                      key={c.id}
-                      className={`px-3 py-2 hover:bg-accent/50 flex items-center gap-2 border-b border-border last:border-b-0 ${
-                        c.id === comparisonId ? "bg-accent/30" : ""
-                      }`}
-                    >
-                      <button
-                        onClick={() => handleLoad(c)}
-                        className="flex-1 text-left min-w-0"
-                      >
-                        <div className="text-body-sm font-medium text-foreground truncate">
-                          {c.name}
-                        </div>
-                        <div className="text-caption text-muted-foreground truncate">
-                          {new Date(c.updatedAt).toLocaleDateString()} &middot;{" "}
-                          {c.prompt.slice(0, 50)}
-                          {c.prompt.length > 50 ? "..." : ""}
-                        </div>
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteSaved(c.id);
-                        }}
-                        className="p-1 text-muted-foreground hover:text-red-500 shrink-0"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Settings */}
-          <button
-            onClick={() => setShowSettings(true)}
-            className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5"
-            title="Provider settings"
-          >
-            <Settings className="w-3.5 h-3.5" />
-          </button>
-        </header>
-
-      {/* Main content */}
+      {/* Mode content */}
       <div className="flex-1 flex flex-col min-h-0">
-        {/* Dual panels (always rendered, diff props injected when active) */}
-        <div className="flex-1 flex flex-col md:flex-row min-h-0">
-          <AnnotatedPanelDisplay
-            panel="A"
-            result={resultA}
-            isLoading={loadingA}
-            slotLabel={getSlotLabel("A")}
-            ann={annA}
-            fontSize={proseFontSize}
-            displaySettings={annDisplaySettings}
-            proseFontFamily={getFontCss(proseFontFamily)}
-            annotationFontFamily={getFontCss(annotationFontFamily)}
-            annotationFontSize={annotationFontSize}
-            isDark={isDark}
-            diffSegments={diffResult?.segmentsA}
-            diffUniqueCount={diffResult ? diffUniqueA : undefined}
-            bodyScrollRef={diffScrollARef}
-          />
-          <div className="hidden md:block w-px bg-border" />
-          <div className="md:hidden h-px bg-border" />
-          <AnnotatedPanelDisplay
-            panel="B"
-            result={resultB}
-            isLoading={loadingB}
-            slotLabel={getSlotLabel("B")}
-            ann={annB}
-            fontSize={proseFontSize}
-            displaySettings={annDisplaySettings}
-            proseFontFamily={getFontCss(proseFontFamily)}
-            annotationFontFamily={getFontCss(annotationFontFamily)}
-            annotationFontSize={annotationFontSize}
-            isDark={isDark}
-            diffSegments={diffResult?.segmentsB}
-            diffUniqueCount={diffResult ? diffUniqueB : undefined}
-            bodyScrollRef={diffScrollBRef}
-          />
-        </div>
-
-        {/* Prompt area — below panels */}
-        <div className="px-6 py-3 border-t border-border bg-card">
-          <div className="flex gap-3 max-w-4xl mx-auto">
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Enter a prompt to send to both models..."
-              className="input-editorial flex-1 resize-none min-h-[60px] max-h-[200px]"
-              rows={2}
-              disabled={isLoading}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-            />
-            <button
-              onClick={handleSend}
-              disabled={!prompt.trim() || isLoading}
-              className="btn-editorial-primary px-4 py-2 self-end disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {isLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Send className="w-4 h-4" />
-              )}
-            </button>
-          </div>
-          {error && (
-            <div className="mt-2 max-w-4xl mx-auto text-caption text-red-500 flex items-center gap-1.5">
-              <AlertCircle className="w-3.5 h-3.5" />
-              {error}
-            </div>
-          )}
-        </div>
+        {activeTab === "compare" && <CompareMode isDark={isDark} onToggleDark={toggleDark} />}
+        {activeTab === "stochastic" && <StochasticMode isDark={isDark} />}
+        {activeTab === "temperature" && <TemperatureMode isDark={isDark} />}
+        {activeTab === "sensitivity" && <SensitivityMode isDark={isDark} />}
+        {activeTab === "logprobs" && <LogprobsMode isDark={isDark} />}
+        {activeTab === "divergence" && <DivergenceMode isDark={isDark} />}
       </div>
 
       {/* Status bar */}
       <footer className="px-6 py-1.5 border-t border-border bg-card text-caption text-muted-foreground flex justify-between">
-        <span>LLMbench v0.1.0</span>
-        <span>
-          {comparisonId ? "Saved" : "Unsaved"} &middot; Local mode
-        </span>
+        <span>LLMbench v{APP_VERSION}</span>
+        <span>{MODE_LABELS[activeTab]}</span>
       </footer>
 
       {/* Settings modal */}
-      <ProviderSettings
-        isDark={isDark}
-        onToggleDark={() => {
-          const next = !isDark;
-          setIsDark(next);
-          document.documentElement.classList.toggle("dark", next);
-        }}
-      />
+      <ProviderSettings isDark={isDark} onToggleDark={toggleDark} />
 
-      {/* Export modal */}
-      {showExportModal && (
+      {/* Help modal */}
+      {showHelp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-popover rounded-sm shadow-lg p-6 w-full max-w-md border border-parchment">
+          <div className="bg-popover rounded-sm shadow-lg p-6 w-full max-w-lg border border-parchment max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-display-md font-bold text-foreground">
-                Export Comparison
+                About LLMbench
               </h2>
               <button
-                onClick={() => setShowExportModal(false)}
+                onClick={() => setShowHelp(false)}
                 className="p-1 text-muted-foreground hover:text-foreground"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="space-y-3">
-              <button
-                onClick={handleExportJSON}
-                className="w-full flex items-center gap-3 p-3 rounded border border-parchment/50 bg-card hover:bg-cream text-left"
-              >
-                <FileJson className="w-6 h-6 text-blue-500 shrink-0" />
-                <div>
-                  <div className="text-body-sm font-medium text-foreground">JSON</div>
-                  <div className="text-caption text-muted-foreground">
-                    Structured data with full metadata and annotations
-                  </div>
+
+            <div className="space-y-4 text-body-sm text-foreground">
+              <p>
+                <strong>LLMbench</strong> is a research tool for the comparative close reading of
+                Large Language Model outputs. It enables researchers to subject AI-generated text to
+                hermeneutic scrutiny by comparing outputs across models, runs, and configurations.
+              </p>
+
+              <div>
+                <h3 className="font-semibold mb-1">Getting Started</h3>
+                <p className="text-muted-foreground">
+                  Click <strong>Settings</strong> to configure one or two LLM providers with API keys.
+                  You can use any combination of Google Gemini, OpenAI, Anthropic, Ollama, or OpenAI-compatible
+                  providers. Each mode works with one or two models configured in Panel A and Panel B.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-1">Modes</h3>
+                <div className="space-y-2 text-muted-foreground">
+                  <p>
+                    <strong className="text-foreground">Compare</strong> &mdash; Side-by-side comparison of two model outputs
+                    with annotations, word-level diff highlighting, and export to JSON, text, or PDF.
+                  </p>
+                  <p>
+                    <strong className="text-foreground">Stochastic Variation</strong> &mdash; Sends the same prompt to the
+                    same model(s) multiple times to measure how outputs vary across runs. Demonstrates
+                    the aleatory dimension of LLM generation.
+                  </p>
+                  <p>
+                    <strong className="text-foreground">Temperature Gradient</strong> &mdash; Runs the same prompt across a
+                    range of temperature settings (0.0 to 2.0) to visualise how sampling temperature
+                    affects output determinism and creativity.
+                  </p>
+                  <p>
+                    <strong className="text-foreground">Prompt Sensitivity</strong> &mdash; Tests how minor prompt changes
+                    (adding &ldquo;please&rdquo;, changing punctuation, rephrasing) affect model outputs.
+                    Auto-generates variations with option to add custom ones.
+                  </p>
+                  <p>
+                    <strong className="text-foreground">Token Probabilities</strong> &mdash; Visualises per-token probability
+                    distributions with a colour-coded heatmap. Hover over tokens to see alternative
+                    choices the model considered. Supported by Google Gemini and OpenAI.
+                  </p>
+                  <p>
+                    <strong className="text-foreground">Cross-Model Divergence</strong> &mdash; Quantitative comparison with
+                    Jaccard similarity, vocabulary overlap analysis, structural metrics, and response
+                    time comparison.
+                  </p>
                 </div>
-              </button>
-              <button
-                onClick={handleExportText}
-                className="w-full flex items-center gap-3 p-3 rounded border border-parchment/50 bg-card hover:bg-cream text-left"
-              >
-                <FileText className="w-6 h-6 text-green-500 shrink-0" />
-                <div>
-                  <div className="text-body-sm font-medium text-foreground">Plain Text</div>
-                  <div className="text-caption text-muted-foreground">
-                    Formatted text log with annotations
-                  </div>
-                </div>
-              </button>
-              <button
-                onClick={handleExportPDF}
-                className="w-full flex items-center gap-3 p-3 rounded border border-parchment/50 bg-card hover:bg-cream text-left"
-              >
-                <FileType className="w-6 h-6 text-red-500 shrink-0" />
-                <div>
-                  <div className="text-body-sm font-medium text-foreground">PDF</div>
-                  <div className="text-caption text-muted-foreground">
-                    Printable document with coloured annotation badges
-                  </div>
-                </div>
-              </button>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-1">Deep Dive</h3>
+                <p className="text-muted-foreground">
+                  Each result card has a collapsible &ldquo;Deep Dive&rdquo; panel that reveals detailed
+                  analysis: full text, token tables, vocabulary comparisons, and CSV export.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-1">Single or Dual Model</h3>
+                <p className="text-muted-foreground">
+                  All modes work with one or two models. Configure just Panel A for single-model analysis,
+                  or both panels for side-by-side comparison. Any combination of providers is supported.
+                </p>
+              </div>
+
+              <div className="pt-2 border-t border-parchment/50 text-caption text-muted-foreground">
+                <p>LLMbench v{APP_VERSION} &mdash; David M. Berry, University of Sussex</p>
+                <p className="mt-1">
+                  A tool for humanistic close reading of AI outputs, built as part of a research programme
+                  into computational culture and critical code studies.
+                </p>
+              </div>
             </div>
           </div>
         </div>
