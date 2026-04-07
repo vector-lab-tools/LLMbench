@@ -265,6 +265,8 @@ export default function TemperatureMode({ isDark }: TemperatureModeProps) {
         placeholder="Enter a prompt to test across temperatures..."
         panelSelection={panelSelection}
         onPanelSelectionChange={setPanelSelection}
+        hasResults={runsA.length > 0 || runsB.length > 0}
+        onReset={() => { setRunsA([]); setRunsB([]); setIsDone(false); setError(null); }}
         footer={
           <div className="space-y-1.5">
             <span className="text-caption text-muted-foreground">

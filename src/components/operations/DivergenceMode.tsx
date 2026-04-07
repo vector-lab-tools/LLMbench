@@ -434,6 +434,8 @@ export default function DivergenceMode({ isDark: _isDark }: DivergenceModeProps)
         placeholder="Enter a prompt to compare models..."
         panelSelection={panelSelection}
         onPanelSelectionChange={setPanelSelection}
+        hasResults={resultA !== null || resultB !== null}
+        onReset={() => { setResultA(null); setResultB(null); setMetrics(null); setError(null); }}
         footer={
           <div className="space-y-1.5">
             {!slotBConfigured && slotAConfigured && (

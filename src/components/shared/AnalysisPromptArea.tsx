@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, type ReactNode } from "react";
-import { Send, Loader2, AlertCircle, ChevronUp, ChevronDown } from "lucide-react";
+import { Send, Loader2, AlertCircle, ChevronUp, ChevronDown, RotateCcw } from "lucide-react";
 import { ModelSelector, type PanelSelection } from "./ModelSelector";
 
 interface AnalysisPromptAreaProps {
@@ -18,6 +18,9 @@ interface AnalysisPromptAreaProps {
   controls?: ReactNode;
   /** Content rendered below the input row (e.g. variation chips, info text) */
   footer?: ReactNode;
+  /** When provided, shows a Reset button that clears results */
+  onReset?: () => void;
+  hasResults?: boolean;
 }
 
 export function AnalysisPromptArea({
@@ -32,6 +35,8 @@ export function AnalysisPromptArea({
   onPanelSelectionChange,
   controls,
   footer,
+  onReset,
+  hasResults,
 }: AnalysisPromptAreaProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [bouncing, setBouncing] = useState(false);
@@ -78,9 +83,9 @@ export function AnalysisPromptArea({
         }`}
       >
         <div className="overflow-hidden">
-          <div className="px-6 py-3 space-y-2">
-            {/* Toolbar row: model selector + controls */}
-            <div className="flex items-center gap-3 max-w-4xl mx-auto">
+          <div className="px-3 py-2 space-y-1.5">
+            {/* Toolbar row: model selector + controls + reset */}
+            <div className="flex items-center gap-3 flex-wrap">
               <ModelSelector
                 value={panelSelection}
                 onChange={onPanelSelectionChange}
@@ -92,16 +97,30 @@ export function AnalysisPromptArea({
                   {controls}
                 </>
               )}
+              {onReset && hasResults && (
+                <>
+                  <div className="h-4 w-px bg-parchment" />
+                  <button
+                    onClick={onReset}
+                    disabled={isLoading}
+                    className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5 disabled:opacity-30"
+                    title="Clear results and reset to initial state"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Reset</span>
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Input row: textarea + send */}
-            <div className="flex gap-2 max-w-4xl mx-auto items-end">
+            <div className="flex gap-2 items-end">
               <textarea
                 value={prompt}
                 onChange={(e) => onPromptChange(e.target.value)}
                 placeholder={placeholder}
-                className="input-editorial flex-1 resize-none min-h-[52px] max-h-[160px] text-body-sm"
-                rows={2}
+                className="input-editorial flex-1 resize-none min-h-[40px] max-h-[160px] text-body-sm"
+                rows={1}
                 disabled={isLoading}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
@@ -113,7 +132,7 @@ export function AnalysisPromptArea({
               <button
                 onClick={handleSubmit}
                 disabled={!prompt.trim() || isLoading || disabled}
-                className="btn-editorial-primary px-3 py-2.5 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                className="btn-editorial-primary px-3 py-2 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
               >
                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               </button>
@@ -121,7 +140,7 @@ export function AnalysisPromptArea({
 
             {/* Error */}
             {error && (
-              <div className="max-w-4xl mx-auto text-caption text-red-500 flex items-center gap-1.5">
+              <div className="text-caption text-red-500 flex items-center gap-1.5">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                 {error}
               </div>
@@ -129,7 +148,7 @@ export function AnalysisPromptArea({
 
             {/* Footer (variation chips, info text, etc.) */}
             {footer && (
-              <div className="max-w-4xl mx-auto">
+              <div>
                 {footer}
               </div>
             )}

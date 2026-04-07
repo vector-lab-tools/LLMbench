@@ -409,6 +409,8 @@ export default function LogprobsMode({ isDark }: LogprobsModeProps) {
         placeholder="Enter a prompt to analyse token probabilities..."
         panelSelection={panelSelection}
         onPanelSelectionChange={setPanelSelection}
+        hasResults={resultA !== null || resultB !== null}
+        onReset={() => { setResultA(null); setResultB(null); setError(null); }}
         footer={
           !aSupported && slotAConfigured ? (
             <span className="text-caption text-amber-600">

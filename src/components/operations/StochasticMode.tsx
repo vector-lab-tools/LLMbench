@@ -308,6 +308,8 @@ export default function StochasticMode({ isDark }: StochasticModeProps) {
         placeholder="Enter a prompt to run multiple times..."
         panelSelection={panelSelection}
         onPanelSelectionChange={setPanelSelection}
+        hasResults={runsA.length > 0 || runsB.length > 0}
+        onReset={() => { setRunsA([]); setRunsB([]); setIsDone(false); setError(null); }}
         controls={
           <div className="flex items-center gap-1.5">
             <label className="text-caption text-muted-foreground">Runs</label>

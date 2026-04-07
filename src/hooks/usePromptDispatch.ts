@@ -44,7 +44,7 @@ export function usePromptDispatch() {
   });
 
   const dispatch = useCallback(
-    async (prompt: string) => {
+    async (prompt: string, temperatureOverride?: number) => {
       if (!prompt.trim()) return;
 
       setState({
@@ -57,14 +57,21 @@ export function usePromptDispatch() {
         error: null,
       });
 
+      const slotA = temperatureOverride !== undefined
+        ? { ...slots.A, temperature: temperatureOverride }
+        : slots.A;
+      const slotB = temperatureOverride !== undefined
+        ? { ...slots.B, temperature: temperatureOverride }
+        : slots.B;
+
       try {
         const response = await fetch("/api/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             prompt,
-            slotA: slots.A,
-            slotB: slots.B,
+            slotA,
+            slotB,
             noMarkdown,
           }),
         });

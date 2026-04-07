@@ -52,13 +52,11 @@ export default function Home() {
         </span>
         <div className="flex-1" />
         {/* Markdown / No Markdown segmented toggle */}
-        <div
-          className="flex items-center border border-border rounded-sm text-caption overflow-hidden"
-          title="Controls whether models are asked to respond in plain prose or may use markdown formatting"
-        >
+        <div className="flex items-center border border-border rounded-sm text-caption overflow-hidden">
           <button
             onClick={() => setNoMarkdown(false)}
             className={`px-2 py-1 transition-colors ${!noMarkdown ? "bg-burgundy text-cream" : "text-muted-foreground/60 hover:text-foreground"}`}
+            title="Allow markdown: the model may use bold, italics, bullet points, headers, and code blocks in its response"
           >
             Markdown
           </button>
@@ -66,6 +64,7 @@ export default function Home() {
           <button
             onClick={() => setNoMarkdown(true)}
             className={`px-2 py-1 transition-colors ${noMarkdown ? "bg-burgundy text-cream" : "text-muted-foreground/60 hover:text-foreground"}`}
+            title="No Markdown: appends a system instruction telling the model to respond in plain text only — no bold, italics, headers, bullet points, or code blocks"
           >
             No Markdown
           </button>

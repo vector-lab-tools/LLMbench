@@ -380,6 +380,8 @@ export default function SensitivityMode({ isDark }: SensitivityModeProps) {
         placeholder="Enter a prompt to test sensitivity..."
         panelSelection={panelSelection}
         onPanelSelectionChange={setPanelSelection}
+        hasResults={baseA !== null || baseB !== null}
+        onReset={() => { setBaseA(null); setBaseB(null); setVariationsA([]); setVariationsB([]); setIsDone(false); setError(null); }}
         footer={
           <>
             {/* Default prompts */}

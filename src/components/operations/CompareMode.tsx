@@ -32,6 +32,8 @@ import {
   ListOrdered,
   Activity,
   BarChart2,
+  Eye,
+  FileCode,
 } from "lucide-react";
 import { StructView } from "@/components/viz/StructView";
 import { ToneView } from "@/components/viz/ToneView";
@@ -58,7 +60,7 @@ import {
 } from "@/lib/export/comparison-export";
 import { DeepDive } from "@/components/shared/DeepDive";
 import { MetricBox } from "@/components/shared/ResultCard";
-import { computeTextMetrics, computeWordOverlap } from "@/lib/metrics/text-metrics";
+import { computeTextMetrics, computeWordOverlap, computeTokenEntropy } from "@/lib/metrics/text-metrics";
 import { DiffRenderedText } from "@/components/workspace/DiffPanel";
 import { computeWordDiff, type DiffSegment } from "@/lib/diff/word-diff";
 import { TokenHeatmap } from "@/components/viz/TokenHeatmap";
@@ -360,6 +362,13 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
   const [logprobTokensB, setLogprobTokensB] = useState<TokenLogprob[] | null>(null);
   const [logprobsLoading, setLogprobsLoading] = useState(false);
   const [showLogprobsInfo, setShowLogprobsInfo] = useState(false);
+  const [lastSentPrompt, setLastSentPrompt] = useState("");
+  const [showPromptModal, setShowPromptModal] = useState(false);
+  const [showProbsExport, setShowProbsExport] = useState(false);
+  const [probsNavIndex, setProbsNavIndex] = useState<number | null>(null);
+  const [probsSecondIndex, setProbsSecondIndex] = useState<number | null>(null);
+  // Temperature override: null = use slot default
+  const [temperatureOverride, setTemperatureOverride] = useState<number | null>(null);
   const showDiff = viewMode === "diff";
 
   const hasContent = resultA !== null || resultB !== null;
@@ -466,7 +475,10 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     annB.setAllAnnotations([]);
     setLogprobTokensA(null);
     setLogprobTokensB(null);
-    dispatch(effectivePrompt);
+    setProbsNavIndex(null);
+    setProbsSecondIndex(null);
+    setLastSentPrompt(effectivePrompt);
+    dispatch(effectivePrompt, temperatureOverride !== null ? temperatureOverride : undefined);
     setPromptCollapsed(true);
     setPromptBouncing(true);
   };
@@ -496,6 +508,224 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
       setLogprobsLoading(false);
     }
   };
+
+  // ---- probs export helpers ----
+
+  function probsColorLight(logprob: number): [string, string] {
+    const u = Math.min(1, Math.abs(logprob) / 5);
+    if (u < 0.1) return ["#f1f5f9", "#334155"];
+    if (u < 0.3) return ["#dbeafe", "#334155"];
+    if (u < 0.5) return ["#fef9c3", "#92400e"];
+    if (u < 0.7) return ["#fed7aa", "#9a3412"];
+    return ["#fecaca", "#991b1b"];
+  }
+
+  const exportProbsJSON = useCallback(() => {
+    const makePanel = (tokens: TokenLogprob[], label: string) => ({
+      model: label,
+      tokenCount: tokens.length,
+      tokens: tokens.map((t, i) => ({
+        position: i + 1,
+        token: t.token,
+        logprob: t.logprob,
+        probability: parseFloat(Math.exp(t.logprob).toFixed(6)),
+        entropy: parseFloat(computeTokenEntropy(t).toFixed(6)),
+        topAlternatives: t.topAlternatives.map(a => ({
+          token: a.token,
+          logprob: a.logprob,
+          probability: parseFloat(Math.exp(a.logprob).toFixed(6)),
+        })),
+      })),
+    });
+    const payload: Record<string, unknown> = {
+      export: "token-probabilities",
+      tool: "LLMbench",
+      timestamp: new Date().toISOString(),
+      prompt: lastSentPrompt,
+    };
+    if (logprobTokensA) payload.panelA = makePanel(logprobTokensA, getSlotLabel("A"));
+    if (logprobTokensB) payload.panelB = makePanel(logprobTokensB, getSlotLabel("B"));
+    const name = comparisonName.replace(/[^a-z0-9]/gi, "-").toLowerCase();
+    downloadFile(JSON.stringify(payload, null, 2), `${name}-probs.json`, "application/json");
+  }, [logprobTokensA, logprobTokensB, lastSentPrompt, getSlotLabel, comparisonName]);
+
+  const exportProbsPDF = useCallback(async () => {
+    // Build canvas (shared logic with image export)
+    const canvas = document.createElement("canvas");
+    const W = 2400;
+    canvas.width = W;
+    const ctx = canvas.getContext("2d")!;
+    const PAD = 32;
+    const LINE_H = 34;
+    const TOKEN_H = 26;
+    const FONT = "18px Georgia, serif";
+    const HEADER_FONT = "bold 14px system-ui, sans-serif";
+    const META_FONT = "12px system-ui, sans-serif";
+
+    ctx.font = FONT;
+    const layoutPanel = (tokens: TokenLogprob[], panelW: number) => {
+      const lines: { token: TokenLogprob; w: number; x: number }[][] = [[]];
+      let cx = 0;
+      for (const tok of tokens) {
+        const w = ctx.measureText(tok.token).width + 6;
+        if (cx + w > panelW && cx > 0) { lines.push([]); cx = 0; }
+        lines[lines.length - 1].push({ token: tok, w, x: cx });
+        cx += w;
+      }
+      return lines;
+    };
+    const panelW = logprobTokensB ? (W - PAD * 3) / 2 : W - PAD * 2;
+    const linesA = logprobTokensA ? layoutPanel(logprobTokensA, panelW) : [];
+    const linesB = logprobTokensB ? layoutPanel(logprobTokensB, panelW) : [];
+    const HEADER_H = 60;
+    const totalH = PAD + HEADER_H + Math.max(linesA.length, linesB.length) * LINE_H + PAD + 32;
+    canvas.height = Math.max(totalH, 200);
+
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, W, canvas.height);
+
+    // Title + prompt
+    ctx.font = HEADER_FONT;
+    ctx.fillStyle = "#1e293b";
+    ctx.textBaseline = "middle";
+    ctx.fillText("Token Probability Heatmap — LLMbench", PAD, PAD + 8);
+    ctx.font = META_FONT;
+    ctx.fillStyle = "#64748b";
+    const promptPreview = lastSentPrompt.length > 100 ? lastSentPrompt.slice(0, 100) + "…" : lastSentPrompt;
+    ctx.fillText(`"${promptPreview}"  ·  ${new Date().toLocaleString()}`, PAD, PAD + 28);
+
+    const drawPanel = (tokens: TokenLogprob[], lines: { token: TokenLogprob; w: number; x: number }[][], ox: number, label: string) => {
+      ctx.font = HEADER_FONT;
+      ctx.fillStyle = "#64748b";
+      ctx.fillText(label, ox, PAD + HEADER_H - 14);
+      ctx.font = FONT;
+      ctx.textBaseline = "middle";
+      const startY = PAD + HEADER_H;
+      for (const [li, line] of lines.entries()) {
+        const y = startY + li * LINE_H;
+        for (const { token: tok, w, x } of line) {
+          const [bg, fg] = probsColorLight(tok.logprob);
+          ctx.fillStyle = bg;
+          ctx.fillRect(ox + x, y, w, TOKEN_H);
+          ctx.fillStyle = fg;
+          ctx.fillText(tok.token, ox + x + 3, y + TOKEN_H / 2);
+        }
+      }
+    };
+
+    if (logprobTokensA) drawPanel(logprobTokensA, linesA, PAD, getSlotLabel("A"));
+    if (logprobTokensB) drawPanel(logprobTokensB, linesB, PAD + panelW + PAD, getSlotLabel("B"));
+
+    // Legend
+    const ly = canvas.height - PAD + 6;
+    ctx.font = META_FONT;
+    ctx.fillStyle = "#64748b";
+    ctx.fillText("Confidence:", PAD, ly);
+    const legendItems: [string, string][] = [["#f1f5f9", "High"], ["#fef9c3", "Medium"], ["#fecaca", "Low"]];
+    let lx = PAD + 90;
+    for (const [color, lbl] of legendItems) {
+      ctx.fillStyle = color;
+      ctx.fillRect(lx, ly - 7, 14, 14);
+      ctx.fillStyle = "#64748b";
+      ctx.fillText(lbl, lx + 18, ly);
+      lx += 64;
+    }
+
+    // Embed canvas into PDF via jsPDF
+    const imgData = canvas.toDataURL("image/png");
+    const { default: jsPDF } = await import("jspdf");
+    // A4 landscape or auto-size to fit
+    const aspect = canvas.height / canvas.width;
+    const pdfW = 297; // mm A4 landscape width
+    const pdfH = Math.max(210, pdfW * aspect);
+    const doc = new jsPDF({ orientation: pdfW > pdfH ? "landscape" : "portrait", unit: "mm", format: [pdfW, pdfH] });
+    doc.addImage(imgData, "PNG", 0, 0, pdfW, pdfW * aspect);
+    doc.save(`${comparisonName.replace(/[^a-z0-9]/gi, "-").toLowerCase()}-probs.pdf`);
+  }, [logprobTokensA, logprobTokensB, lastSentPrompt, getSlotLabel, comparisonName]);
+
+  const exportProbsImage = useCallback(() => {
+    const canvas = document.createElement("canvas");
+    const W = 1600;
+    canvas.width = W;
+    const ctx = canvas.getContext("2d")!;
+    const PAD = 28;
+    const LINE_H = 30;
+    const TOKEN_H = 22;
+    const FONT = "15px Georgia, serif";
+    const HEADER_FONT = "bold 12px system-ui, sans-serif";
+
+    ctx.font = FONT;
+
+    // Layout tokens into wrapped lines for a given panel width
+    const layoutPanel = (tokens: TokenLogprob[], panelW: number) => {
+      const lines: { token: TokenLogprob; w: number; x: number }[][] = [[]];
+      let cx = 0;
+      for (const tok of tokens) {
+        const w = ctx.measureText(tok.token).width + 6;
+        if (cx + w > panelW && cx > 0) { lines.push([]); cx = 0; }
+        lines[lines.length - 1].push({ token: tok, w, x: cx });
+        cx += w;
+      }
+      return lines;
+    };
+
+    const panelW = logprobTokensB ? (W - PAD * 3) / 2 : W - PAD * 2;
+    const linesA = logprobTokensA ? layoutPanel(logprobTokensA, panelW) : [];
+    const linesB = logprobTokensB ? layoutPanel(logprobTokensB, panelW) : [];
+    const HEADER_H = 36;
+    const totalH = PAD + HEADER_H + Math.max(linesA.length, linesB.length) * LINE_H + PAD + 28;
+    canvas.height = Math.max(totalH, 200);
+
+    // Background
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, W, canvas.height);
+
+    const drawPanel = (tokens: TokenLogprob[], lines: { token: TokenLogprob; w: number; x: number }[][], ox: number, label: string) => {
+      // Header
+      ctx.font = HEADER_FONT;
+      ctx.fillStyle = "#64748b";
+      ctx.fillText(label, ox, PAD + 14);
+
+      ctx.font = FONT;
+      ctx.textBaseline = "middle";
+      const startY = PAD + HEADER_H;
+      for (const [li, line] of lines.entries()) {
+        const y = startY + li * LINE_H;
+        for (const { token: tok, w, x } of line) {
+          const [bg, fg] = probsColorLight(tok.logprob);
+          ctx.fillStyle = bg;
+          ctx.fillRect(ox + x, y, w, TOKEN_H);
+          ctx.fillStyle = fg;
+          ctx.fillText(tok.token, ox + x + 3, y + TOKEN_H / 2);
+        }
+      }
+    };
+
+    if (logprobTokensA) drawPanel(logprobTokensA, linesA, PAD, getSlotLabel("A"));
+    if (logprobTokensB) drawPanel(logprobTokensB, linesB, PAD + panelW + PAD, getSlotLabel("B"));
+
+    // Legend
+    const ly = canvas.height - PAD + 4;
+    ctx.font = "11px system-ui, sans-serif";
+    ctx.fillStyle = "#64748b";
+    ctx.textBaseline = "middle";
+    ctx.fillText("Confidence:", PAD, ly);
+    const legendItems: [string, string][] = [["#f1f5f9", "High"], ["#fef9c3", "Medium"], ["#fecaca", "Low"]];
+    let lx = PAD + 80;
+    for (const [color, label] of legendItems) {
+      ctx.fillStyle = color;
+      ctx.fillRect(lx, ly - 6, 14, 12);
+      ctx.fillStyle = "#64748b";
+      ctx.fillText(label, lx + 18, ly);
+      lx += 60;
+    }
+
+    const url = canvas.toDataURL("image/png");
+    const a = document.createElement("a");
+    a.download = `${comparisonName.replace(/[^a-z0-9]/gi, "-").toLowerCase()}-probs.png`;
+    a.href = url;
+    a.click();
+  }, [logprobTokensA, logprobTokensB, getSlotLabel, comparisonName]);
 
   const handleSave = useCallback(() => {
     const comparison = buildComparison();
@@ -822,7 +1052,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
               disabled={(mode === "diff" && !hasBothOutputs) || (mode !== "diff" && !hasContent)}
               className={`px-2 py-1 text-caption flex items-center gap-1.5 rounded-sm transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
                 active
-                  ? "bg-burgundy/90 text-white dark:bg-burgundy/80"
+                  ? "bg-burgundy/90 text-white dark:bg-burgundy/80 border border-transparent"
                   : "btn-editorial-ghost"
               }`}
               title={titles[mode]}
@@ -852,7 +1082,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
                 !anyCapable
                   ? "btn-editorial-ghost opacity-40"
                   : probsActive
-                  ? "bg-burgundy/90 text-white dark:bg-burgundy/80"
+                  ? "bg-burgundy/90 text-white dark:bg-burgundy/80 border border-transparent"
                   : "btn-editorial-ghost"
               }`}
               title={anyCapable ? "Token probability heatmap (Gemini / OpenAI)" : "Token probabilities require Gemini or OpenAI — click for details"}
@@ -862,6 +1092,38 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
             </button>
           );
         })()}
+
+        {/* Probs export dropdown — only when probs data exists */}
+        {(logprobTokensA || logprobTokensB) && viewMode === "probs" && (
+          <div className="relative">
+            <button
+              onClick={() => setShowProbsExport(p => !p)}
+              className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5"
+              title="Export token probability data"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export</span>
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {showProbsExport && (
+              <div className="absolute left-0 top-full mt-1 z-30 bg-popover border border-parchment rounded-sm shadow-lg min-w-[160px]"
+                onMouseLeave={() => setShowProbsExport(false)}>
+                <button onClick={() => { exportProbsPDF(); setShowProbsExport(false); }}
+                  className="w-full text-left px-3 py-2 text-caption hover:bg-cream flex items-center gap-2">
+                  <FileType className="w-3.5 h-3.5 text-burgundy" /> PDF snapshot
+                </button>
+                <button onClick={() => { exportProbsImage(); setShowProbsExport(false); }}
+                  className="w-full text-left px-3 py-2 text-caption hover:bg-cream flex items-center gap-2">
+                  <FileCode className="w-3.5 h-3.5 text-burgundy" /> PNG image
+                </button>
+                <button onClick={() => { exportProbsJSON(); setShowProbsExport(false); }}
+                  className="w-full text-left px-3 py-2 text-caption hover:bg-cream flex items-center gap-2">
+                  <FileJson className="w-3.5 h-3.5 text-burgundy" /> JSON data
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex-1" />
 
@@ -923,9 +1185,10 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
 
       {/* Scrollable body: panels + deep dive extend downward */}
       <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="flex flex-col min-h-full">
 
       {/* Dual panels */}
-      <div className="flex flex-col md:flex-row min-h-[50vh]">
+      <div className="flex flex-col md:flex-row flex-1">
         <AnnotatedPanelDisplay
           panel="A"
           result={resultA}
@@ -1033,45 +1296,60 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
         );
       })()}
 
+      {/* End min-h-full wrapper */}
+      </div>
+
       {/* End scrollable body */}
       </div>
 
       {/* Prompt area */}
       <div className="border-t border-border bg-card shrink-0">
-        {/* Collapse toggle */}
-        <button
-          onClick={() => {
-            if (promptCollapsed) {
-              setPromptCollapsed(false);
-            } else {
-              setPromptCollapsed(true);
-              setPromptBouncing(true);
-            }
-          }}
-          onAnimationEnd={() => setPromptBouncing(false)}
-          className={`w-full flex items-center justify-center gap-1 py-1 text-[10px] transition-colors ${
-            promptCollapsed
-              ? "text-burgundy hover:bg-burgundy/10"
-              : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/20"
-          } ${promptBouncing ? "prompt-toggle-bounce" : ""}`}
-          title={promptCollapsed ? "Show prompt" : "Hide prompt"}
-        >
-          {promptCollapsed ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3 h-3" />}
-        </button>
+        {/* Collapse toggle strip */}
+        <div className={`flex items-center border-b border-border/30 ${promptBouncing ? "prompt-toggle-bounce" : ""}`} onAnimationEnd={() => setPromptBouncing(false)}>
+          {lastSentPrompt && (
+            <button
+              onClick={() => setShowPromptModal(true)}
+              className="pl-3 pr-2 py-1 text-[10px] text-muted-foreground/50 hover:text-muted-foreground flex items-center gap-1 min-w-0 flex-1"
+              title="View the full prompt that was sent to the models"
+            >
+              <Eye className="w-3 h-3 shrink-0" />
+              <span className="font-mono truncate">{lastSentPrompt.slice(0, 80)}{lastSentPrompt.length > 80 ? "…" : ""}</span>
+            </button>
+          )}
+          {!lastSentPrompt && <div className="flex-1" />}
+          <button
+            onClick={() => {
+              if (promptCollapsed) {
+                setPromptCollapsed(false);
+              } else {
+                setPromptCollapsed(true);
+                setPromptBouncing(true);
+              }
+            }}
+            className={`px-3 py-1 flex items-center gap-1 text-[10px] transition-colors shrink-0 ${
+              promptCollapsed
+                ? "text-burgundy hover:bg-burgundy/10"
+                : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/20"
+            }`}
+            title={promptCollapsed ? "Show prompt" : "Hide prompt"}
+          >
+            {promptCollapsed ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+        </div>
         <div
           className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
             promptCollapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]"
           }`}
         >
         <div className="overflow-hidden">
-        <div className="px-6 py-3">
-        <div className="flex gap-3 max-w-4xl mx-auto">
+        <div className="px-3 py-2">
+        <div className="flex gap-2 items-end">
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Enter a prompt to send to both models..."
-            className="input-editorial flex-1 resize-none min-h-[60px] max-h-[200px]"
-            rows={2}
+            placeholder="Enter a prompt to send to both models…"
+            className="input-editorial flex-1 resize-none min-h-[40px] max-h-[160px]"
+            rows={1}
             disabled={isLoading}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -1080,10 +1358,28 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
               }
             }}
           />
+          {/* Temperature control */}
+          <div className="flex items-center gap-1.5 shrink-0 self-center">
+            <span className="text-[10px] text-muted-foreground">t=</span>
+            <select
+              value={temperatureOverride !== null ? String(temperatureOverride) : ""}
+              onChange={(e) => setTemperatureOverride(e.target.value === "" ? null : parseFloat(e.target.value))}
+              className="text-[10px] border border-border rounded-sm px-1 py-0.5 bg-background text-foreground"
+              title="Temperature override for this prompt (overrides slot settings)"
+            >
+              <option value="">default</option>
+              <option value="0">0.0</option>
+              <option value="0.3">0.3</option>
+              <option value="0.7">0.7</option>
+              <option value="1.0">1.0</option>
+              <option value="1.5">1.5</option>
+              <option value="2.0">2.0</option>
+            </select>
+          </div>
           <button
             onClick={() => handleSend()}
             disabled={!prompt.trim() || isLoading}
-            className="btn-editorial-primary px-4 py-2 self-end disabled:opacity-40 disabled:cursor-not-allowed"
+            className="btn-editorial-primary px-3 py-2 self-end disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
           >
             {isLoading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -1093,7 +1389,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
           </button>
         </div>
         {!prompt.trim() && !isLoading && (
-          <div className="mt-2 max-w-4xl mx-auto">
+          <div className="mt-1.5">
             <DefaultPromptChips
               prompts={MODE_DEFAULTS.compare}
               onSelect={(p) => { setPrompt(p); handleSend(p); }}
@@ -1102,7 +1398,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
           </div>
         )}
         {error && (
-          <div className="mt-2 max-w-4xl mx-auto text-caption text-red-500 flex items-center gap-1.5">
+          <div className="mt-1.5 text-caption text-red-500 flex items-center gap-1.5">
             <AlertCircle className="w-3.5 h-3.5" />
             {error}
           </div>
@@ -1111,6 +1407,45 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
         </div>
         </div>
       </div>
+
+      {/* View Prompt modal */}
+      {showPromptModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowPromptModal(false)}>
+          <div className="bg-popover rounded-sm shadow-lg p-5 w-full max-w-lg border border-parchment mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-display text-display-md font-bold text-foreground flex items-center gap-2">
+                <Eye className="w-4 h-4 text-burgundy" />
+                Last Sent Prompt
+              </h2>
+              <button onClick={() => setShowPromptModal(false)} className="p-1 text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              {temperatureOverride !== null && (
+                <div className="text-[10px] text-muted-foreground bg-muted/30 rounded-sm px-2 py-1">
+                  Temperature override: <span className="font-mono font-semibold text-foreground">{temperatureOverride}</span>
+                </div>
+              )}
+              {/* System instruction */}
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">System instruction</div>
+                <pre className="text-caption font-mono bg-muted/30 rounded-sm p-2 whitespace-pre-wrap text-muted-foreground text-[10px]">
+                  {lastSentPrompt && (noMarkdown
+                    ? "Respond in plain text only. Do not use any markdown formatting — no bold, italics, headers, bullet points, or code blocks."
+                    : "(none)")}
+                </pre>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">User prompt</div>
+                <pre className="text-caption font-mono bg-muted/30 rounded-sm p-2 whitespace-pre-wrap text-foreground text-[11px] max-h-[300px] overflow-y-auto">
+                  {lastSentPrompt}
+                </pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Logprobs info modal */}
       {showLogprobsInfo && (
