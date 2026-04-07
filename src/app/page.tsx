@@ -12,6 +12,7 @@ import SensitivityMode from "@/components/operations/SensitivityMode";
 import LogprobsMode from "@/components/operations/LogprobsMode";
 import DivergenceMode from "@/components/operations/DivergenceMode";
 import { APP_VERSION } from "@/lib/version";
+import { Clippy } from "@/components/easter-eggs/Clippy";
 
 const MODE_LABELS: Record<TabId, string> = {
   compare: "Dual Panel",
@@ -88,6 +89,9 @@ export default function Home() {
 
       {/* Settings modal */}
       <ProviderSettings isDark={isDark} onToggleDark={toggleDark} />
+
+      {/* Easter eggs */}
+      <Clippy />
 
       {/* Help modal */}
       {showHelp && (
