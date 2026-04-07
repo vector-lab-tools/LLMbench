@@ -16,8 +16,6 @@ export const MODE_DEFAULTS: Record<string, readonly string[]> = {
     "What is the difference between knowledge and information?",
     "What does it mean to understand something?",
     "What is the airspeed velocity of an unladen swallow?",
-    "Oh, king, eh, very nice. An' how'd you get that, eh?",
-    "You're fooling yourself. We're living in a dictatorship. A self-perpetuating autocracy in which the working classes–",
   ],
 
   stochastic: [
