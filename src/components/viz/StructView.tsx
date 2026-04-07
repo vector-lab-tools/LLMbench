@@ -86,18 +86,18 @@ export function StructView({ text, fontSize, fontFamily, isDark }: StructViewPro
         </span>
       </div>
 
-      {/* Text */}
+      {/* Text — one sentence per line */}
       <div
-        className="flex-1 overflow-y-auto px-4 py-4 leading-relaxed whitespace-pre-wrap"
+        className="flex-1 overflow-y-auto px-4 py-3 space-y-1"
         style={{ fontSize, fontFamily }}
       >
         {sentences.map((sentence, i) => (
-          <span
+          <div
             key={i}
-            className={`rounded-sm ${sentenceBg[i % 2]}`}
+            className={`rounded-sm px-2 py-1.5 leading-relaxed ${sentenceBg[i % 2]}`}
           >
             {renderSentenceTokens(sentence, i)}
-          </span>
+          </div>
         ))}
       </div>
 
