@@ -332,7 +332,7 @@ export function TokenHeatmap({
           </div>
         )}
 
-        {secondToken !== null && secondIndex !== null && (
+        {secondToken !== null && secondIndex !== null ? (
           <TokenDetailPanel
             activeToken={secondToken}
             activeIndex={secondIndex}
@@ -342,7 +342,17 @@ export function TokenHeatmap({
             isControlled={isControlled}
             pinnedIndex={secondIndex}
           />
-        )}
+        ) : activeToken !== null && pinnedIndex !== null ? (
+          /* Ghost slot — shown when a token is pinned but no second selected yet */
+          <div className="bg-card/40 border border-dashed border-parchment/60 rounded-sm overflow-hidden">
+            <div className="p-4 text-center">
+              <div className="text-[10px] text-muted-foreground/30 font-mono mb-1">⌘ / Ctrl + click</div>
+              <p className="text-[10px] text-muted-foreground/30 leading-relaxed">
+                Pin a second token to compare two positions side by side
+              </p>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
