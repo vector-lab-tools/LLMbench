@@ -160,7 +160,13 @@ export function getModelDisplayName(provider: AIProvider, modelId: string): stri
   if (model && model.id !== "custom") return model.name;
 
   // For custom or unknown IDs, return the raw ID (which is what the user typed)
-  if (modelId && modelId !== "custom") return modelId;
+  // But never display anything that looks like an API key
+  if (modelId && modelId !== "custom") {
+    if (modelId.startsWith("sk-") || modelId.startsWith("AIza") || modelId.length > 50) {
+      return "Custom Model";
+    }
+    return modelId;
+  }
 
   return "Custom Model";
 }

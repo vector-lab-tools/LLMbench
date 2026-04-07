@@ -46,7 +46,9 @@ LLMbench emerges from the convergence of three research programmes.
 
 - **Multi-provider support.** Anthropic (Claude), OpenAI (GPT), Google (Gemini), Ollama (local models), and any OpenAI-compatible endpoint. API keys are stored persistently in the browser, never sent to a server.
 
-- **Deep Dive.** Every result card has a collapsible Deep Dive panel revealing detailed analysis: full text, token tables, vocabulary comparisons, and CSV export.
+- **Streaming results.** Analysis modes stream results progressively as each run completes, with animated ghost cards for pending results. Metrics update live as data arrives.
+
+- **Deep Dive.** Every result card has a collapsible Deep Dive panel revealing detailed analysis: full text, per-run metrics tables, pairwise overlap matrices, vocabulary comparisons, and CSV export.
 
 - **Display controls.** Configurable prose font, font size, annotation brightness, line highlighting intensity, and dark mode.
 

@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
-import { validateAIConfig, generateAIResponse, staggeredRun } from "@/lib/ai/client";
+import { NextRequest } from "next/server";
+import { validateAIConfig, generateAIResponse } from "@/lib/ai/client";
 import { getModelDisplayName } from "@/lib/ai/config";
 import { computeTextMetrics } from "@/lib/metrics/text-metrics";
+import { createStreamResponse } from "@/lib/streaming";
 import type { AIProvider } from "@/types/ai-settings";
 
 interface SlotPayload {
@@ -21,45 +22,6 @@ interface StochasticRequest {
   slotB?: SlotPayload | null;
 }
 
-async function runSlot(slot: SlotPayload, prompt: string, runCount: number) {
-  const config = {
-    provider: slot.provider,
-    model: slot.customModelId || slot.model,
-    apiKey: slot.apiKey,
-    baseUrl: slot.baseUrl,
-  };
-
-  const validation = validateAIConfig(config);
-  if (!validation.valid) {
-    return { runs: [{ error: validation.error!, provenance: buildProvenance(slot, 0) }] };
-  }
-
-  const tasks = Array.from({ length: runCount }, () =>
-    () => generateAIResponse(config, {
-      prompt,
-      systemPrompt: slot.systemPrompt || undefined,
-      temperature: slot.temperature,
-    })
-  );
-  const runs = await staggeredRun(tasks, 800);
-
-  return {
-    runs: runs.map((r) => {
-      if (r.status === "fulfilled") {
-        return {
-          text: r.value.text,
-          provenance: buildProvenance(slot, r.value.responseTimeMs),
-          metrics: computeTextMetrics(r.value.text),
-        };
-      }
-      return {
-        error: r.reason?.message || "Generation failed",
-        provenance: buildProvenance(slot, 0),
-      };
-    }),
-  };
-}
-
 function buildProvenance(slot: SlotPayload, responseTimeMs: number) {
   return {
     provider: slot.provider,
@@ -72,33 +34,90 @@ function buildProvenance(slot: SlotPayload, responseTimeMs: number) {
   };
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export async function POST(request: NextRequest) {
   let body: StochasticRequest;
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    return Response.json({ error: "Invalid request body" }, { status: 400 });
   }
 
   const { prompt, runCount, slotA, slotB } = body;
   if (!prompt?.trim()) {
-    return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
+    return Response.json({ error: "Prompt is required" }, { status: 400 });
   }
 
   const count = Math.min(Math.max(runCount || 5, 1), 20);
+  const { response, send, close } = createStreamResponse();
 
-  // Run both slots (or just A if B not configured)
-  const promises: Promise<{ runs: unknown[] }>[] = [runSlot(slotA, prompt, count)];
-  if (slotB) {
-    promises.push(runSlot(slotB, prompt, count));
-  }
+  // Run in background, streaming results as they arrive
+  (async () => {
+    // Send metadata first
+    send({ type: "meta", runCount: count, hasB: !!slotB });
 
-  const [resultA, resultB] = await Promise.all(promises);
+    // Process panels
+    const panels: { panel: "A" | "B"; slot: SlotPayload }[] = [{ panel: "A", slot: slotA }];
+    if (slotB) panels.push({ panel: "B", slot: slotB });
 
-  return NextResponse.json({
-    prompt,
-    runCount: count,
-    A: resultA,
-    B: resultB || null,
-  });
+    for (const { panel, slot } of panels) {
+      const config = {
+        provider: slot.provider,
+        model: slot.customModelId || slot.model,
+        apiKey: slot.apiKey,
+        baseUrl: slot.baseUrl,
+      };
+
+      const validation = validateAIConfig(config);
+      if (!validation.valid) {
+        send({
+          type: "run",
+          panel,
+          index: 0,
+          result: { error: validation.error!, provenance: buildProvenance(slot, 0) },
+        });
+        continue;
+      }
+
+      for (let i = 0; i < count; i++) {
+        if (i > 0) await delay(800);
+
+        try {
+          const result = await generateAIResponse(config, {
+            prompt,
+            systemPrompt: slot.systemPrompt || undefined,
+            temperature: slot.temperature,
+          });
+          send({
+            type: "run",
+            panel,
+            index: i,
+            result: {
+              text: result.text,
+              provenance: buildProvenance(slot, result.responseTimeMs),
+              metrics: computeTextMetrics(result.text),
+            },
+          });
+        } catch (err) {
+          send({
+            type: "run",
+            panel,
+            index: i,
+            result: {
+              error: err instanceof Error ? err.message : "Generation failed",
+              provenance: buildProvenance(slot, 0),
+            },
+          });
+        }
+      }
+    }
+
+    send({ type: "done" });
+    close();
+  })();
+
+  return response;
 }

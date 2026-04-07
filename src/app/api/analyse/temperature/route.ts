@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
-import { validateAIConfig, generateAIResponse, staggeredRun } from "@/lib/ai/client";
+import { NextRequest } from "next/server";
+import { validateAIConfig, generateAIResponse } from "@/lib/ai/client";
 import { getModelDisplayName } from "@/lib/ai/config";
 import { computeTextMetrics } from "@/lib/metrics/text-metrics";
+import { createStreamResponse } from "@/lib/streaming";
 import type { AIProvider } from "@/types/ai-settings";
 
 interface SlotPayload {
@@ -33,52 +34,8 @@ function buildProvenance(slot: SlotPayload, temperature: number, responseTimeMs:
   };
 }
 
-async function runSlotTemperatures(slot: SlotPayload, prompt: string, temperatures: number[]) {
-  const config = {
-    provider: slot.provider,
-    model: slot.customModelId || slot.model,
-    apiKey: slot.apiKey,
-    baseUrl: slot.baseUrl,
-  };
-
-  const validation = validateAIConfig(config);
-  if (!validation.valid) {
-    return {
-      runs: temperatures.map((t) => ({
-        temperature: t,
-        error: validation.error!,
-        provenance: buildProvenance(slot, t, 0),
-      })),
-    };
-  }
-
-  const tasks = temperatures.map((temp) =>
-    () => generateAIResponse(config, {
-      prompt,
-      systemPrompt: slot.systemPrompt || undefined,
-      temperature: temp,
-    }).then((r) => ({ ...r, temperature: temp }))
-  );
-  const results = await staggeredRun(tasks, 800);
-
-  return {
-    runs: results.map((r, i) => {
-      const temp = temperatures[i];
-      if (r.status === "fulfilled") {
-        return {
-          temperature: r.value.temperature,
-          text: r.value.text,
-          provenance: buildProvenance(slot, temp, r.value.responseTimeMs),
-          metrics: computeTextMetrics(r.value.text),
-        };
-      }
-      return {
-        temperature: temp,
-        error: r.reason?.message || "Generation failed",
-        provenance: buildProvenance(slot, temp, 0),
-      };
-    }),
-  };
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 export async function POST(request: NextRequest) {
@@ -86,27 +43,84 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    return Response.json({ error: "Invalid request body" }, { status: 400 });
   }
 
   const { prompt, temperatures, slotA, slotB } = body;
   if (!prompt?.trim()) {
-    return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
+    return Response.json({ error: "Prompt is required" }, { status: 400 });
   }
 
   const temps = temperatures?.length ? temperatures : [0.0, 0.3, 0.7, 1.0, 1.5, 2.0];
+  const { response, send, close } = createStreamResponse();
 
-  const promises = [runSlotTemperatures(slotA, prompt, temps)];
-  if (slotB) {
-    promises.push(runSlotTemperatures(slotB, prompt, temps));
-  }
+  (async () => {
+    send({ type: "meta", temperatures: temps, hasB: !!slotB });
 
-  const [resultA, resultB] = await Promise.all(promises);
+    const panels: { panel: "A" | "B"; slot: SlotPayload }[] = [{ panel: "A", slot: slotA }];
+    if (slotB) panels.push({ panel: "B", slot: slotB });
 
-  return NextResponse.json({
-    prompt,
-    temperatures: temps,
-    A: resultA,
-    B: resultB || null,
-  });
+    for (const { panel, slot } of panels) {
+      const config = {
+        provider: slot.provider,
+        model: slot.customModelId || slot.model,
+        apiKey: slot.apiKey,
+        baseUrl: slot.baseUrl,
+      };
+
+      const validation = validateAIConfig(config);
+      if (!validation.valid) {
+        send({
+          type: "run",
+          panel,
+          index: 0,
+          temperature: temps[0],
+          result: { error: validation.error!, provenance: buildProvenance(slot, temps[0], 0) },
+        });
+        continue;
+      }
+
+      for (let i = 0; i < temps.length; i++) {
+        if (i > 0) await delay(800);
+        const temp = temps[i];
+
+        try {
+          const result = await generateAIResponse(config, {
+            prompt,
+            systemPrompt: slot.systemPrompt || undefined,
+            temperature: temp,
+          });
+          send({
+            type: "run",
+            panel,
+            index: i,
+            temperature: temp,
+            result: {
+              temperature: temp,
+              text: result.text,
+              provenance: buildProvenance(slot, temp, result.responseTimeMs),
+              metrics: computeTextMetrics(result.text),
+            },
+          });
+        } catch (err) {
+          send({
+            type: "run",
+            panel,
+            index: i,
+            temperature: temp,
+            result: {
+              temperature: temp,
+              error: err instanceof Error ? err.message : "Generation failed",
+              provenance: buildProvenance(slot, temp, 0),
+            },
+          });
+        }
+      }
+    }
+
+    send({ type: "done" });
+    close();
+  })();
+
+  return response;
 }

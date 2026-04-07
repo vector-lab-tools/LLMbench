@@ -30,10 +30,12 @@ function loadSlots(): ProviderSlots {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      return {
-        A: { ...DEFAULT_SLOT_A, ...parsed.A },
-        B: { ...DEFAULT_SLOT_B, ...parsed.B },
-      };
+      const slotA = { ...DEFAULT_SLOT_A, ...parsed.A };
+      const slotB = { ...DEFAULT_SLOT_B, ...parsed.B };
+      // Ensure enabled is always a boolean (old stored data may lack it)
+      if (typeof slotA.enabled !== "boolean") slotA.enabled = true;
+      if (typeof slotB.enabled !== "boolean") slotB.enabled = true;
+      return { A: slotA, B: slotB };
     }
   } catch {
     // Ignore storage errors

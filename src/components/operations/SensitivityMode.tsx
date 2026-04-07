@@ -1,35 +1,32 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
-import { Loader2, AlertCircle, Fingerprint, Plus, X } from "lucide-react";
+import { AlertCircle, Fingerprint, Plus, X } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { AnalysisPromptArea } from "@/components/shared/AnalysisPromptArea";
 import type { PanelSelection } from "@/components/shared/ModelSelector";
 import { ResultCard, MetricBox } from "@/components/shared/ResultCard";
 import { DeepDive } from "@/components/shared/DeepDive";
+import { GhostCard } from "@/components/shared/GhostCard";
+import { fetchStreaming } from "@/lib/streaming";
 import { generateVariations, type PromptVariation } from "@/lib/prompts/variations";
 import { computeWordOverlap } from "@/lib/metrics/text-metrics";
+
+interface RunResult {
+  text?: string;
+  error?: string;
+  metrics?: { wordCount: number; vocabularyDiversity: number };
+  provenance: { modelDisplayName: string; responseTimeMs: number };
+}
 
 interface VariationResult {
   variationLabel: string;
   variationPrompt: string;
-  result: {
-    text?: string;
-    error?: string;
-    metrics?: { wordCount: number; vocabularyDiversity: number };
-    provenance: { modelDisplayName: string; responseTimeMs: number };
-  };
+  result: RunResult;
 }
 
-interface PanelResult {
-  base: {
-    text?: string;
-    error?: string;
-    metrics?: { wordCount: number; vocabularyDiversity: number };
-    provenance: { modelDisplayName: string; responseTimeMs: number };
-  };
-  variations: VariationResult[];
-}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type StreamEvent = { type: string; panel?: string; index?: number; isBase?: boolean; variationLabel?: string; variationPrompt?: string; result?: any; hasB?: boolean; count?: number };
 
 interface SensitivityModeProps {
   isDark: boolean;
@@ -43,11 +40,17 @@ export default function SensitivityMode({ isDark }: SensitivityModeProps) {
   const [newVariation, setNewVariation] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [resultA, setResultA] = useState<PanelResult | null>(null);
-  const [resultB, setResultB] = useState<PanelResult | null>(null);
+
+  // Progressive results
+  const [baseA, setBaseA] = useState<RunResult | null>(null);
+  const [baseB, setBaseB] = useState<RunResult | null>(null);
+  const [variationsA, setVariationsA] = useState<(VariationResult | null)[]>([]);
+  const [variationsB, setVariationsB] = useState<(VariationResult | null)[]>([]);
+  const [expectedCount, setExpectedCount] = useState(0); // total runs including base
+  const [hasB, setHasB] = useState(false);
+  const [isDone, setIsDone] = useState(false);
 
   const slotAConfigured = isSlotConfigured("A");
-  const slotBConfigured = isSlotConfigured("B");
 
   // Auto-generate variations from prompt
   const autoVariations = useMemo(() => {
@@ -64,39 +67,69 @@ export default function SensitivityMode({ isDark }: SensitivityModeProps) {
     if (!prompt.trim() || isLoading || allVariations.length === 0) return;
     setIsLoading(true);
     setError(null);
-    setResultA(null);
-    setResultB(null);
+    setBaseA(null);
+    setBaseB(null);
+    setVariationsA([]);
+    setVariationsB([]);
+    // expected = 1 base + N variations
+    setExpectedCount(1 + allVariations.length);
+    setHasB(panelSelection === "both" && isSlotConfigured("B"));
+    setIsDone(false);
 
     try {
-      const response = await fetch("/api/analyse/sensitivity", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      await fetchStreaming<StreamEvent>(
+        "/api/analyse/sensitivity",
+        {
           prompt,
           variations: allVariations,
           slotA: panelSelection === "B" ? slots.B : slots.A,
           slotB: panelSelection === "both" && isSlotConfigured("B") ? slots.B : null,
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        throw new Error(data?.error || `Server error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setResultA(data.A);
-      setResultB(data.B);
+        },
+        (event) => {
+          if (event.type === "meta") {
+            setExpectedCount(event.count || (1 + allVariations.length));
+            setHasB(!!event.hasB);
+          } else if (event.type === "run" && event.result) {
+            if (event.isBase) {
+              const setter = event.panel === "B" ? setBaseB : setBaseA;
+              setter(event.result as RunResult);
+            } else {
+              const varResult: VariationResult = {
+                variationLabel: event.variationLabel || `Variation ${event.index}`,
+                variationPrompt: event.variationPrompt || "",
+                result: event.result as RunResult,
+              };
+              // variations are indexed from 1 (base is 0), so slot = index - 1
+              const varIndex = (event.index ?? 1) - 1;
+              const setter = event.panel === "B" ? setVariationsB : setVariationsA;
+              setter(prev => {
+                const next = [...prev];
+                next[varIndex] = varResult;
+                return next;
+              });
+            }
+          } else if (event.type === "done") {
+            setIsDone(true);
+          }
+        }
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Analysis failed");
     } finally {
       setIsLoading(false);
+      setIsDone(true);
     }
   }, [prompt, allVariations, slots, panelSelection, isSlotConfigured, isLoading]);
 
-  const renderPanel = (panel: "A" | "B", result: PanelResult, label: string) => {
-    const baseText = result.base.text;
-    const successfulVariations = result.variations.filter((v) => v.result.text);
+  const hasResults = baseA !== null || baseB !== null || variationsA.some(v => v !== null) || variationsB.some(v => v !== null);
+  const showResults = hasResults || isLoading;
+
+  const renderPanel = (panel: "A" | "B", base: RunResult | null, variations: (VariationResult | null)[], label: string) => {
+    const filledVariations = variations.filter((v): v is VariationResult => v !== null);
+    const successfulVariations = filledVariations.filter((v) => v.result.text);
+    const baseText = base?.text;
+    const completedCount = (base ? 1 : 0) + filledVariations.length;
+    const variationCount = allVariations.length;
 
     // Compute overlap between base and each variation
     const overlaps = baseText
@@ -114,48 +147,59 @@ export default function SensitivityMode({ isDark }: SensitivityModeProps) {
       <div key={panel}>
         <h3 className="text-body-sm font-semibold text-foreground mb-3">
           Panel {panel}: {label}
+          {!isDone && <span className="text-caption text-muted-foreground font-normal ml-2">({completedCount}/{expectedCount} complete)</span>}
         </h3>
 
         {/* Summary */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <MetricBox label="Base Words" value={result.base.metrics?.wordCount || 0} />
-          <MetricBox label="Variations" value={result.variations.length} />
-          <MetricBox label="Avg Overlap with Base" value={`${avgOverlap.toFixed(1)}%`} />
-          <MetricBox label="Successful" value={successfulVariations.length} />
-        </div>
+        {(base || filledVariations.length > 0) && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <MetricBox label="Base Words" value={base?.metrics?.wordCount || 0} />
+            <MetricBox label="Variations" value={`${filledVariations.length}/${variationCount}`} />
+            <MetricBox label="Avg Overlap with Base" value={overlaps.length > 0 ? `${avgOverlap.toFixed(1)}%` : "-"} />
+            <MetricBox label="Successful" value={successfulVariations.length} />
+          </div>
+        )}
 
         {/* Base output */}
-        <ResultCard
-          title="Base Prompt"
-          panel={panel}
-          subtitle={baseText ? `${result.base.metrics!.wordCount} words` : undefined}
-          badge="Base"
-          badgeColor="bg-burgundy/10 text-burgundy"
-          footer={
-            baseText ? (
-              <DeepDive label="Full Text">
-                <div className="text-body-sm text-foreground whitespace-pre-wrap font-serif leading-relaxed max-h-[400px] overflow-y-auto">
-                  {baseText}
-                </div>
-              </DeepDive>
-            ) : undefined
-          }
-        >
-          {baseText ? (
-            <p className="text-body-sm text-muted-foreground line-clamp-3 font-serif">
-              {baseText.slice(0, 200)}{baseText.length > 200 ? "..." : ""}
-            </p>
-          ) : (
-            <div className="flex items-center gap-2 text-red-500">
-              <AlertCircle className="w-4 h-4" />
-              <span className="text-body-sm">{result.base.error}</span>
-            </div>
-          )}
-        </ResultCard>
+        {base ? (
+          <ResultCard
+            title="Base Prompt"
+            panel={panel}
+            subtitle={baseText ? `${base.metrics!.wordCount} words` : undefined}
+            badge="Base"
+            badgeColor="bg-burgundy/10 text-burgundy"
+            footer={
+              baseText ? (
+                <DeepDive label="Full Text">
+                  <div className="text-body-sm text-foreground whitespace-pre-wrap font-serif leading-relaxed max-h-[400px] overflow-y-auto">
+                    {baseText}
+                  </div>
+                </DeepDive>
+              ) : undefined
+            }
+          >
+            {baseText ? (
+              <p className="text-body-sm text-muted-foreground line-clamp-3 font-serif">
+                {baseText.slice(0, 200)}{baseText.length > 200 ? "..." : ""}
+              </p>
+            ) : (
+              <div className="flex items-center gap-2 text-red-500">
+                <AlertCircle className="w-4 h-4" />
+                <span className="text-body-sm">{base.error}</span>
+              </div>
+            )}
+          </ResultCard>
+        ) : (
+          isLoading && <GhostCard title="Base Prompt" panel={panel} />
+        )}
 
         {/* Variation cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-          {result.variations.map((v, i) => {
+          {Array.from({ length: variationCount }, (_, i) => {
+            const v = variations[i];
+            if (!v) {
+              return <GhostCard key={i} title={allVariations[i]?.label ?? `Variation ${i + 1}`} panel={panel} />;
+            }
             const overlapInfo = overlaps.find((o) => o.label === v.variationLabel);
             return (
               <ResultCard
@@ -211,17 +255,15 @@ export default function SensitivityMode({ isDark }: SensitivityModeProps) {
         <strong className="text-foreground">Prompt Sensitivity:</strong> Tests how minor changes to a prompt (adding politeness markers, changing punctuation, rephrasing) affect model outputs. Variations are auto-generated from the base prompt. You can also add custom variations to test specific hypotheses about prompt sensitivity.
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center text-muted-foreground">
-              <Loader2 className="w-8 h-8 mx-auto mb-3 animate-spin opacity-40" />
-              <p className="text-body-sm">Testing {allVariations.length} prompt variations...</p>
-            </div>
-          </div>
-        ) : resultA ? (
+        {showResults ? (
           <div className="p-6 space-y-6">
-            {renderPanel("A", resultA, getSlotLabel("A"))}
-            {resultB && renderPanel("B", resultB, getSlotLabel("B"))}
+            {renderPanel(
+              panelSelection === "B" ? "B" : "A",
+              panelSelection === "B" ? baseB : baseA,
+              panelSelection === "B" ? variationsB : variationsA,
+              getSlotLabel(panelSelection === "B" ? "B" : "A")
+            )}
+            {hasB && renderPanel("B", baseB, variationsB, getSlotLabel("B"))}
           </div>
         ) : (
           <div className="flex items-center justify-center h-full">
