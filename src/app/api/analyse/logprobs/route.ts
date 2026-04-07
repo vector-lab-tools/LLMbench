@@ -182,15 +182,25 @@ async function runSlotLogprobs(slot: SlotPayload, prompt: string, topK: number) 
     return { error: validation.error!, provenance: buildProvenance(slot, 0) };
   }
 
+  const model = slot.customModelId || slot.model;
+
   switch (slot.provider) {
-    case "google":
+    case "google": {
+      // Only Gemini 2.0 and earlier support logprobs; 2.5 models do not
+      if (model.includes("2.5")) {
+        return {
+          error: `${model} does not support token probabilities. Gemini 2.5 models (Pro, Flash, Flash-Lite) do not provide logprobs. Use gemini-2.0-flash instead.`,
+          provenance: buildProvenance(slot, 0),
+        };
+      }
       return runGoogleLogprobs(slot, prompt, topK);
+    }
     case "openai":
     case "openai-compatible":
       return runOpenAILogprobs(slot, prompt, topK);
     default:
       return {
-        error: `Token probabilities are not supported for ${slot.provider}. Use Google Gemini or OpenAI.`,
+        error: `Token probabilities are not supported for ${slot.provider}. Use Google Gemini (2.0) or OpenAI.`,
         provenance: buildProvenance(slot, 0),
       };
   }

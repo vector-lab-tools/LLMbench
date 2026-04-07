@@ -48,6 +48,9 @@ import {
   downloadFile,
   type PdfDiffData,
 } from "@/lib/export/comparison-export";
+import { DeepDive } from "@/components/shared/DeepDive";
+import { MetricBox } from "@/components/shared/ResultCard";
+import { computeTextMetrics, computeWordOverlap } from "@/lib/metrics/text-metrics";
 import { DiffRenderedText } from "@/components/workspace/DiffPanel";
 import { computeWordDiff, type DiffSegment } from "@/lib/diff/word-diff";
 import {
@@ -838,6 +841,73 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
           bodyScrollRef={diffScrollBRef}
         />
       </div>
+
+      {/* Deep Dive: comparison analysis */}
+      {hasBothOutputs && (() => {
+        const textA = (resultA as { text: string }).text;
+        const textB = (resultB as { text: string }).text;
+        const metricsA = computeTextMetrics(textA);
+        const metricsB = computeTextMetrics(textB);
+        const overlap = computeWordOverlap(textA, textB);
+        return (
+          <div className="border-t border-border">
+            <DeepDive label="Deep Dive" summary={`${overlap.shared.length} shared words, ${(overlap.jaccardSimilarity * 100).toFixed(0)}% Jaccard`}>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+                <MetricBox label="Jaccard Similarity" value={`${(overlap.jaccardSimilarity * 100).toFixed(1)}%`} />
+                <MetricBox label="Word Overlap" value={`${overlap.overlapPercentage.toFixed(1)}%`} />
+                <MetricBox label="Shared Words" value={overlap.shared.length} />
+                <MetricBox label="Unique to A" value={overlap.uniqueA.length} />
+                <MetricBox label="Unique to B" value={overlap.uniqueB.length} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <div className="text-caption font-medium text-muted-foreground mb-2">Panel A</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <MetricBox label="Words" value={metricsA.wordCount} />
+                    <MetricBox label="Sentences" value={metricsA.sentenceCount} />
+                    <MetricBox label="Avg Sent. Length" value={metricsA.avgSentenceLength.toFixed(1)} />
+                    <MetricBox label="Vocab Diversity" value={`${(metricsA.vocabularyDiversity * 100).toFixed(0)}%`} />
+                  </div>
+                </div>
+                <div>
+                  <div className="text-caption font-medium text-muted-foreground mb-2">Panel B</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <MetricBox label="Words" value={metricsB.wordCount} />
+                    <MetricBox label="Sentences" value={metricsB.sentenceCount} />
+                    <MetricBox label="Avg Sent. Length" value={metricsB.avgSentenceLength.toFixed(1)} />
+                    <MetricBox label="Vocab Diversity" value={`${(metricsB.vocabularyDiversity * 100).toFixed(0)}%`} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <div className="text-caption font-medium text-red-600 dark:text-red-400 mb-1">Unique to A ({overlap.uniqueA.length})</div>
+                  <div className="max-h-[200px] overflow-y-auto text-caption font-mono text-red-600 dark:text-red-400 space-y-0.5">
+                    {overlap.uniqueA.slice(0, 80).map((w, i) => <div key={i}>{w}</div>)}
+                    {overlap.uniqueA.length > 80 && <div className="text-muted-foreground">...and {overlap.uniqueA.length - 80} more</div>}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-caption font-medium text-muted-foreground mb-1">Shared ({overlap.shared.length})</div>
+                  <div className="max-h-[200px] overflow-y-auto text-caption font-mono text-foreground space-y-0.5">
+                    {overlap.shared.slice(0, 80).map((w, i) => <div key={i}>{w}</div>)}
+                    {overlap.shared.length > 80 && <div className="text-muted-foreground">...and {overlap.shared.length - 80} more</div>}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-caption font-medium text-green-600 dark:text-green-400 mb-1">Unique to B ({overlap.uniqueB.length})</div>
+                  <div className="max-h-[200px] overflow-y-auto text-caption font-mono text-green-600 dark:text-green-400 space-y-0.5">
+                    {overlap.uniqueB.slice(0, 80).map((w, i) => <div key={i}>{w}</div>)}
+                    {overlap.uniqueB.length > 80 && <div className="text-muted-foreground">...and {overlap.uniqueB.length - 80} more</div>}
+                  </div>
+                </div>
+              </div>
+            </DeepDive>
+          </div>
+        );
+      })()}
 
       {/* Prompt area */}
       <div className="px-6 py-3 border-t border-border bg-card">

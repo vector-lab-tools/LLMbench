@@ -74,11 +74,13 @@ function SlotEditor({
           }}
           className="input-editorial w-full"
         >
-          {providers.map((p) => (
-            <option key={p.id} value={p.id} disabled={p.id === "ollama" && !isLocal}>
-              {p.name}{p.id === "ollama" && !isLocal ? " (local only)" : ""}
-            </option>
-          ))}
+          {providers
+            .filter((p) => p.id !== "ollama" || isLocal)
+            .map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
         </select>
 
         {slot.provider === "ollama" && !isLocal && (

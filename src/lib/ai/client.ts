@@ -78,11 +78,15 @@ function createAIClient(config: AIRequestConfig) {
       });
     }
 
-    case "openai-compatible":
-      return createOpenAI({
+    case "openai-compatible": {
+      const compat = createOpenAI({
         apiKey,
         baseURL: baseUrl,
       });
+      // Return a function that uses .chat() instead of default .responses()
+      // OpenAI-compatible providers don't support the Responses API
+      return (modelId: string) => compat.chat(modelId);
+    }
 
     default:
       throw new Error(`Unsupported provider: ${provider}`);

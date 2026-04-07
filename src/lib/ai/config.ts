@@ -160,11 +160,15 @@ export function getModelDisplayName(provider: AIProvider, modelId: string): stri
   if (model && model.id !== "custom") return model.name;
 
   // For custom or unknown IDs, return the raw ID (which is what the user typed)
-  // But never display anything that looks like an API key
+  // But never display anything that looks like an API key or token
   if (modelId && modelId !== "custom") {
-    if (modelId.startsWith("sk-") || modelId.startsWith("AIza") || modelId.length > 50) {
-      return "Custom Model";
-    }
+    const looksLikeKey = modelId.startsWith("sk-")
+      || modelId.startsWith("AIza")
+      || modelId.startsWith("key-")
+      || modelId.startsWith("Bearer ")
+      || modelId.length > 50
+      || /^[a-zA-Z0-9+/=_-]{20,}$/.test(modelId); // long alphanumeric strings
+    if (looksLikeKey) return "Custom Model";
     return modelId;
   }
 

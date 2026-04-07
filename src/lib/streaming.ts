@@ -78,9 +78,9 @@ export function createStreamResponse() {
 
   const response = new Response(stream, {
     headers: {
-      "Content-Type": "application/x-ndjson",
-      "Cache-Control": "no-cache",
-      "Transfer-Encoding": "chunked",
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-cache, no-store",
+      "X-Content-Type-Options": "nosniff",
     },
   });
 

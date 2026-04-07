@@ -244,6 +244,57 @@ export default function SensitivityMode({ isDark }: SensitivityModeProps) {
             );
           })}
         </div>
+
+        {/* Panel-level Deep Dive */}
+        {isDone && successfulVariations.length > 0 && baseText && (
+          <div className="mt-4 bg-card border border-parchment/50 rounded-sm overflow-hidden">
+            <DeepDive
+              label="Deep Dive"
+              summary={`${successfulVariations.length} variations analysed`}
+            >
+              <div>
+                <div className="text-caption font-medium text-muted-foreground mb-2">Variation Overlap Ranking</div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-caption">
+                    <thead>
+                      <tr className="border-b border-parchment">
+                        <th className="text-left py-1.5 px-2 font-medium text-muted-foreground">Variation</th>
+                        <th className="text-left py-1.5 px-2 font-medium text-muted-foreground">Prompt Change</th>
+                        <th className="text-right py-1.5 px-2 font-medium text-muted-foreground">Words</th>
+                        <th className="text-right py-1.5 px-2 font-medium text-muted-foreground">Overlap with Base</th>
+                        <th className="text-right py-1.5 px-2 font-medium text-muted-foreground">Word Diff</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...successfulVariations]
+                        .map((v) => {
+                          const o = overlaps.find((x) => x.label === v.variationLabel);
+                          return { ...v, overlap: o?.overlap ?? 0 };
+                        })
+                        .sort((a, b) => a.overlap - b.overlap)
+                        .map((v, i) => {
+                          const wordDiff = Math.abs(v.result.metrics!.wordCount - (base?.metrics?.wordCount || 0));
+                          const bg = v.overlap > 70 ? "text-green-600 dark:text-green-400" : v.overlap > 40 ? "text-yellow-600 dark:text-yellow-400" : "text-red-600 dark:text-red-400";
+                          return (
+                            <tr key={i} className="border-b border-parchment/30 hover:bg-cream/30">
+                              <td className="py-1 px-2 font-medium">{v.variationLabel}</td>
+                              <td className="py-1 px-2 text-muted-foreground font-mono text-[11px] max-w-[200px] truncate">{v.variationPrompt}</td>
+                              <td className="py-1 px-2 text-right tabular-nums">{v.result.metrics!.wordCount}</td>
+                              <td className={`py-1 px-2 text-right tabular-nums font-medium ${bg}`}>{v.overlap.toFixed(1)}%</td>
+                              <td className="py-1 px-2 text-right tabular-nums text-muted-foreground">{wordDiff > 0 ? `+${wordDiff}` : wordDiff}</td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-caption text-muted-foreground mt-2">
+                  Sorted by overlap with base (lowest first). Variations with lower overlap produced the most divergent outputs from the same model, indicating higher prompt sensitivity.
+                </p>
+              </div>
+            </DeepDive>
+          </div>
+        )}
       </div>
     );
   };
