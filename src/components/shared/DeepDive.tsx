@@ -20,7 +20,7 @@ export function DeepDive({ label = "Deep Dive", summary, children, defaultOpen =
         onClick={() => setOpen(!open)}
         className={cn(
           "w-full flex items-center gap-2 px-5 py-2.5 text-left",
-          "text-body-sm font-semibold",
+          "text-caption font-semibold",
           "transition-colors",
           open
             ? "bg-burgundy/5 text-burgundy border-b border-parchment/50"

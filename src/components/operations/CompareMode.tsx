@@ -28,7 +28,11 @@ import {
   Moon,
   Sun,
   GitCompareArrows,
+  ListOrdered,
+  Activity,
 } from "lucide-react";
+import { StructView } from "@/components/viz/StructView";
+import { ToneView } from "@/components/viz/ToneView";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import {
   usePromptDispatch,
@@ -119,6 +123,7 @@ function AnnotatedPanelDisplay({
   annotationFontFamily,
   annotationFontSize,
   isDark,
+  viewMode,
   diffSegments,
   diffUniqueCount,
   bodyScrollRef,
@@ -134,6 +139,7 @@ function AnnotatedPanelDisplay({
   annotationFontFamily: string;
   annotationFontSize: number;
   isDark: boolean;
+  viewMode?: "diff" | "struct" | "tone" | null;
   diffSegments?: DiffSegment[];
   diffUniqueCount?: number;
   bodyScrollRef?: React.RefObject<HTMLDivElement | null>;
@@ -235,6 +241,14 @@ function AnnotatedPanelDisplay({
             <p className="text-body-sm">{errorText}</p>
           </div>
         </div>
+      ) : viewMode === "struct" && outputText !== null ? (
+        <div className="flex-1 min-h-0">
+          <StructView text={outputText} fontSize={fontSize} fontFamily={proseFontFamily} isDark={isDark} />
+        </div>
+      ) : viewMode === "tone" && outputText !== null ? (
+        <div className="flex-1 min-h-0">
+          <ToneView text={outputText} fontSize={fontSize} fontFamily={proseFontFamily} isDark={isDark} />
+        </div>
       ) : diffSegments && outputText !== null ? (
         <div ref={bodyScrollRef} className="flex-1 min-h-0 overflow-y-auto">
           <DiffRenderedText
@@ -322,7 +336,8 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
   const [showExportModal, setShowExportModal] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showDisplaySettings, setShowDisplaySettings] = useState(false);
-  const [showDiff, setShowDiff] = useState(false);
+  const [viewMode, setViewMode] = useState<"diff" | "struct" | "tone" | null>(null);
+  const showDiff = viewMode === "diff";
 
   const hasContent = resultA !== null || resultB !== null;
   const hasBothOutputs =
@@ -736,20 +751,34 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
 
         <div className="h-4 w-px bg-parchment mx-1" />
 
-        {/* Diff toggle */}
-        <button
-          onClick={() => setShowDiff((d) => !d)}
-          disabled={!hasBothOutputs}
-          className={`px-2 py-1 text-caption flex items-center gap-1.5 rounded-sm transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
-            showDiff
-              ? "bg-burgundy/90 text-white dark:bg-burgundy/80"
-              : "btn-editorial-ghost"
-          }`}
-          title="Toggle word diff view"
-        >
-          <GitCompareArrows className="w-3.5 h-3.5" />
-          <span>{showDiff ? "Diff On" : "Diff"}</span>
-        </button>
+        {/* View augmentation buttons */}
+        {(["diff", "struct", "tone"] as const).map((mode) => {
+          const active = viewMode === mode;
+          const icons = { diff: GitCompareArrows, struct: ListOrdered, tone: Activity };
+          const labels = { diff: "Diff", struct: "Struct", tone: "Tone" };
+          const titles = {
+            diff: "Word-level diff between panels",
+            struct: "Sentence structure + discourse markers",
+            tone: "Hedging / confidence / negation register",
+          };
+          const Icon = icons[mode];
+          return (
+            <button
+              key={mode}
+              onClick={() => setViewMode(active ? null : mode)}
+              disabled={(mode === "diff" && !hasBothOutputs) || (mode !== "diff" && !hasContent)}
+              className={`px-2 py-1 text-caption flex items-center gap-1.5 rounded-sm transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+                active
+                  ? "bg-burgundy/90 text-white dark:bg-burgundy/80"
+                  : "btn-editorial-ghost"
+              }`}
+              title={titles[mode]}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              <span>{active ? `${labels[mode]} On` : labels[mode]}</span>
+            </button>
+          );
+        })}
 
         <div className="flex-1" />
 
@@ -823,6 +852,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
           annotationFontFamily={getFontCss(annotationFontFamily)}
           annotationFontSize={annotationFontSize}
           isDark={isDark}
+          viewMode={viewMode}
           diffSegments={diffResult?.segmentsA}
           diffUniqueCount={diffResult ? diffUniqueA : undefined}
           bodyScrollRef={diffScrollARef}
@@ -841,6 +871,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
           annotationFontFamily={getFontCss(annotationFontFamily)}
           annotationFontSize={annotationFontSize}
           isDark={isDark}
+          viewMode={viewMode}
           diffSegments={diffResult?.segmentsB}
           diffUniqueCount={diffResult ? diffUniqueB : undefined}
           bodyScrollRef={diffScrollBRef}

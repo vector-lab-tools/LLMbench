@@ -26,6 +26,10 @@ LLMbench emerges from the convergence of three research programmes.
 
 - **Visual word diff.** Toggle a word-level diff view that highlights textual differences between the two outputs with synchronised scrolling.
 
+- **Structure view.** Toggle a sentence-structure overlay that numbers each sentence in the margin and highlights discourse connectives (however, therefore, moreover, etc.) in a distinct colour. Makes argumentative structure and sentence count differences immediately visible across both panels.
+
+- **Tone view.** Toggle a register analysis overlay that highlights hedging language (might, perhaps, arguably), confident/assertive language (clearly, certainly, must), and negation (not, never, without) using colour-coded spans. A tone balance bar shows the proportion of each register type, enabling rapid comparison of how assertively or tentatively each model writes.
+
 - **Export.** Comparisons export as structured JSON, formatted plain text, or side-by-side landscape PDF with coloured annotation badges and optional diff highlighting.
 
 ### Analyse Modes
@@ -119,7 +123,7 @@ src/
     annotations/               # CodeMirror annotation system (adapted from CCS-WB)
     settings/                  # Provider configuration modal
     shared/                    # DeepDive, ResultCard, MetricBox
-    viz/                       # TokenHeatmap (logprobs visualisation)
+    viz/                       # TokenHeatmap, EntropyHistogram, SentenceEntropyView, StructView, ToneView
     workspace/                 # ProsePanel, DiffPanel, theme
   context/                     # Provider settings (localStorage-persisted)
   hooks/                       # Annotations, local storage, prompt dispatch
