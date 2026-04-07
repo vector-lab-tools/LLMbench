@@ -3,25 +3,55 @@
 import { useState, useEffect, useCallback } from "react";
 import { X } from "lucide-react";
 
-const QUESTIONS = [
-  "Stop! Who would cross the Bridge of LLMs must answer me these questions three, ere the other side he see!",
-  "What... is your name?",
-  "What... is your quest?",
-  "What... is the airspeed velocity of an unladen vector?",
-  "African or European transformer?",
-  "What is your favourite attention mechanism?",
-  "What is the compute velocity of an unladen attention head?",
-  "What... is the capital of the latent space?",
-  "What is the temperature of an unladen model at inference?",
-  "Right. Off you go.",
+type Speaker = "keeper" | "arthur";
+
+const CONVERSATION: { speaker: Speaker; text: string }[] = [
+  { speaker: "keeper", text: "Stop! Who would cross the Bridge of LLMs must answer me these questions three, ere the other side he see!" },
+  { speaker: "arthur", text: "Ask me the questions, BridgeKeeper. I am not afraid." },
+  { speaker: "keeper", text: "What... is your name?" },
+  { speaker: "arthur", text: "It is Arthur, King of the Britons!" },
+  { speaker: "keeper", text: "What... is your quest?" },
+  { speaker: "arthur", text: "To seek the Holy Token!" },
+  { speaker: "keeper", text: "What... is the airspeed velocity of an unladen vector?" },
+  { speaker: "arthur", text: "What do you mean? An African or European transformer?" },
+  { speaker: "keeper", text: "Huh? I... I don't know that!" },
+  { speaker: "arthur", text: "Ha! Then you must answer me THESE questions three!" },
+  { speaker: "keeper", text: "AAARGH!" },
 ];
 
-const DISMISSALS = [
-  "AAARGH!",
-  "He who is valiant and pure of spirit may find the Holy Token!",
-  "We are the knights who say... logprob!",
-  "It's just a flesh wound.",
-];
+const STEP_DELAY = 4500; // ms between lines
+
+interface BubbleProps {
+  text: string;
+  side: "left" | "right";
+}
+
+function SpeechBubble({ text, side }: BubbleProps) {
+  return (
+    <div className={`relative max-w-[220px] bg-[#fffde7] border-2 border-[#8B4513] rounded-lg shadow-xl px-3 py-2.5 ${side === "left" ? "self-end" : "self-start"}`}>
+      {/* Tail */}
+      <div
+        className="absolute -bottom-3 w-0 h-0"
+        style={{
+          [side === "left" ? "right" : "left"]: 14,
+          borderLeft: "8px solid transparent",
+          borderRight: "8px solid transparent",
+          borderTop: "12px solid #8B4513",
+        }}
+      />
+      <div
+        className="absolute -bottom-2 w-0 h-0"
+        style={{
+          [side === "left" ? "right" : "left"]: 16,
+          borderLeft: "6px solid transparent",
+          borderRight: "6px solid transparent",
+          borderTop: "10px solid #fffde7",
+        }}
+      />
+      <p className="text-[11px] font-serif text-[#5c2a00] leading-relaxed">{text}</p>
+    </div>
+  );
+}
 
 interface BridgeKeeperProps {
   onDismiss: () => void;
@@ -29,79 +59,85 @@ interface BridgeKeeperProps {
 
 export function BridgeKeeper({ onDismiss }: BridgeKeeperProps) {
   const [step, setStep] = useState(0);
-  const [dismissText, setDismissText] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
 
-  // Auto-advance through questions
+  const current = CONVERSATION[step];
+  const isLast = step >= CONVERSATION.length - 1;
+
   useEffect(() => {
-    if (step >= QUESTIONS.length - 1) return;
-    const delay = step === 0 ? 2000 : 3500;
-    const t = setTimeout(() => setStep(s => Math.min(s + 1, QUESTIONS.length - 1)), delay);
+    if (isLast) return;
+    const t = setTimeout(() => setStep(s => s + 1), STEP_DELAY);
     return () => clearTimeout(t);
-  }, [step]);
+  }, [step, isLast]);
 
   const handleDismiss = useCallback(() => {
-    const text = DISMISSALS[Math.floor(Math.random() * DISMISSALS.length)];
-    setDismissText(text);
     setLeaving(true);
-    setTimeout(onDismiss, 2000);
+    setTimeout(onDismiss, 500);
   }, [onDismiss]);
 
   return (
-    <div className={`fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2 transition-all duration-500 ${leaving ? "opacity-0 translate-y-4" : "opacity-100 translate-y-0"}`}>
-      {/* Speech bubble */}
-      <div className="relative max-w-xs bg-[#fffde7] border-2 border-[#8B4513] rounded-lg shadow-xl px-4 py-3">
-        {/* Tail pointing to character below-right */}
-        <div className="absolute -bottom-3 right-8 w-0 h-0"
-          style={{
-            borderLeft: "8px solid transparent",
-            borderRight: "8px solid transparent",
-            borderTop: "12px solid #8B4513",
-          }}
-        />
-        <div className="absolute -bottom-2 right-9 w-0 h-0"
-          style={{
-            borderLeft: "6px solid transparent",
-            borderRight: "6px solid transparent",
-            borderTop: "10px solid #fffde7",
-          }}
-        />
+    <div
+      className={`fixed bottom-6 right-6 z-50 transition-all duration-500 ${leaving ? "opacity-0 translate-y-4" : "opacity-100 translate-y-0"}`}
+    >
+      {/* Dismiss */}
+      <button
+        onClick={handleDismiss}
+        className="absolute -top-2 -right-2 z-10 w-5 h-5 rounded-full bg-[#8B4513] text-[#fffde7] hover:bg-[#5c2a00] flex items-center justify-center transition-colors"
+        title="Flee!"
+      >
+        <X className="w-3 h-3" />
+      </button>
 
-        {/* Dismiss button */}
-        <button
-          onClick={handleDismiss}
-          className="absolute top-1.5 right-1.5 text-[#8B4513]/50 hover:text-[#8B4513] transition-colors"
-          title="Flee!"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
+      {/* Speech bubbles above characters */}
+      <div className="flex items-end gap-3 mb-2">
+        {/* Arthur's bubble — left, visible when Arthur speaks */}
+        <div className="w-[220px] flex flex-col items-start min-h-[60px] justify-end">
+          {current.speaker === "arthur" && (
+            <SpeechBubble text={current.text} side="left" />
+          )}
+        </div>
 
-        {dismissText ? (
-          <p className="text-[12px] font-serif text-[#5c2a00] italic pr-4 leading-relaxed">
-            {dismissText}
-          </p>
-        ) : (
-          <p className="text-[12px] font-serif text-[#5c2a00] pr-4 leading-relaxed min-h-[2.5em]">
-            {QUESTIONS[step]}
-          </p>
-        )}
-
-        {/* Progress dots */}
-        {!dismissText && (
-          <div className="flex gap-1 mt-2">
-            {QUESTIONS.map((_, i) => (
-              <div
-                key={i}
-                className={`w-1.5 h-1.5 rounded-full transition-colors ${i === step ? "bg-[#8B4513]" : i < step ? "bg-[#8B4513]/40" : "bg-[#8B4513]/15"}`}
-              />
-            ))}
-          </div>
-        )}
+        {/* BridgeKeeper's bubble — right, visible when keeper speaks */}
+        <div className="w-[220px] flex flex-col items-end min-h-[60px] justify-end">
+          {current.speaker === "keeper" && (
+            <SpeechBubble text={current.text} side="right" />
+          )}
+        </div>
       </div>
 
-      {/* BridgeKeeper character */}
-      <div className="select-none text-4xl drop-shadow-md" title="I am the BridgeKeeper!">
-        🧙‍♂️
+      {/* Characters */}
+      <div className="flex items-end gap-3">
+        {/* Arthur */}
+        <div className="flex flex-col items-center gap-0.5">
+          <span
+            className={`text-3xl select-none drop-shadow transition-all duration-300 ${current.speaker === "arthur" ? "scale-110" : "scale-90 opacity-60"}`}
+            title="Arthur, King of the Britons"
+          >
+            🤴
+          </span>
+          <span className="text-[9px] text-muted-foreground/50 font-mono">Arthur</span>
+        </div>
+
+        {/* BridgeKeeper */}
+        <div className="flex flex-col items-center gap-0.5">
+          <span
+            className={`text-3xl select-none drop-shadow transition-all duration-300 ${current.speaker === "keeper" ? "scale-110" : "scale-90 opacity-60"}`}
+            title="I am the BridgeKeeper!"
+          >
+            🧙‍♂️
+          </span>
+          <span className="text-[9px] text-muted-foreground/50 font-mono">BridgeKeeper</span>
+        </div>
+      </div>
+
+      {/* Progress */}
+      <div className="flex justify-center gap-1 mt-1.5">
+        {CONVERSATION.map((_, i) => (
+          <div
+            key={i}
+            className={`w-1 h-1 rounded-full transition-colors ${i === step ? "bg-[#8B4513]" : i < step ? "bg-[#8B4513]/35" : "bg-[#8B4513]/12"}`}
+          />
+        ))}
       </div>
     </div>
   );
