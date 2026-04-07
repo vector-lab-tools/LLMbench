@@ -64,6 +64,7 @@ import { computeTextMetrics, computeWordOverlap, computeTokenEntropy } from "@/l
 import { DiffRenderedText } from "@/components/workspace/DiffPanel";
 import { computeWordDiff, type DiffSegment } from "@/lib/diff/word-diff";
 import { TokenHeatmap } from "@/components/viz/TokenHeatmap";
+import { BridgeKeeper, isBridgeKeeperPrompt } from "@/components/viz/BridgeKeeper";
 import type { TokenLogprob } from "@/types/analysis";
 import {
   DEFAULT_ANNOTATION_DISPLAY_SETTINGS,
@@ -362,6 +363,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
   const [logprobTokensB, setLogprobTokensB] = useState<TokenLogprob[] | null>(null);
   const [logprobsLoading, setLogprobsLoading] = useState(false);
   const [showLogprobsInfo, setShowLogprobsInfo] = useState(false);
+  const [showBridgeKeeper, setShowBridgeKeeper] = useState(false);
   const [lastSentPrompt, setLastSentPrompt] = useState("");
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [showProbsExport, setShowProbsExport] = useState(false);
@@ -478,6 +480,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     setProbsNavIndex(null);
     setProbsSecondIndex(null);
     setLastSentPrompt(effectivePrompt);
+    if (isBridgeKeeperPrompt(effectivePrompt)) setShowBridgeKeeper(true);
     dispatch(effectivePrompt, temperatureOverride !== null ? temperatureOverride : undefined);
     setPromptCollapsed(true);
     setPromptBouncing(true);
@@ -1407,6 +1410,11 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
         </div>
         </div>
       </div>
+
+      {/* BridgeKeeper Easter egg */}
+      {showBridgeKeeper && (
+        <BridgeKeeper onDismiss={() => setShowBridgeKeeper(false)} />
+      )}
 
       {/* View Prompt modal */}
       {showPromptModal && (
