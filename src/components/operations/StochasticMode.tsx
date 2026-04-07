@@ -157,6 +157,97 @@ export default function StochasticMode({ isDark }: StochasticModeProps) {
                       </ResultCard>
                     ))}
                   </div>
+
+                  {/* Panel-level Deep Dive: pairwise overlap matrix and per-run metrics */}
+                  {outputs.length >= 2 && (
+                    <div className="mt-4 bg-card border border-parchment/50 rounded-sm overflow-hidden">
+                      <DeepDive
+                        label="Deep Dive"
+                        summary={`${outputs.length} runs, ${(outputs.length * (outputs.length - 1)) / 2} pairwise comparisons`}
+                      >
+                        {/* Per-run metrics table */}
+                        <div>
+                          <div className="text-caption font-medium text-muted-foreground mb-2">Per-Run Metrics</div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-caption">
+                              <thead>
+                                <tr className="border-b border-parchment">
+                                  <th className="text-left py-1.5 px-2 font-medium text-muted-foreground">Run</th>
+                                  <th className="text-right py-1.5 px-2 font-medium text-muted-foreground">Words</th>
+                                  <th className="text-right py-1.5 px-2 font-medium text-muted-foreground">Sentences</th>
+                                  <th className="text-right py-1.5 px-2 font-medium text-muted-foreground">Avg Sent. Length</th>
+                                  <th className="text-right py-1.5 px-2 font-medium text-muted-foreground">Vocab Diversity</th>
+                                  <th className="text-right py-1.5 px-2 font-medium text-muted-foreground">Unique Words</th>
+                                  <th className="text-right py-1.5 px-2 font-medium text-muted-foreground">Response Time</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {outputs.map((run, i) => {
+                                  const r = run as { metrics: { wordCount: number; sentenceCount: number; avgSentenceLength: number; vocabularyDiversity: number; uniqueWordCount: number }; provenance: { responseTimeMs: number } };
+                                  return (
+                                    <tr key={i} className="border-b border-parchment/30 hover:bg-cream/30">
+                                      <td className="py-1 px-2 font-medium">Run {i + 1}</td>
+                                      <td className="py-1 px-2 text-right tabular-nums">{r.metrics.wordCount}</td>
+                                      <td className="py-1 px-2 text-right tabular-nums">{r.metrics.sentenceCount}</td>
+                                      <td className="py-1 px-2 text-right tabular-nums">{r.metrics.avgSentenceLength.toFixed(1)}</td>
+                                      <td className="py-1 px-2 text-right tabular-nums">{(r.metrics.vocabularyDiversity * 100).toFixed(1)}%</td>
+                                      <td className="py-1 px-2 text-right tabular-nums">{r.metrics.uniqueWordCount}</td>
+                                      <td className="py-1 px-2 text-right tabular-nums">{(r.provenance.responseTimeMs / 1000).toFixed(1)}s</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Pairwise overlap matrix */}
+                        <div>
+                          <div className="text-caption font-medium text-muted-foreground mb-2">Pairwise Word Overlap (%)</div>
+                          <div className="overflow-x-auto">
+                            <table className="text-caption">
+                              <thead>
+                                <tr>
+                                  <th className="py-1 px-2 font-medium text-muted-foreground"></th>
+                                  {outputs.map((_, j) => (
+                                    <th key={j} className="py-1 px-2 font-medium text-muted-foreground text-center min-w-[50px]">
+                                      R{j + 1}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {outputs.map((runI, i) => (
+                                  <tr key={i}>
+                                    <td className="py-1 px-2 font-medium text-muted-foreground">R{i + 1}</td>
+                                    {outputs.map((runJ, j) => {
+                                      if (i === j) {
+                                        return <td key={j} className="py-1 px-2 text-center text-muted-foreground/40 tabular-nums">-</td>;
+                                      }
+                                      const overlap = computeWordOverlap(
+                                        (runI as { text: string }).text,
+                                        (runJ as { text: string }).text
+                                      );
+                                      const pct = overlap.overlapPercentage;
+                                      const bg = pct > 70 ? "bg-green-100 dark:bg-green-900/30" : pct > 40 ? "bg-yellow-100 dark:bg-yellow-900/30" : "bg-red-100 dark:bg-red-900/30";
+                                      return (
+                                        <td key={j} className={`py-1 px-2 text-center tabular-nums ${bg}`}>
+                                          {pct.toFixed(0)}%
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          <p className="text-caption text-muted-foreground mt-2">
+                            Colour key: green (&gt;70%) = high overlap, yellow (40-70%) = moderate, red (&lt;40%) = low overlap. Lower overlap indicates greater stochastic variation between runs.
+                          </p>
+                        </div>
+                      </DeepDive>
+                    </div>
+                  )}
                 </div>
               );
             })}
