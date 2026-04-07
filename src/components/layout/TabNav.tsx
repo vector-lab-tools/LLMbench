@@ -48,55 +48,65 @@ export function TabNav({ activeTab, onTabChange }: TabNavProps) {
   const currentGroup = GROUPS.find(g => g.id === activeGroup)!;
 
   return (
-    <div className="bg-card">
-      {/* Group tabs */}
-      <div className="px-6 flex gap-0 border-b border-parchment">
-        {GROUPS.map(group => {
-          const Icon = group.icon;
-          const isActive = group.id === activeGroup;
-          return (
-            <button
-              key={group.id}
-              onClick={() => onTabChange(group.tabs[0].id)}
-              className={cn(
-                "flex items-center gap-2 px-5 py-2.5 font-sans text-body-sm font-semibold",
-                "border-b-[3px] transition-all duration-200",
-                isActive
-                  ? "border-burgundy text-burgundy bg-background"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-cream/30"
-              )}
-            >
-              <Icon size={15} />
-              {group.label}
-            </button>
-          );
-        })}
-      </div>
+    <div className="bg-card border-b border-parchment">
+      <div className="px-6 flex items-center gap-0">
+        {/* "Mode:" label */}
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-semibold mr-2 select-none">
+          Mode
+        </span>
 
-      {/* Sub-tabs for active group (skip if only one tab) */}
-      {currentGroup.tabs.length > 1 && (
-        <div className="px-6 flex gap-1 py-1 border-b border-parchment bg-muted/30">
-          {currentGroup.tabs.map(tab => {
-            const isActive = tab.id === activeTab;
+        {/* Group tabs as compact pill toggles */}
+        <div className="flex items-center gap-0 border border-parchment rounded-sm overflow-hidden my-1.5">
+          {GROUPS.map(group => {
+            const Icon = group.icon;
+            const isActive = group.id === activeGroup;
             return (
               <button
-                key={tab.id}
-                onClick={() => onTabChange(tab.id)}
+                key={group.id}
+                onClick={() => onTabChange(group.tabs[0].id)}
                 className={cn(
-                  "px-4 py-1.5 font-sans text-body-sm font-medium rounded-sm",
-                  "transition-all duration-200",
+                  "flex items-center gap-1.5 px-3 py-1 text-caption font-medium",
+                  "transition-all duration-150 border-r border-parchment last:border-r-0",
                   isActive
-                    ? "text-primary-foreground bg-burgundy shadow-editorial"
-                    : "text-muted-foreground hover:text-foreground hover:bg-cream/50"
+                    ? "bg-burgundy text-white"
+                    : "bg-card text-muted-foreground hover:text-foreground hover:bg-cream/50"
                 )}
-                title={tab.description}
               >
-                {tab.label}
+                <Icon size={12} />
+                {group.label}
               </button>
             );
           })}
         </div>
-      )}
+
+        {/* Sub-tabs (inline, after a separator) */}
+        {currentGroup.tabs.length > 1 && (
+          <>
+            <div className="h-4 w-px bg-parchment mx-3" />
+            <div className="flex items-center gap-0.5">
+              {currentGroup.tabs.map(tab => {
+                const isActive = tab.id === activeTab;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => onTabChange(tab.id)}
+                    className={cn(
+                      "px-2.5 py-1 text-caption font-medium rounded-sm",
+                      "transition-all duration-150",
+                      isActive
+                        ? "bg-burgundy/10 text-burgundy"
+                        : "text-muted-foreground hover:text-foreground hover:bg-cream/50"
+                    )}
+                    title={tab.description}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
