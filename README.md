@@ -4,7 +4,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.0.0
+**Version:** 2.1.0
 **Date:** 8 April 2026
 **Licence:** MIT
 
@@ -38,7 +38,7 @@ LLMbench emerges from the convergence of three research programmes.
 
   - **Tone (Register view)** — Applies Hyland's (2005) metadiscourse model across seven categories: **Hedges** (might, perhaps, arguably — blue), **Boosters** (clearly, certainly, must — green), **Limiting** (not, never, without, hardly — orange), **Attitude markers** (important, surprising, problematic — purple), **Intensifiers** (very, extremely, highly — amber), **Self-mentions** (I, we, my, our — rose), and **Engagement markers** (you, consider, note, imagine — teal). Click any chip to toggle that category on or off. Click the **?** beside each chip to open a modal with the full Hyland (2005) definition, term, and bibliographic origin. Hover any marked word for its surrounding context, frequency count, and a word-specific linguistic note. A register balance bar at the foot shows proportions.
 
-  - **Probs** — Re-runs the current prompt through the token probability API and overlays a colour-coded entropy heatmap on each panel (grey = confident, red = uncertain). Click any token to pin a probability distribution bar chart in a side panel; ⌘/Ctrl+click to pin a second token and compare two positions simultaneously. Explanatory notes identify divergence points, high-entropy positions, and low-probability samples. Exports as PDF, PNG image, or JSON data with per-token entropy and alternatives. Requires Google Gemini 2.0 or OpenAI models. If neither panel is configured with a compatible model the button is dimmed; clicking it opens an explanatory modal with model requirements and a link to Settings.
+  - **Probs** — Re-runs the current prompt through the token probability API and overlays a continuous probability heatmap on each panel. Tokens with ≥70% probability receive no highlight; below that, the background glides from pale yellow (moderate uncertainty) through orange to deep red (near-zero probability), reflecting the full shape of the distribution. A gradient confidence key in the legend shows the scale. Click any token to pin a probability distribution bar chart in a side panel; ⌘/Ctrl+click to pin a second token and compare two positions simultaneously. Explanatory notes identify divergence points, high-entropy positions, and low-probability samples. Export chips (PDF / PNG / JSON) appear inline in the toolbar when probs data is loaded. Requires Google Gemini 2.0 or OpenAI models. If neither panel is configured with a compatible model the button is dimmed; clicking it opens an explanatory modal with model requirements and a link to Settings.
 
 - **Default prompts.** A row of curated example prompts appears below the input when empty. Clicking one fills and immediately runs it. Sending an empty prompt auto-selects a random example.
 

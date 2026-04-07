@@ -366,6 +366,9 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
   const [showLogprobsInfo, setShowLogprobsInfo] = useState(false);
   const [showBridgeKeeper, setShowBridgeKeeper] = useState(false);
   const [showKillerRabbit, setShowKillerRabbit] = useState(false);
+  const [grenadeReady, setGrenadeReady] = useState(false);
+  const [grenadeThrown, setGrenadeThrown] = useState(false);
+  const throwRabbitRef = useRef<(() => void) | null>(null);
   const [lastSentPrompt, setLastSentPrompt] = useState("");
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [showProbsExport, setShowProbsExport] = useState(false);
@@ -483,7 +486,12 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     setProbsSecondIndex(null);
     setLastSentPrompt(effectivePrompt);
     if (isBridgeKeeperPrompt(effectivePrompt)) setShowBridgeKeeper(true);
-    if (isKillerRabbitPrompt(effectivePrompt)) setShowKillerRabbit(true);
+    if (isKillerRabbitPrompt(effectivePrompt)) {
+      setShowKillerRabbit(true);
+      setGrenadeReady(false);
+      setGrenadeThrown(false);
+      throwRabbitRef.current = null;
+    }
     dispatch(effectivePrompt, temperatureOverride !== null ? temperatureOverride : undefined);
     setPromptCollapsed(true);
     setPromptBouncing(true);
@@ -1099,36 +1107,46 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
           );
         })()}
 
-        {/* Probs export dropdown — only when probs data exists */}
+        {/* Probs export chips — visible inline when probs data exists */}
         {(logprobTokensA || logprobTokensB) && viewMode === "probs" && (
-          <div className="relative">
-            <button
-              onClick={() => setShowProbsExport(p => !p)}
+          <>
+            <div className="w-px h-4 bg-parchment/60" />
+            <button onClick={exportProbsPDF}
               className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5"
-              title="Export token probability data"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export</span>
-              <ChevronDown className="w-3 h-3" />
+              title="Export token heatmap as PDF">
+              <FileType className="w-3.5 h-3.5" /><span>PDF</span>
             </button>
-            {showProbsExport && (
-              <div className="absolute left-0 top-full mt-1 z-30 bg-popover border border-parchment rounded-sm shadow-lg min-w-[160px]"
-                onMouseLeave={() => setShowProbsExport(false)}>
-                <button onClick={() => { exportProbsPDF(); setShowProbsExport(false); }}
-                  className="w-full text-left px-3 py-2 text-caption hover:bg-cream flex items-center gap-2">
-                  <FileType className="w-3.5 h-3.5 text-burgundy" /> PDF snapshot
-                </button>
-                <button onClick={() => { exportProbsImage(); setShowProbsExport(false); }}
-                  className="w-full text-left px-3 py-2 text-caption hover:bg-cream flex items-center gap-2">
-                  <FileCode className="w-3.5 h-3.5 text-burgundy" /> PNG image
-                </button>
-                <button onClick={() => { exportProbsJSON(); setShowProbsExport(false); }}
-                  className="w-full text-left px-3 py-2 text-caption hover:bg-cream flex items-center gap-2">
-                  <FileJson className="w-3.5 h-3.5 text-burgundy" /> JSON data
-                </button>
-              </div>
-            )}
-          </div>
+            <button onClick={exportProbsImage}
+              className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5"
+              title="Export token heatmap as PNG image">
+              <FileCode className="w-3.5 h-3.5" /><span>PNG</span>
+            </button>
+            <button onClick={exportProbsJSON}
+              className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5"
+              title="Export full token probability data as JSON">
+              <FileJson className="w-3.5 h-3.5" /><span>JSON</span>
+            </button>
+          </>
+        )}
+
+        {/* Holy Hand Grenade — appears once Tim has finished warning */}
+        {showKillerRabbit && grenadeReady && (
+          <>
+            <div className="w-px h-4 bg-parchment/60" />
+            <button
+              onClick={() => {
+                setGrenadeThrown(true);
+                throwRabbitRef.current?.();
+                setTimeout(() => { setGrenadeReady(false); setShowKillerRabbit(false); }, 2200);
+              }}
+              className="px-2 py-1 text-caption flex items-center gap-1.5 rounded-sm transition-all animate-pulse"
+              style={{ background: "#2e1e10", color: "#c8b898", border: "1px solid #5a3a20" }}
+              title="Throw the Holy Hand Grenade of Antioch!"
+            >
+              <span>💣</span>
+              <span style={{ fontFamily: "Georgia, serif", fontSize: 11 }}>Holy Hand Grenade</span>
+            </button>
+          </>
         )}
 
         <div className="flex-1" />
@@ -1421,7 +1439,11 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
 
       {/* Killer Rabbit Easter egg */}
       {showKillerRabbit && (
-        <KillerRabbit onDismiss={() => setShowKillerRabbit(false)} />
+        <KillerRabbit
+          onDismiss={() => { setShowKillerRabbit(false); setGrenadeReady(false); setGrenadeThrown(false); }}
+          onGrenadeReady={(fn) => { throwRabbitRef.current = fn; setGrenadeReady(true); }}
+          grenadeThrown={grenadeThrown}
+        />
       )}
 
       {/* View Prompt modal */}

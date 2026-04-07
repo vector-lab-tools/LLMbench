@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import { computeTokenEntropy } from "@/lib/metrics/text-metrics";
 import type { TokenLogprob } from "@/types/analysis";
@@ -17,38 +17,34 @@ interface TokenHeatmapProps {
   siblingTokens?: TokenLogprob[] | null;
 }
 
-function logprobToColor(logprob: number, isDark: boolean): string {
-  const uncertainty = Math.min(1, Math.abs(logprob) / 5);
+// Continuous probability → background colour.
+// Tokens with prob ≥ 70% receive no highlight.
+// Below 70% the hue glides yellow → orange → deep red and opacity builds.
+function logprobToStyle(logprob: number, isDark: boolean): CSSProperties {
+  const prob = Math.exp(logprob);
+  const THRESHOLD = 0.70;
+  if (prob >= THRESHOLD) return {};
+
+  // t: 0 at prob=70%, 1 at prob=0%. Slight power curve so the colour
+  // ramps up noticeably even for moderate uncertainty.
+  const t = Math.pow(1 - prob / THRESHOLD, 0.75);
+
+  // Hue: 52° (yellow) → 5° (deep red)
+  const hue = Math.round(52 - 47 * t);
+  // Saturation stays high throughout
+  const sat = Math.round(88 + 7 * t);
 
   if (isDark) {
-    if (uncertainty < 0.1) return "bg-slate-700/30";
-    if (uncertainty < 0.3) return "bg-blue-900/40";
-    if (uncertainty < 0.5) return "bg-yellow-900/40";
-    if (uncertainty < 0.7) return "bg-orange-900/50";
-    return "bg-red-900/60";
+    // Dark mode: keep lightness low so it doesn't wash out dark text
+    const lit = Math.round(32 - 12 * t);     // 32% → 20%
+    const alpha = (0.25 + 0.55 * t).toFixed(2);
+    return { backgroundColor: `hsla(${hue},${sat}%,${lit}%,${alpha})` };
   }
 
-  if (uncertainty < 0.1) return "bg-slate-100";
-  if (uncertainty < 0.3) return "bg-blue-100";
-  if (uncertainty < 0.5) return "bg-yellow-100";
-  if (uncertainty < 0.7) return "bg-orange-200";
-  return "bg-red-200";
-}
-
-function logprobToTextColor(logprob: number, isDark: boolean): string {
-  const uncertainty = Math.min(1, Math.abs(logprob) / 5);
-
-  if (isDark) {
-    if (uncertainty < 0.3) return "text-slate-300";
-    if (uncertainty < 0.5) return "text-yellow-300";
-    if (uncertainty < 0.7) return "text-orange-300";
-    return "text-red-300";
-  }
-
-  if (uncertainty < 0.3) return "text-slate-700";
-  if (uncertainty < 0.5) return "text-yellow-800";
-  if (uncertainty < 0.7) return "text-orange-800";
-  return "text-red-800";
+  // Light mode: start pale, deepen as confidence drops
+  const lit = Math.round(92 - 50 * t);       // 92% → 42%
+  const alpha = (0.18 + 0.82 * t).toFixed(2);
+  return { backgroundColor: `hsla(${hue},${sat}%,${lit}%,${alpha})` };
 }
 
 // ---- Detail panel sub-component ----
@@ -276,11 +272,10 @@ export function TokenHeatmap({
               key={i}
               className={cn(
                 "cursor-pointer rounded-sm px-0.5 transition-all duration-100",
-                logprobToColor(token.logprob, isDark),
-                logprobToTextColor(token.logprob, isDark),
                 activeIndex === i && "ring-2 ring-burgundy",
                 secondIndex === i && "ring-2 ring-purple-500"
               )}
+              style={logprobToStyle(token.logprob, isDark)}
               onMouseEnter={() => setHoveredIndex(i)}
               onMouseLeave={() => setHoveredIndex(null)}
               onClick={(e) => handleClick(i, e)}
@@ -290,22 +285,23 @@ export function TokenHeatmap({
           ))}
         </div>
 
-        {/* Legend */}
+        {/* Legend — continuous gradient confidence key */}
         <div className="flex items-center gap-3 text-caption text-muted-foreground mt-4">
           <span>Confidence:</span>
-          <div className="flex items-center gap-1">
-            <span className={cn("w-4 h-3 rounded-sm", isDark ? "bg-slate-700/30" : "bg-slate-100")} />
-            <span>High</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px]">high</span>
+            <div
+              className="w-28 h-3 rounded-sm border border-parchment/20"
+              style={{
+                background: isDark
+                  ? "linear-gradient(to right, hsla(52,95%,20%,0.2), hsla(30,95%,22%,0.55), hsla(5,95%,20%,0.8))"
+                  : "linear-gradient(to right, hsla(52,90%,88%,0.3), hsla(30,92%,65%,0.75), hsla(5,95%,42%,1))",
+              }}
+            />
+            <span className="text-[10px]">low</span>
           </div>
-          <div className="flex items-center gap-1">
-            <span className={cn("w-4 h-3 rounded-sm", isDark ? "bg-yellow-900/40" : "bg-yellow-100")} />
-            <span>Medium</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className={cn("w-4 h-3 rounded-sm", isDark ? "bg-red-900/60" : "bg-red-200")} />
-            <span>Low</span>
-          </div>
-          <span className="text-muted-foreground/50 ml-2">⌘/Ctrl+click to pin a second token</span>
+          <span className="text-muted-foreground/40">·</span>
+          <span className="text-muted-foreground/50 text-[10px]">no colour = ≥70% probability</span>
         </div>
       </div>
 
