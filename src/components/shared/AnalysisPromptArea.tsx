@@ -80,7 +80,7 @@ export function AnalysisPromptArea({
           }}
         />
         <button
-          onClick={onSubmit}
+          onClick={() => onSubmit()}
           disabled={!prompt.trim() || isLoading || disabled}
           className="btn-editorial-primary px-3 py-2.5 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
         >

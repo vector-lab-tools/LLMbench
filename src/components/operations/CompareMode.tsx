@@ -31,6 +31,7 @@ import {
   GitCompareArrows,
   ListOrdered,
   Activity,
+  BarChart2,
 } from "lucide-react";
 import { StructView } from "@/components/viz/StructView";
 import { ToneView } from "@/components/viz/ToneView";
@@ -60,6 +61,8 @@ import { MetricBox } from "@/components/shared/ResultCard";
 import { computeTextMetrics, computeWordOverlap } from "@/lib/metrics/text-metrics";
 import { DiffRenderedText } from "@/components/workspace/DiffPanel";
 import { computeWordDiff, type DiffSegment } from "@/lib/diff/word-diff";
+import { TokenHeatmap } from "@/components/viz/TokenHeatmap";
+import type { TokenLogprob } from "@/types/analysis";
 import {
   DEFAULT_ANNOTATION_DISPLAY_SETTINGS,
   type AnnotationDisplaySettings,
@@ -128,6 +131,7 @@ function AnnotatedPanelDisplay({
   diffSegments,
   diffUniqueCount,
   bodyScrollRef,
+  logprobTokens,
 }: {
   panel: "A" | "B";
   result: PanelResult | null;
@@ -140,10 +144,11 @@ function AnnotatedPanelDisplay({
   annotationFontFamily: string;
   annotationFontSize: number;
   isDark: boolean;
-  viewMode?: "diff" | "struct" | "tone" | null;
+  viewMode?: "diff" | "struct" | "tone" | "probs" | null;
   diffSegments?: DiffSegment[];
   diffUniqueCount?: number;
   bodyScrollRef?: React.RefObject<HTMLDivElement | null>;
+  logprobTokens?: TokenLogprob[];
 }) {
   const editCallbacks = useMemo(
     () => ({
@@ -242,6 +247,17 @@ function AnnotatedPanelDisplay({
             <p className="text-body-sm">{errorText}</p>
           </div>
         </div>
+      ) : viewMode === "probs" && logprobTokens && logprobTokens.length > 0 ? (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <TokenHeatmap tokens={logprobTokens} isDark={isDark} />
+        </div>
+      ) : viewMode === "probs" && outputText !== null ? (
+        <div className="flex-1 flex items-center justify-center p-6">
+          <p className="text-caption text-muted-foreground text-center">
+            No token probability data for Panel {panel}.<br />
+            Logprobs require Gemini or OpenAI models.
+          </p>
+        </div>
       ) : viewMode === "struct" && outputText !== null ? (
         <div className="flex-1 min-h-0">
           <StructView text={outputText} fontSize={fontSize} fontFamily={proseFontFamily} isDark={isDark} />
@@ -299,7 +315,7 @@ interface CompareModeProps {
 
 export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) {
   const [prompt, setPrompt] = useState("");
-  const { getSlotLabel, setShowSettings } = useProviderSettings();
+  const { getSlotLabel, setShowSettings, slots, noMarkdown, isSlotConfigured } = useProviderSettings();
   const {
     isLoading,
     loadingA,
@@ -337,8 +353,12 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
   const [showExportModal, setShowExportModal] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showDisplaySettings, setShowDisplaySettings] = useState(false);
-  const [viewMode, setViewMode] = useState<"diff" | "struct" | "tone" | null>(null);
+  const [viewMode, setViewMode] = useState<"diff" | "struct" | "tone" | "probs" | null>(null);
   const [promptCollapsed, setPromptCollapsed] = useState(false);
+  const [logprobTokensA, setLogprobTokensA] = useState<TokenLogprob[] | null>(null);
+  const [logprobTokensB, setLogprobTokensB] = useState<TokenLogprob[] | null>(null);
+  const [logprobsLoading, setLogprobsLoading] = useState(false);
+  const [showLogprobsInfo, setShowLogprobsInfo] = useState(false);
   const showDiff = viewMode === "diff";
 
   const hasContent = resultA !== null || resultB !== null;
@@ -443,7 +463,35 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     setComparisonCreatedAt(null);
     annA.setAllAnnotations([]);
     annB.setAllAnnotations([]);
+    setLogprobTokensA(null);
+    setLogprobTokensB(null);
     dispatch(effectivePrompt);
+  };
+
+  const fetchLogprobs = async () => {
+    const effectivePrompt = prompt.trim();
+    if (!effectivePrompt || logprobsLoading) return;
+    setLogprobsLoading(true);
+    try {
+      const res = await fetch("/api/analyse/logprobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: effectivePrompt,
+          topK: 5,
+          slotA: slots.A,
+          slotB: isSlotConfigured("B") ? slots.B : null,
+          noMarkdown,
+        }),
+      });
+      const data = await res.json();
+      if (data.resultA?.tokens) setLogprobTokensA(data.resultA.tokens);
+      if (data.resultB?.tokens) setLogprobTokensB(data.resultB.tokens);
+    } catch {
+      // silently fail — panel will show "no data" message
+    } finally {
+      setLogprobsLoading(false);
+    }
   };
 
   const handleSave = useCallback(() => {
@@ -781,6 +829,36 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
             </button>
           );
         })}
+        {/* Probs view button */}
+        {(() => {
+          const probsActive = viewMode === "probs";
+          const logprobCapable = (p: string) => p === "google" || p === "openai";
+          const aCapable = isSlotConfigured("A") && logprobCapable(slots.A.provider);
+          const bCapable = isSlotConfigured("B") && logprobCapable(slots.B.provider);
+          const anyCapable = aCapable || bCapable;
+          return (
+            <button
+              onClick={() => {
+                if (!anyCapable) { setShowLogprobsInfo(true); return; }
+                if (probsActive) { setViewMode(null); return; }
+                setViewMode("probs");
+                if (!logprobTokensA && !logprobTokensB) fetchLogprobs();
+              }}
+              disabled={!hasContent && anyCapable}
+              className={`px-2 py-1 text-caption flex items-center gap-1.5 rounded-sm transition-colors ${
+                !anyCapable
+                  ? "btn-editorial-ghost opacity-40"
+                  : probsActive
+                  ? "bg-burgundy/90 text-white dark:bg-burgundy/80"
+                  : "btn-editorial-ghost"
+              }`}
+              title={anyCapable ? "Token probability heatmap (Gemini / OpenAI)" : "Token probabilities require Gemini or OpenAI — click for details"}
+            >
+              <BarChart2 className="w-3.5 h-3.5" />
+              <span>{probsActive ? "Probs On" : "Probs"}{logprobsLoading ? "…" : ""}</span>
+            </button>
+          );
+        })()}
 
         <div className="flex-1" />
 
@@ -861,6 +939,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
           diffSegments={diffResult?.segmentsA}
           diffUniqueCount={diffResult ? diffUniqueA : undefined}
           bodyScrollRef={diffScrollARef}
+          logprobTokens={logprobTokensA ?? undefined}
         />
         <div className="hidden md:block w-px bg-border" />
         <div className="md:hidden h-px bg-border" />
@@ -880,6 +959,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
           diffSegments={diffResult?.segmentsB}
           diffUniqueCount={diffResult ? diffUniqueB : undefined}
           bodyScrollRef={diffScrollBRef}
+          logprobTokens={logprobTokensB ?? undefined}
         />
       </div>
 
@@ -1010,6 +1090,49 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
         </div>
         )}
       </div>
+
+      {/* Logprobs info modal */}
+      {showLogprobsInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowLogprobsInfo(false)}>
+          <div className="bg-popover rounded-sm shadow-lg p-5 w-full max-w-md border border-parchment mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-display text-display-md font-bold text-foreground flex items-center gap-2">
+                <BarChart2 className="w-4 h-4 text-burgundy" />
+                Token Probabilities
+              </h2>
+              <button onClick={() => setShowLogprobsInfo(false)} className="p-1 text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-3 text-caption text-muted-foreground leading-relaxed">
+              <p>
+                The <strong className="text-foreground">Probs</strong> view overlays a token probability heatmap on each panel.
+                It re-runs the current prompt and returns the log-probability distribution at each token position,
+                revealing where the model was confident and where it was genuinely uncertain.
+              </p>
+              <p>
+                Token probabilities are only available from providers that expose log-probability data via their API:
+              </p>
+              <ul className="list-disc pl-4 space-y-1">
+                <li><strong className="text-foreground">Google Gemini</strong> — supported on Gemini 2.0 Flash and most 1.5 models. <em>Not</em> supported on Gemini 2.5 models.</li>
+                <li><strong className="text-foreground">OpenAI</strong> — supported on GPT-4o, GPT-4 Turbo, and most chat models.</li>
+              </ul>
+              <p>
+                Anthropic (Claude), Ollama, and OpenAI-compatible endpoints do <em>not</em> expose token probabilities.
+              </p>
+              <div className="pt-2 border-t border-parchment/40">
+                <p className="mb-2">To enable Probs view, configure Panel A or B to use a Gemini or OpenAI model:</p>
+                <button
+                  onClick={() => { setShowLogprobsInfo(false); setShowSettings(true); }}
+                  className="btn-editorial-primary px-3 py-1.5 text-caption"
+                >
+                  Open Settings
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Export modal */}
       {showExportModal && (

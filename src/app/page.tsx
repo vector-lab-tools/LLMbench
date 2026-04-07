@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { SplitSquareHorizontal, Settings, HelpCircle, Info, X, Type } from "lucide-react";
+import { SplitSquareHorizontal, Settings, HelpCircle, Info, X } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { TabNav, type TabId } from "@/components/layout/TabNav";
 import ProviderSettings from "@/components/settings/ProviderSettings";
@@ -51,21 +51,25 @@ export default function Home() {
           {MODE_LABELS[activeTab]}
         </span>
         <div className="flex-1" />
-        {/* Plain prose toggle — default on; suppresses markdown in all model responses */}
-        <button
-          onClick={() => setNoMarkdown(!noMarkdown)}
-          className={`px-2 py-1 text-caption flex items-center gap-1.5 rounded-sm transition-colors ${
-            noMarkdown
-              ? "bg-burgundy/10 text-burgundy border border-burgundy/20"
-              : "btn-editorial-ghost text-muted-foreground/50"
-          }`}
-          title={noMarkdown
-            ? "Plain prose mode ON — models are asked not to use markdown formatting. Click to allow markdown."
-            : "Plain prose mode OFF — models may return markdown. Click to suppress it."}
+        {/* Markdown / No Markdown segmented toggle */}
+        <div
+          className="flex items-center border border-border rounded-sm text-caption overflow-hidden"
+          title="Controls whether models are asked to respond in plain prose or may use markdown formatting"
         >
-          <Type className="w-3.5 h-3.5" />
-          <span>Prose</span>
-        </button>
+          <button
+            onClick={() => setNoMarkdown(false)}
+            className={`px-2 py-1 transition-colors ${!noMarkdown ? "bg-burgundy text-cream" : "text-muted-foreground/60 hover:text-foreground"}`}
+          >
+            Markdown
+          </button>
+          <div className="w-px self-stretch bg-border" />
+          <button
+            onClick={() => setNoMarkdown(true)}
+            className={`px-2 py-1 transition-colors ${noMarkdown ? "bg-burgundy text-cream" : "text-muted-foreground/60 hover:text-foreground"}`}
+          >
+            No Markdown
+          </button>
+        </div>
 
         <button
           onClick={() => setShowHelp(true)}
