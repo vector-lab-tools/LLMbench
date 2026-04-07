@@ -54,7 +54,8 @@ export function BridgeKeeper({ onDismiss }: BridgeKeeperProps) {
       {/* Dismiss button */}
       <button
         onClick={handleDismiss}
-        className="absolute -top-2 -right-2 z-10 w-5 h-5 rounded-full bg-[#8B4513] text-[#fffde7] hover:bg-[#5c2a00] flex items-center justify-center transition-colors"
+        className="absolute -top-2 -right-2 z-10 w-5 h-5 rounded-sm flex items-center justify-center transition-colors"
+      style={{ background: "#2e1e10", color: "#c8b898" }}
         title="Flee!"
       >
         <X className="w-3 h-3" />
@@ -62,8 +63,15 @@ export function BridgeKeeper({ onDismiss }: BridgeKeeperProps) {
 
       {/* Speech bubble — single bubble, tail moves left/right per speaker */}
       <div className="relative mb-4">
-        <div className="bg-[#fffde7] border-2 border-[#8B4513] rounded-lg shadow-xl px-3 py-2.5 min-h-[52px] flex items-center">
-          <p className="text-[11px] font-serif text-[#5c2a00] leading-relaxed">
+        <div
+          className="rounded-sm px-3 py-2.5 min-h-[52px] flex items-center"
+          style={{
+            background: "#9e9080",
+            border: "2px solid #2e1e10",
+            boxShadow: "2px 3px 0 #1a1008",
+          }}
+        >
+          <p className="text-[11px] leading-relaxed" style={{ fontFamily: "Georgia, serif", color: "#f0e6d0" }}>
             {current.text}
           </p>
         </div>
@@ -75,7 +83,7 @@ export function BridgeKeeper({ onDismiss }: BridgeKeeperProps) {
             transform: "translateX(-50%)",
             borderLeft: "8px solid transparent",
             borderRight: "8px solid transparent",
-            borderTop: "12px solid #8B4513",
+            borderTop: "12px solid #2e1e10",
           }}
         />
         <div
@@ -85,23 +93,31 @@ export function BridgeKeeper({ onDismiss }: BridgeKeeperProps) {
             transform: "translateX(-50%)",
             borderLeft: "6px solid transparent",
             borderRight: "6px solid transparent",
-            borderTop: "10px solid #fffde7",
+            borderTop: "10px solid #9e9080",
           }}
         />
       </div>
 
       {/* Characters — fixed positions matching tail anchors */}
       <div className="flex items-end justify-between px-2">
-        {/* Arthur — left ~20% */}
-        <div className={`flex flex-col items-center gap-0.5 transition-all duration-300 ${current.speaker === "arthur" ? "scale-110" : "scale-90 opacity-50"}`}>
-          <span className="text-3xl select-none" title="Arthur, King of the Britons">🤴</span>
-          <span className="text-[9px] text-muted-foreground/60 font-mono">Arthur</span>
+        {/* Arthur — left */}
+        <div className={`flex flex-col items-center gap-0.5 transition-all duration-300 ${current.speaker === "arthur" ? "scale-110" : "scale-100"}`}>
+          <span
+            className="text-3xl select-none"
+            title="Arthur, King of the Britons"
+            style={{ filter: "grayscale(55%) sepia(30%) brightness(0.8)" }}
+          >🤴</span>
+          <span className="text-[9px] font-mono" style={{ color: "#7a6a58" }}>Arthur</span>
         </div>
 
-        {/* BridgeKeeper — right ~75% */}
-        <div className={`flex flex-col items-center gap-0.5 transition-all duration-300 ${current.speaker === "keeper" ? "scale-110" : "scale-90 opacity-50"}`}>
-          <span className="text-3xl select-none" title="I am the BridgeKeeper!">🧙‍♂️</span>
-          <span className="text-[9px] text-muted-foreground/60 font-mono">BridgeKeeper</span>
+        {/* BridgeKeeper — right */}
+        <div className={`flex flex-col items-center gap-0.5 transition-all duration-300 ${current.speaker === "keeper" ? "scale-110" : "scale-100"}`}>
+          <span
+            className="text-3xl select-none"
+            title="I am the BridgeKeeper!"
+            style={{ filter: "grayscale(55%) sepia(30%) brightness(0.8)" }}
+          >🧙‍♂️</span>
+          <span className="text-[9px] font-mono" style={{ color: "#7a6a58" }}>BridgeKeeper</span>
         </div>
       </div>
 
@@ -110,7 +126,8 @@ export function BridgeKeeper({ onDismiss }: BridgeKeeperProps) {
         {CONVERSATION.map((_, i) => (
           <div
             key={i}
-            className={`w-1 h-1 rounded-full transition-colors ${i === step ? "bg-[#8B4513]" : i < step ? "bg-[#8B4513]/35" : "bg-[#8B4513]/12"}`}
+            className="w-1 h-1 rounded-full transition-colors"
+            style={{ background: i === step ? "#7a6a58" : i < step ? "#7a6a5860" : "#7a6a5820" }}
           />
         ))}
       </div>
