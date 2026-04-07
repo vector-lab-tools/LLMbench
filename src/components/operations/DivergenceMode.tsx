@@ -4,6 +4,8 @@ import { useState, useCallback, useMemo } from "react";
 import { Loader2, AlertCircle, GitFork, RotateCcw } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { AnalysisPromptArea } from "@/components/shared/AnalysisPromptArea";
+import { DefaultPromptChips } from "@/components/shared/DefaultPromptChips";
+import { MODE_DEFAULTS, getRandomDefault } from "@/lib/prompts/defaults";
 import type { PanelSelection } from "@/components/shared/ModelSelector";
 import { MetricBox } from "@/components/shared/ResultCard";
 import { DeepDive } from "@/components/shared/DeepDive";
@@ -97,8 +99,11 @@ export default function DivergenceMode({ isDark: _isDark }: DivergenceModeProps)
   const slotAConfigured = isSlotConfigured("A");
   const slotBConfigured = isSlotConfigured("B");
 
-  const handleRun = useCallback(async () => {
-    if (!prompt.trim() || isLoading) return;
+  const handleRun = useCallback(async (overridePrompt?: string) => {
+    const effectivePrompt = overridePrompt ?? (prompt.trim() || (() => {
+      const d = getRandomDefault("divergence"); setPrompt(d); return d;
+    })());
+    if (!effectivePrompt || isLoading) return;
     setIsLoading(true);
     setError(null);
     setResultA(null);
@@ -110,7 +115,7 @@ export default function DivergenceMode({ isDark: _isDark }: DivergenceModeProps)
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt,
+          prompt: effectivePrompt,
           slotA: panelSelection === "B" ? slots.B : slots.A,
           slotB: panelSelection === "both" && isSlotConfigured("B") ? slots.B : null,
         }),
@@ -322,7 +327,7 @@ export default function DivergenceMode({ isDark: _isDark }: DivergenceModeProps)
                           <span className="text-body-sm">{result.error}</span>
                         </div>
                         <button
-                          onClick={handleRun}
+                          onClick={() => handleRun()}
                           disabled={isLoading}
                           className="flex items-center gap-1.5 text-caption text-burgundy hover:text-foreground transition-colors disabled:opacity-40"
                         >
@@ -429,11 +434,20 @@ export default function DivergenceMode({ isDark: _isDark }: DivergenceModeProps)
         panelSelection={panelSelection}
         onPanelSelectionChange={setPanelSelection}
         footer={
-          !slotBConfigured && slotAConfigured ? (
-            <span className="text-caption text-muted-foreground">
-              Only Panel A is configured. Add a second model in Settings for cross-model comparison.
-            </span>
-          ) : undefined
+          <div className="space-y-1.5">
+            {!slotBConfigured && slotAConfigured && (
+              <span className="text-caption text-muted-foreground">
+                Only Panel A is configured. Add a second model in Settings for cross-model comparison.
+              </span>
+            )}
+            {!prompt.trim() && !isLoading && (
+              <DefaultPromptChips
+                prompts={MODE_DEFAULTS.divergence}
+                onSelect={(p) => { setPrompt(p); handleRun(p); }}
+                isLoading={isLoading}
+              />
+            )}
+          </div>
         }
       />
     </>

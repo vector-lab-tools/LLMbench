@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { computeTokenEntropy, computeMeanEntropy } from "@/lib/metrics/text-metrics";
+import { computeMeanEntropy } from "@/lib/metrics/text-metrics";
 import type { TokenLogprob } from "@/types/analysis";
 
 interface SentenceEntropyViewProps {
@@ -30,33 +30,36 @@ function buildSentenceSegments(tokens: TokenLogprob[]): SentenceSegment[] {
 
   if (!fullText.trim()) return [];
 
-  // Split into sentences on ./?/! followed by whitespace or end
-  // Keep the delimiter with the sentence
-  const sentencePattern = /[^.!?]*(?:[.!?]+(?:\s|$)|$)/g;
-  const rawSentences: { text: string; start: number; end: number }[] = [];
-  let match;
-  while ((match = sentencePattern.exec(fullText)) !== null) {
-    const s = match[0];
-    if (s.trim().length > 3) {
-      rawSentences.push({ text: s, start: match.index, end: match.index + s.length });
-    }
+  // [^.!?]+ requires at least 1 char — prevents zero-length matches and infinite loops
+  // matchAll is safe; exec-while with patterns that can match "" is not
+  const sentenceMatches = [...fullText.matchAll(/[^.!?]+[.!?]*/g)];
+
+  if (sentenceMatches.length === 0) {
+    // Fallback: treat entire text as one segment
+    return [{
+      text: fullText,
+      tokens,
+      meanEntropy: computeMeanEntropy(tokens),
+      tokenCount: tokens.length,
+    }];
   }
 
-  // Map each sentence to its tokens
-  return rawSentences.map(sentence => {
-    const sentTokens = tokens.filter((_, i) => {
-      const r = tokenRanges[i];
-      // token belongs to sentence if its start falls within sentence range
-      return r.start >= sentence.start && r.start < sentence.end;
-    });
-    const meanEntropy = sentTokens.length > 0 ? computeMeanEntropy(sentTokens) : 0;
-    return {
-      text: sentence.text,
-      tokens: sentTokens,
-      meanEntropy,
-      tokenCount: sentTokens.length,
-    };
-  }).filter(s => s.tokenCount > 0);
+  return sentenceMatches
+    .map(match => {
+      const start = match.index!;
+      const end = start + match[0].length;
+      const sentTokens = tokens.filter((_, i) =>
+        tokenRanges[i].start >= start && tokenRanges[i].start < end
+      );
+      const meanEntropy = sentTokens.length > 0 ? computeMeanEntropy(sentTokens) : 0;
+      return {
+        text: match[0],
+        tokens: sentTokens,
+        meanEntropy,
+        tokenCount: sentTokens.length,
+      };
+    })
+    .filter(s => s.tokenCount > 0);
 }
 
 function entropyToBackground(entropy: number, maxEntropy: number, isDark: boolean): string {
@@ -83,10 +86,8 @@ export function SentenceEntropyView({ tokens, isDark }: SentenceEntropyViewProps
   const { segments, maxEntropy, maxEntropyIndex } = useMemo(() => {
     const segs = buildSentenceSegments(tokens);
     const maxE = segs.reduce((m, s) => Math.max(m, s.meanEntropy), 0);
-    // Pre-compute per-token max entropy for context
-    const entropies = tokens.map(computeTokenEntropy);
     const maxIdx = segs.reduce((mi, s, i) => s.meanEntropy > (segs[mi]?.meanEntropy ?? 0) ? i : mi, 0);
-    return { segments: segs, maxEntropy: maxE, maxEntropyIndex: maxIdx, entropies };
+    return { segments: segs, maxEntropy: maxE, maxEntropyIndex: maxIdx };
   }, [tokens]);
 
   if (segments.length === 0) {

@@ -4,6 +4,8 @@ import { useState, useCallback } from "react";
 import { Loader2, AlertCircle, BarChart3, Download, RotateCcw } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { AnalysisPromptArea } from "@/components/shared/AnalysisPromptArea";
+import { DefaultPromptChips } from "@/components/shared/DefaultPromptChips";
+import { MODE_DEFAULTS, getRandomDefault } from "@/lib/prompts/defaults";
 import type { PanelSelection } from "@/components/shared/ModelSelector";
 import { MetricBox } from "@/components/shared/ResultCard";
 import { DeepDive } from "@/components/shared/DeepDive";
@@ -53,8 +55,11 @@ export default function LogprobsMode({ isDark }: LogprobsModeProps) {
   // Check if providers support logprobs
   const aSupported = ["google", "openai", "openai-compatible"].includes(slots.A.provider);
 
-  const handleRun = useCallback(async () => {
-    if (!prompt.trim() || isLoading) return;
+  const handleRun = useCallback(async (overridePrompt?: string) => {
+    const effectivePrompt = overridePrompt ?? (prompt.trim() || (() => {
+      const d = getRandomDefault("logprobs"); setPrompt(d); return d;
+    })());
+    if (!effectivePrompt || isLoading) return;
     setIsLoading(true);
     setError(null);
     setResultA(null);
@@ -65,7 +70,7 @@ export default function LogprobsMode({ isDark }: LogprobsModeProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt,
+          prompt: effectivePrompt,
           topK: 5,
           slotA: panelSelection === "B" ? slots.B : slots.A,
           slotB: panelSelection === "both" && isSlotConfigured("B") ? slots.B : null,
@@ -114,7 +119,7 @@ export default function LogprobsMode({ isDark }: LogprobsModeProps) {
             <span className="text-body-sm">{result.error}</span>
           </div>
           <button
-            onClick={handleRun}
+            onClick={() => handleRun()}
             disabled={isLoading}
             className="mt-2 flex items-center gap-1.5 text-caption text-burgundy hover:text-foreground transition-colors disabled:opacity-40"
           >
@@ -408,6 +413,12 @@ export default function LogprobsMode({ isDark }: LogprobsModeProps) {
             <span className="text-caption text-amber-600">
               Panel A ({slots.A.provider}) does not support logprobs. Use Google Gemini or OpenAI.
             </span>
+          ) : !prompt.trim() && !isLoading ? (
+            <DefaultPromptChips
+              prompts={MODE_DEFAULTS.logprobs}
+              onSelect={(p) => { setPrompt(p); handleRun(p); }}
+              isLoading={isLoading}
+            />
           ) : undefined
         }
       />

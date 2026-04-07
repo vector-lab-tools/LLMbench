@@ -4,6 +4,8 @@ import { useState, useCallback } from "react";
 import { AlertCircle, Thermometer, RotateCcw } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { AnalysisPromptArea } from "@/components/shared/AnalysisPromptArea";
+import { DefaultPromptChips } from "@/components/shared/DefaultPromptChips";
+import { MODE_DEFAULTS, getRandomDefault } from "@/lib/prompts/defaults";
 import type { PanelSelection } from "@/components/shared/ModelSelector";
 import { ResultCard, MetricBox } from "@/components/shared/ResultCard";
 import { DeepDive } from "@/components/shared/DeepDive";
@@ -44,8 +46,11 @@ export default function TemperatureMode({ isDark }: TemperatureModeProps) {
 
   const slotAConfigured = isSlotConfigured("A");
 
-  const handleRun = useCallback(async () => {
-    if (!prompt.trim() || isLoading) return;
+  const handleRun = useCallback(async (overridePrompt?: string) => {
+    const effectivePrompt = overridePrompt ?? (prompt.trim() || (() => {
+      const d = getRandomDefault("temperature"); setPrompt(d); return d;
+    })());
+    if (!effectivePrompt || isLoading) return;
     setIsLoading(true);
     setError(null);
     setRunsA([]);
@@ -58,7 +63,7 @@ export default function TemperatureMode({ isDark }: TemperatureModeProps) {
       await fetchStreaming<StreamEvent>(
         "/api/analyse/temperature",
         {
-          prompt,
+          prompt: effectivePrompt,
           temperatures,
           slotA: panelSelection === "B" ? slots.B : slots.A,
           slotB: panelSelection === "both" && isSlotConfigured("B") ? slots.B : null,
@@ -159,7 +164,7 @@ export default function TemperatureMode({ isDark }: TemperatureModeProps) {
                       <span className="text-body-sm">{run.error}</span>
                     </div>
                     <button
-                      onClick={handleRun}
+                      onClick={() => handleRun()}
                       disabled={isLoading}
                       className="flex items-center gap-1.5 text-caption text-burgundy hover:text-foreground transition-colors disabled:opacity-40"
                     >
@@ -260,9 +265,18 @@ export default function TemperatureMode({ isDark }: TemperatureModeProps) {
         panelSelection={panelSelection}
         onPanelSelectionChange={setPanelSelection}
         footer={
-          <span className="text-caption text-muted-foreground">
-            Temperatures: {temperatures.map((t) => t.toFixed(1)).join(", ")}
-          </span>
+          <div className="space-y-1.5">
+            <span className="text-caption text-muted-foreground">
+              Temperatures: {temperatures.map((t) => t.toFixed(1)).join(", ")}
+            </span>
+            {!prompt.trim() && !isLoading && (
+              <DefaultPromptChips
+                prompts={MODE_DEFAULTS.temperature}
+                onSelect={(p) => { setPrompt(p); handleRun(p); }}
+                isLoading={isLoading}
+              />
+            )}
+          </div>
         }
       />
     </>

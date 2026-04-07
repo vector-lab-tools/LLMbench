@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useMemo } from "react";
 import { AlertCircle, Fingerprint, Plus, RotateCcw, X } from "lucide-react";
+import { DefaultPromptChips } from "@/components/shared/DefaultPromptChips";
+import { MODE_DEFAULTS, getRandomDefault } from "@/lib/prompts/defaults";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { AnalysisPromptArea } from "@/components/shared/AnalysisPromptArea";
 import type { PanelSelection } from "@/components/shared/ModelSelector";
@@ -63,8 +65,11 @@ export default function SensitivityMode({ isDark }: SensitivityModeProps) {
     ...customVariations.map((p, i) => ({ label: `Custom ${i + 1}`, prompt: p })),
   ], [autoVariations, customVariations]);
 
-  const handleRun = useCallback(async () => {
-    if (!prompt.trim() || isLoading || allVariations.length === 0) return;
+  const handleRun = useCallback(async (overridePrompt?: string) => {
+    const effectivePrompt = overridePrompt ?? (prompt.trim() || (() => {
+      const d = getRandomDefault("sensitivity"); setPrompt(d); return d;
+    })());
+    if (!effectivePrompt || isLoading || allVariations.length === 0) return;
     setIsLoading(true);
     setError(null);
     setBaseA(null);
@@ -80,7 +85,7 @@ export default function SensitivityMode({ isDark }: SensitivityModeProps) {
       await fetchStreaming<StreamEvent>(
         "/api/analyse/sensitivity",
         {
-          prompt,
+          prompt: effectivePrompt,
           variations: allVariations,
           slotA: panelSelection === "B" ? slots.B : slots.A,
           slotB: panelSelection === "both" && isSlotConfigured("B") ? slots.B : null,
@@ -189,7 +194,7 @@ export default function SensitivityMode({ isDark }: SensitivityModeProps) {
                   <span className="text-body-sm">{base.error}</span>
                 </div>
                 <button
-                  onClick={handleRun}
+                  onClick={() => handleRun()}
                   disabled={isLoading}
                   className="flex items-center gap-1.5 text-caption text-burgundy hover:text-foreground transition-colors disabled:opacity-40"
                 >
@@ -251,7 +256,7 @@ export default function SensitivityMode({ isDark }: SensitivityModeProps) {
                       <span className="text-body-sm">{v.result.error}</span>
                     </div>
                     <button
-                      onClick={handleRun}
+                      onClick={() => handleRun()}
                       disabled={isLoading}
                       className="flex items-center gap-1.5 text-caption text-burgundy hover:text-foreground transition-colors disabled:opacity-40"
                     >
@@ -376,6 +381,14 @@ export default function SensitivityMode({ isDark }: SensitivityModeProps) {
         onPanelSelectionChange={setPanelSelection}
         footer={
           <>
+            {/* Default prompts */}
+            {!prompt.trim() && !isLoading && (
+              <DefaultPromptChips
+                prompts={MODE_DEFAULTS.sensitivity}
+                onSelect={(p) => { setPrompt(p); handleRun(p); }}
+                isLoading={isLoading}
+              />
+            )}
             {/* Custom variation input */}
             <div className="flex gap-2">
               <input

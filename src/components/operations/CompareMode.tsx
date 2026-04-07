@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { DefaultPromptChips } from "@/components/shared/DefaultPromptChips";
+import { MODE_DEFAULTS, getRandomDefault } from "@/lib/prompts/defaults";
 import {
   Send,
   SplitSquareHorizontal,
@@ -415,13 +417,16 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
 
   // ---- actions ----
 
-  const handleSend = () => {
-    if (!prompt.trim() || isLoading) return;
+  const handleSend = (overridePrompt?: string) => {
+    const effectivePrompt = overridePrompt ?? (prompt.trim() || (() => {
+      const d = getRandomDefault("compare"); setPrompt(d); return d;
+    })());
+    if (!effectivePrompt || isLoading) return;
     setComparisonId(null);
     setComparisonCreatedAt(null);
     annA.setAllAnnotations([]);
     annB.setAllAnnotations([]);
-    dispatch(prompt);
+    dispatch(effectivePrompt);
   };
 
   const handleSave = useCallback(() => {
@@ -927,7 +932,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
             }}
           />
           <button
-            onClick={handleSend}
+            onClick={() => handleSend()}
             disabled={!prompt.trim() || isLoading}
             className="btn-editorial-primary px-4 py-2 self-end disabled:opacity-40 disabled:cursor-not-allowed"
           >
@@ -938,6 +943,15 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
             )}
           </button>
         </div>
+        {!prompt.trim() && !isLoading && (
+          <div className="mt-2 max-w-4xl mx-auto">
+            <DefaultPromptChips
+              prompts={MODE_DEFAULTS.compare}
+              onSelect={(p) => { setPrompt(p); handleSend(p); }}
+              isLoading={isLoading}
+            />
+          </div>
+        )}
         {error && (
           <div className="mt-2 max-w-4xl mx-auto text-caption text-red-500 flex items-center gap-1.5">
             <AlertCircle className="w-3.5 h-3.5" />
