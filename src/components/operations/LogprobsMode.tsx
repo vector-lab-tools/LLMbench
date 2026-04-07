@@ -41,7 +41,7 @@ interface LogprobsModeProps {
 }
 
 export default function LogprobsMode({ isDark }: LogprobsModeProps) {
-  const { slots, getSlotLabel, isSlotConfigured } = useProviderSettings();
+  const { slots, getSlotLabel, isSlotConfigured, noMarkdown } = useProviderSettings();
   const [panelSelection, setPanelSelection] = useState<PanelSelection>("A");
   const [prompt, setPrompt] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -74,6 +74,7 @@ export default function LogprobsMode({ isDark }: LogprobsModeProps) {
           topK: 5,
           slotA: panelSelection === "B" ? slots.B : slots.A,
           slotB: panelSelection === "both" && isSlotConfigured("B") ? slots.B : null,
+          noMarkdown,
         }),
       });
 

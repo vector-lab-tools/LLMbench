@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { SplitSquareHorizontal, Settings, HelpCircle, Info, X } from "lucide-react";
+import { SplitSquareHorizontal, Settings, HelpCircle, Info, X, Type } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { TabNav, type TabId } from "@/components/layout/TabNav";
 import ProviderSettings from "@/components/settings/ProviderSettings";
@@ -28,7 +28,7 @@ export default function Home() {
   const [isDark, setIsDark] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
-  const { setShowSettings } = useProviderSettings();
+  const { setShowSettings, noMarkdown, setNoMarkdown } = useProviderSettings();
 
   const toggleDark = () => {
     const next = !isDark;
@@ -51,6 +51,22 @@ export default function Home() {
           {MODE_LABELS[activeTab]}
         </span>
         <div className="flex-1" />
+        {/* Plain prose toggle — default on; suppresses markdown in all model responses */}
+        <button
+          onClick={() => setNoMarkdown(!noMarkdown)}
+          className={`px-2 py-1 text-caption flex items-center gap-1.5 rounded-sm transition-colors ${
+            noMarkdown
+              ? "bg-burgundy/10 text-burgundy border border-burgundy/20"
+              : "btn-editorial-ghost text-muted-foreground/50"
+          }`}
+          title={noMarkdown
+            ? "Plain prose mode ON — models are asked not to use markdown formatting. Click to allow markdown."
+            : "Plain prose mode OFF — models may return markdown. Click to suppress it."}
+        >
+          <Type className="w-3.5 h-3.5" />
+          <span>Prose</span>
+        </button>
+
         <button
           onClick={() => setShowHelp(true)}
           className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5"

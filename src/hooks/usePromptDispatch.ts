@@ -31,7 +31,7 @@ export interface DispatchState {
 }
 
 export function usePromptDispatch() {
-  const { slots } = useProviderSettings();
+  const { slots, noMarkdown } = useProviderSettings();
 
   const [state, setState] = useState<DispatchState>({
     isLoading: false,
@@ -65,6 +65,7 @@ export function usePromptDispatch() {
             prompt,
             slotA: slots.A,
             slotB: slots.B,
+            noMarkdown,
           }),
         });
 

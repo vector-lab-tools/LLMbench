@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateAIConfig, fanOutGenerate } from "@/lib/ai/client";
 import { getModelDisplayName } from "@/lib/ai/config";
+import { buildSystemPrompt } from "@/lib/ai/system-prompts";
 import type { AIProvider } from "@/types/ai-settings";
 
 interface SlotPayload {
@@ -25,6 +26,7 @@ interface GenerateRequest {
   prompt: string;
   slotA: SlotPayload;
   slotB: SlotPayload;
+  noMarkdown?: boolean;
 }
 
 export async function POST(request: NextRequest) {
@@ -39,7 +41,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { prompt, slotA, slotB } = body;
+  const { prompt, slotA, slotB, noMarkdown = false } = body;
 
   if (!prompt || !prompt.trim()) {
     return NextResponse.json(
@@ -82,8 +84,8 @@ export async function POST(request: NextRequest) {
   // If only one is valid, still dispatch both (allSettled handles failures)
   const result = await fanOutGenerate(configA, configB, {
     prompt,
-    systemPromptA: slotA.systemPrompt || undefined,
-    systemPromptB: slotB.systemPrompt || undefined,
+    systemPromptA: buildSystemPrompt(slotA.systemPrompt || undefined, noMarkdown),
+    systemPromptB: buildSystemPrompt(slotB.systemPrompt || undefined, noMarkdown),
     temperatureA: slotA.temperature,
     temperatureB: slotB.temperature,
   });

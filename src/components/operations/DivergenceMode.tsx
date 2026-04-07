@@ -87,7 +87,7 @@ interface DivergenceModeProps {
 }
 
 export default function DivergenceMode({ isDark: _isDark }: DivergenceModeProps) {
-  const { slots, getSlotLabel, isSlotConfigured } = useProviderSettings();
+  const { slots, getSlotLabel, isSlotConfigured, noMarkdown } = useProviderSettings();
   const [panelSelection, setPanelSelection] = useState<PanelSelection>("both");
   const [prompt, setPrompt] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -118,6 +118,7 @@ export default function DivergenceMode({ isDark: _isDark }: DivergenceModeProps)
           prompt: effectivePrompt,
           slotA: panelSelection === "B" ? slots.B : slots.A,
           slotB: panelSelection === "both" && isSlotConfigured("B") ? slots.B : null,
+          noMarkdown,
         }),
       });
 

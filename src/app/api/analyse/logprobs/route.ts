@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateAIConfig } from "@/lib/ai/client";
 import { getModelDisplayName } from "@/lib/ai/config";
 import { computeMeanEntropy, computeMaxEntropyToken, computeTokenEntropy } from "@/lib/metrics/text-metrics";
+import { buildSystemPrompt } from "@/lib/ai/system-prompts";
 import type { AIProvider } from "@/types/ai-settings";
 import type { TokenLogprob } from "@/types/analysis";
 
@@ -20,6 +21,7 @@ interface LogprobsRequest {
   topK?: number;
   slotA: SlotPayload;
   slotB?: SlotPayload | null;
+  noMarkdown?: boolean;
 }
 
 function buildProvenance(slot: SlotPayload, responseTimeMs: number) {
@@ -36,7 +38,7 @@ function buildProvenance(slot: SlotPayload, responseTimeMs: number) {
 
 // ---------- Google Gemini (direct SDK) ----------
 
-async function runGoogleLogprobs(slot: SlotPayload, prompt: string, topK: number) {
+async function runGoogleLogprobs(slot: SlotPayload, prompt: string, topK: number, noMarkdown = false) {
   const model = slot.customModelId || slot.model;
   const startTime = Date.now();
 
@@ -54,8 +56,9 @@ async function runGoogleLogprobs(slot: SlotPayload, prompt: string, topK: number
     });
 
     const contents = [];
-    if (slot.systemPrompt) {
-      contents.push({ role: "user" as const, parts: [{ text: slot.systemPrompt }] });
+    const builtSystemPrompt = buildSystemPrompt(slot.systemPrompt || undefined, noMarkdown);
+    if (builtSystemPrompt) {
+      contents.push({ role: "user" as const, parts: [{ text: builtSystemPrompt }] });
       contents.push({ role: "model" as const, parts: [{ text: "Understood." }] });
     }
     contents.push({ role: "user" as const, parts: [{ text: prompt }] });
@@ -107,7 +110,7 @@ async function runGoogleLogprobs(slot: SlotPayload, prompt: string, topK: number
 
 // ---------- OpenAI (via Vercel AI SDK) ----------
 
-async function runOpenAILogprobs(slot: SlotPayload, prompt: string, topK: number) {
+async function runOpenAILogprobs(slot: SlotPayload, prompt: string, topK: number, noMarkdown = false) {
   const startTime = Date.now();
 
   try {
@@ -120,7 +123,7 @@ async function runOpenAILogprobs(slot: SlotPayload, prompt: string, topK: number
     const result = await generateText({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       model: client(model) as any,
-      system: slot.systemPrompt || undefined,
+      system: buildSystemPrompt(slot.systemPrompt || undefined, noMarkdown),
       messages: [{ role: "user", content: prompt }],
       temperature: slot.temperature,
       providerOptions: {
@@ -170,7 +173,7 @@ async function runOpenAILogprobs(slot: SlotPayload, prompt: string, topK: number
 
 // ---------- Dispatch ----------
 
-async function runSlotLogprobs(slot: SlotPayload, prompt: string, topK: number) {
+async function runSlotLogprobs(slot: SlotPayload, prompt: string, topK: number, noMarkdown = false) {
   const validation = validateAIConfig({
     provider: slot.provider,
     model: slot.customModelId || slot.model,
@@ -193,11 +196,11 @@ async function runSlotLogprobs(slot: SlotPayload, prompt: string, topK: number) 
           provenance: buildProvenance(slot, 0),
         };
       }
-      return runGoogleLogprobs(slot, prompt, topK);
+      return runGoogleLogprobs(slot, prompt, topK, noMarkdown);
     }
     case "openai":
     case "openai-compatible":
-      return runOpenAILogprobs(slot, prompt, topK);
+      return runOpenAILogprobs(slot, prompt, topK, noMarkdown);
     default:
       return {
         error: `Token probabilities are not supported for ${slot.provider}. Use Google Gemini (2.0) or OpenAI.`,
@@ -214,16 +217,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { prompt, topK, slotA, slotB } = body;
+  const { prompt, topK, slotA, slotB, noMarkdown = false } = body;
   if (!prompt?.trim()) {
     return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
   }
 
   const k = Math.min(Math.max(topK || 5, 1), 20);
 
-  const promises = [runSlotLogprobs(slotA, prompt, k)];
+  const promises = [runSlotLogprobs(slotA, prompt, k, noMarkdown)];
   if (slotB) {
-    promises.push(runSlotLogprobs(slotB, prompt, k));
+    promises.push(runSlotLogprobs(slotB, prompt, k, noMarkdown));
   }
 
   const [resultA, resultB] = await Promise.all(promises);

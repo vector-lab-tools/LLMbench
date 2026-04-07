@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateAIConfig, generateAIResponse } from "@/lib/ai/client";
 import { getModelDisplayName } from "@/lib/ai/config";
 import { computeTextMetrics, computeWordOverlap } from "@/lib/metrics/text-metrics";
+import { buildSystemPrompt } from "@/lib/ai/system-prompts";
 import type { AIProvider } from "@/types/ai-settings";
 
 interface SlotPayload {
@@ -18,6 +19,7 @@ interface DivergenceRequest {
   prompt: string;
   slotA: SlotPayload;
   slotB?: SlotPayload | null;
+  noMarkdown?: boolean;
 }
 
 function buildProvenance(slot: SlotPayload, responseTimeMs: number) {
@@ -32,7 +34,7 @@ function buildProvenance(slot: SlotPayload, responseTimeMs: number) {
   };
 }
 
-async function runSlot(slot: SlotPayload, prompt: string) {
+async function runSlot(slot: SlotPayload, prompt: string, noMarkdown = false) {
   const config = {
     provider: slot.provider,
     model: slot.customModelId || slot.model,
@@ -48,7 +50,7 @@ async function runSlot(slot: SlotPayload, prompt: string) {
   try {
     const result = await generateAIResponse(config, {
       prompt,
-      systemPrompt: slot.systemPrompt || undefined,
+      systemPrompt: buildSystemPrompt(slot.systemPrompt || undefined, noMarkdown),
       temperature: slot.temperature,
     });
     return {
@@ -72,14 +74,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { prompt, slotA, slotB } = body;
+  const { prompt, slotA, slotB, noMarkdown = false } = body;
   if (!prompt?.trim()) {
     return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
   }
 
-  const promises = [runSlot(slotA, prompt)];
+  const promises = [runSlot(slotA, prompt, noMarkdown)];
   if (slotB) {
-    promises.push(runSlot(slotB, prompt));
+    promises.push(runSlot(slotB, prompt, noMarkdown));
   }
 
   const [resultA, resultB] = await Promise.all(promises);

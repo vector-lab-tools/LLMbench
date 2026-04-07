@@ -35,7 +35,7 @@ interface SensitivityModeProps {
 }
 
 export default function SensitivityMode({ isDark }: SensitivityModeProps) {
-  const { slots, getSlotLabel, isSlotConfigured } = useProviderSettings();
+  const { slots, getSlotLabel, isSlotConfigured, noMarkdown } = useProviderSettings();
   const [panelSelection, setPanelSelection] = useState<PanelSelection>("A");
   const [prompt, setPrompt] = useState("");
   const [customVariations, setCustomVariations] = useState<string[]>([]);
@@ -89,6 +89,7 @@ export default function SensitivityMode({ isDark }: SensitivityModeProps) {
           variations: allVariations,
           slotA: panelSelection === "B" ? slots.B : slots.A,
           slotB: panelSelection === "both" && isSlotConfigured("B") ? slots.B : null,
+          noMarkdown,
         },
         (event) => {
           if (event.type === "meta") {

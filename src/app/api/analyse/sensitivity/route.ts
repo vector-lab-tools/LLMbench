@@ -3,6 +3,7 @@ import { validateAIConfig, generateAIResponse } from "@/lib/ai/client";
 import { getModelDisplayName } from "@/lib/ai/config";
 import { computeTextMetrics } from "@/lib/metrics/text-metrics";
 import { createStreamResponse } from "@/lib/streaming";
+import { buildSystemPrompt } from "@/lib/ai/system-prompts";
 import type { AIProvider } from "@/types/ai-settings";
 
 interface SlotPayload {
@@ -20,6 +21,7 @@ interface SensitivityRequest {
   variations: { label: string; prompt: string }[];
   slotA: SlotPayload;
   slotB?: SlotPayload | null;
+  noMarkdown?: boolean;
 }
 
 function buildProvenance(slot: SlotPayload, responseTimeMs: number) {
@@ -46,7 +48,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { prompt, variations, slotA, slotB } = body;
+  const { prompt, variations, slotA, slotB, noMarkdown = false } = body;
   if (!prompt?.trim()) {
     return Response.json({ error: "Prompt is required" }, { status: 400 });
   }
@@ -94,7 +96,7 @@ export async function POST(request: NextRequest) {
         try {
           const result = await generateAIResponse(config, {
             prompt: v.prompt,
-            systemPrompt: slot.systemPrompt || undefined,
+            systemPrompt: buildSystemPrompt(slot.systemPrompt || undefined, noMarkdown),
             temperature: slot.temperature,
           });
           send({

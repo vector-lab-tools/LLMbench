@@ -21,10 +21,20 @@ export function computeWordOverlap(textA: string, textB: string) {
   const uniqueA = [...wordsA].filter(w => !wordsB.has(w));
   const uniqueB = [...wordsB].filter(w => !wordsA.has(w));
   const union = new Set([...wordsA, ...wordsB]);
-  const jaccardSimilarity = union.size > 0 ? shared.length / union.size : 0;
-  const overlapPercentage = union.size > 0 ? (shared.length / union.size) * 100 : 0;
 
-  return { shared, uniqueA, uniqueB, jaccardSimilarity, overlapPercentage };
+  // Jaccard: |A∩B| / |A∪B| — strict set similarity, penalises any vocabulary difference
+  const jaccardSimilarity = union.size > 0 ? shared.length / union.size : 0;
+
+  // Dice coefficient: 2|A∩B| / (|A| + |B|) — more generous when outputs differ in length;
+  // equivalent to the harmonic mean of the two directional coverage scores (A→B and B→A)
+  const diceCoefficient = (wordsA.size + wordsB.size) > 0
+    ? (2 * shared.length) / (wordsA.size + wordsB.size)
+    : 0;
+
+  // Keep overlapPercentage as Dice for backward-compat display (replaces the old duplicate)
+  const overlapPercentage = diceCoefficient * 100;
+
+  return { shared, uniqueA, uniqueB, jaccardSimilarity, diceCoefficient, overlapPercentage };
 }
 
 export function computeTokenEntropy(logprob: TokenLogprob): number {

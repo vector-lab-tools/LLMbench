@@ -12,6 +12,7 @@ import { DEFAULT_SLOT_A, DEFAULT_SLOT_B } from "@/types/ai-settings";
 import { getModelDisplayName } from "@/lib/ai/config";
 
 const STORAGE_KEY = "llmbench-provider-settings";
+const NO_MARKDOWN_KEY = "llmbench-no-markdown";
 
 interface ProviderSettingsContextValue {
   slots: ProviderSlots;
@@ -20,6 +21,8 @@ interface ProviderSettingsContextValue {
   isSlotConfigured: (panel: "A" | "B") => boolean;
   showSettings: boolean;
   setShowSettings: (show: boolean) => void;
+  noMarkdown: boolean;
+  setNoMarkdown: (value: boolean) => void;
 }
 
 const ProviderSettingsContext =
@@ -62,10 +65,20 @@ export function ProviderSettingsProvider({
   });
   const [showSettings, setShowSettings] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [noMarkdown, setNoMarkdownState] = useState(true); // default: on
+
+  const setNoMarkdown = useCallback((value: boolean) => {
+    setNoMarkdownState(value);
+    try { localStorage.setItem(NO_MARKDOWN_KEY, JSON.stringify(value)); } catch { /* ignore */ }
+  }, []);
 
   // Load from localStorage on mount
   useEffect(() => {
     setSlots(loadSlots());
+    try {
+      const stored = localStorage.getItem(NO_MARKDOWN_KEY);
+      if (stored !== null) setNoMarkdownState(JSON.parse(stored));
+    } catch { /* ignore */ }
     setLoaded(true);
   }, []);
 
@@ -113,6 +126,8 @@ export function ProviderSettingsProvider({
         isSlotConfigured,
         showSettings,
         setShowSettings,
+        noMarkdown,
+        setNoMarkdown,
       }}
     >
       {children}

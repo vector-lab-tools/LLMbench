@@ -30,7 +30,7 @@ interface TemperatureModeProps {
 }
 
 export default function TemperatureMode({ isDark }: TemperatureModeProps) {
-  const { slots, getSlotLabel, isSlotConfigured } = useProviderSettings();
+  const { slots, getSlotLabel, isSlotConfigured, noMarkdown } = useProviderSettings();
   const [panelSelection, setPanelSelection] = useState<PanelSelection>("A");
   const [prompt, setPrompt] = useState("");
   const [temperatures, setTemperatures] = useState(DEFAULT_TEMPS);
@@ -67,6 +67,7 @@ export default function TemperatureMode({ isDark }: TemperatureModeProps) {
           temperatures,
           slotA: panelSelection === "B" ? slots.B : slots.A,
           slotB: panelSelection === "both" && isSlotConfigured("B") ? slots.B : null,
+          noMarkdown,
         },
         (event) => {
           if (event.type === "meta") {

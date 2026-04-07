@@ -26,7 +26,7 @@ interface StochasticModeProps {
 }
 
 export default function StochasticMode({ isDark }: StochasticModeProps) {
-  const { slots, getSlotLabel, isSlotConfigured } = useProviderSettings();
+  const { slots, getSlotLabel, isSlotConfigured, noMarkdown } = useProviderSettings();
   const [panelSelection, setPanelSelection] = useState<PanelSelection>("A");
   const [prompt, setPrompt] = useState("");
   const [runCount, setRunCount] = useState(5);
@@ -63,6 +63,7 @@ export default function StochasticMode({ isDark }: StochasticModeProps) {
           runCount,
           slotA: panelSelection === "B" ? slots.B : slots.A,
           slotB: panelSelection === "both" && isSlotConfigured("B") ? slots.B : null,
+          noMarkdown,
         },
         (event) => {
           if (event.type === "meta") {
