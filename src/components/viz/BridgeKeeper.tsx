@@ -66,12 +66,12 @@ export function BridgeKeeper({ onDismiss }: BridgeKeeperProps) {
         <div
           className="rounded-sm px-3 py-2.5 min-h-[52px] flex items-center"
           style={{
-            background: "#9e9080",
+            background: "#ffffff",
             border: "2px solid #2e1e10",
             boxShadow: "2px 3px 0 #1a1008",
           }}
         >
-          <p className="text-[11px] leading-relaxed" style={{ fontFamily: "Georgia, serif", color: "#f0e6d0" }}>
+          <p className="text-[11px] leading-relaxed" style={{ fontFamily: "Georgia, serif", color: "#0a0a0a" }}>
             {current.text}
           </p>
         </div>
@@ -93,7 +93,7 @@ export function BridgeKeeper({ onDismiss }: BridgeKeeperProps) {
             transform: "translateX(-50%)",
             borderLeft: "6px solid transparent",
             borderRight: "6px solid transparent",
-            borderTop: "10px solid #9e9080",
+            borderTop: "10px solid #ffffff",
           }}
         />
       </div>
