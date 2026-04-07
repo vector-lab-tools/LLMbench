@@ -15,6 +15,10 @@ export const MODE_DEFAULTS: Record<string, readonly string[]> = {
     "What is the role of the university in contemporary society?",
     "What is the difference between knowledge and information?",
     "What does it mean to understand something?",
+    "Can a machine be creative?",
+    "What is the relationship between power and knowledge?",
+    "What does it mean to be human in the age of artificial intelligence?",
+    "What is the difference between intelligence and wisdom?",
     "What is the airspeed velocity of an unladen swallow?",
   ],
 
