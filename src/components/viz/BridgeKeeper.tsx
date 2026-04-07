@@ -19,39 +19,7 @@ const CONVERSATION: { speaker: Speaker; text: string }[] = [
   { speaker: "keeper", text: "AAARGH!" },
 ];
 
-const STEP_DELAY = 4500; // ms between lines
-
-interface BubbleProps {
-  text: string;
-  side: "left" | "right";
-}
-
-function SpeechBubble({ text, side }: BubbleProps) {
-  return (
-    <div className={`relative max-w-[220px] bg-[#fffde7] border-2 border-[#8B4513] rounded-lg shadow-xl px-3 py-2.5 ${side === "left" ? "self-end" : "self-start"}`}>
-      {/* Tail */}
-      <div
-        className="absolute -bottom-3 w-0 h-0"
-        style={{
-          [side === "left" ? "right" : "left"]: 14,
-          borderLeft: "8px solid transparent",
-          borderRight: "8px solid transparent",
-          borderTop: "12px solid #8B4513",
-        }}
-      />
-      <div
-        className="absolute -bottom-2 w-0 h-0"
-        style={{
-          [side === "left" ? "right" : "left"]: 16,
-          borderLeft: "6px solid transparent",
-          borderRight: "6px solid transparent",
-          borderTop: "10px solid #fffde7",
-        }}
-      />
-      <p className="text-[11px] font-serif text-[#5c2a00] leading-relaxed">{text}</p>
-    </div>
-  );
-}
+const STEP_DELAY = 4500;
 
 interface BridgeKeeperProps {
   onDismiss: () => void;
@@ -75,11 +43,15 @@ export function BridgeKeeper({ onDismiss }: BridgeKeeperProps) {
     setTimeout(onDismiss, 500);
   }, [onDismiss]);
 
+  // Arthur is left character, Keeper is right character.
+  // Tail sits at roughly 20% from left (Arthur) or 80% from left (Keeper).
+  const tailLeft = current.speaker === "arthur" ? "20%" : "75%";
+
   return (
     <div
-      className={`fixed bottom-6 right-6 z-50 transition-all duration-500 ${leaving ? "opacity-0 translate-y-4" : "opacity-100 translate-y-0"}`}
+      className={`fixed bottom-6 right-6 z-50 w-64 transition-all duration-500 ${leaving ? "opacity-0 translate-y-4" : "opacity-100 translate-y-0"}`}
     >
-      {/* Dismiss */}
+      {/* Dismiss button */}
       <button
         onClick={handleDismiss}
         className="absolute -top-2 -right-2 z-10 w-5 h-5 rounded-full bg-[#8B4513] text-[#fffde7] hover:bg-[#5c2a00] flex items-center justify-center transition-colors"
@@ -88,50 +60,53 @@ export function BridgeKeeper({ onDismiss }: BridgeKeeperProps) {
         <X className="w-3 h-3" />
       </button>
 
-      {/* Speech bubbles above characters */}
-      <div className="flex items-end gap-3 mb-2">
-        {/* Arthur's bubble — left, visible when Arthur speaks */}
-        <div className="w-[220px] flex flex-col items-start min-h-[60px] justify-end">
-          {current.speaker === "arthur" && (
-            <SpeechBubble text={current.text} side="left" />
-          )}
+      {/* Speech bubble — single bubble, tail moves left/right per speaker */}
+      <div className="relative mb-4">
+        <div className="bg-[#fffde7] border-2 border-[#8B4513] rounded-lg shadow-xl px-3 py-2.5 min-h-[52px] flex items-center">
+          <p className="text-[11px] font-serif text-[#5c2a00] leading-relaxed">
+            {current.text}
+          </p>
+        </div>
+        {/* Down-pointing tail, shifts with speaker */}
+        <div
+          className="absolute -bottom-[11px] w-0 h-0"
+          style={{
+            left: tailLeft,
+            transform: "translateX(-50%)",
+            borderLeft: "8px solid transparent",
+            borderRight: "8px solid transparent",
+            borderTop: "12px solid #8B4513",
+          }}
+        />
+        <div
+          className="absolute -bottom-[9px] w-0 h-0"
+          style={{
+            left: tailLeft,
+            transform: "translateX(-50%)",
+            borderLeft: "6px solid transparent",
+            borderRight: "6px solid transparent",
+            borderTop: "10px solid #fffde7",
+          }}
+        />
+      </div>
+
+      {/* Characters — fixed positions matching tail anchors */}
+      <div className="flex items-end justify-between px-2">
+        {/* Arthur — left ~20% */}
+        <div className={`flex flex-col items-center gap-0.5 transition-all duration-300 ${current.speaker === "arthur" ? "scale-110" : "scale-90 opacity-50"}`}>
+          <span className="text-3xl select-none" title="Arthur, King of the Britons">🤴</span>
+          <span className="text-[9px] text-muted-foreground/60 font-mono">Arthur</span>
         </div>
 
-        {/* BridgeKeeper's bubble — right, visible when keeper speaks */}
-        <div className="w-[220px] flex flex-col items-end min-h-[60px] justify-end">
-          {current.speaker === "keeper" && (
-            <SpeechBubble text={current.text} side="right" />
-          )}
+        {/* BridgeKeeper — right ~75% */}
+        <div className={`flex flex-col items-center gap-0.5 transition-all duration-300 ${current.speaker === "keeper" ? "scale-110" : "scale-90 opacity-50"}`}>
+          <span className="text-3xl select-none" title="I am the BridgeKeeper!">🧙‍♂️</span>
+          <span className="text-[9px] text-muted-foreground/60 font-mono">BridgeKeeper</span>
         </div>
       </div>
 
-      {/* Characters */}
-      <div className="flex items-end gap-3">
-        {/* Arthur */}
-        <div className="flex flex-col items-center gap-0.5">
-          <span
-            className={`text-3xl select-none drop-shadow transition-all duration-300 ${current.speaker === "arthur" ? "scale-110" : "scale-90 opacity-60"}`}
-            title="Arthur, King of the Britons"
-          >
-            🤴
-          </span>
-          <span className="text-[9px] text-muted-foreground/50 font-mono">Arthur</span>
-        </div>
-
-        {/* BridgeKeeper */}
-        <div className="flex flex-col items-center gap-0.5">
-          <span
-            className={`text-3xl select-none drop-shadow transition-all duration-300 ${current.speaker === "keeper" ? "scale-110" : "scale-90 opacity-60"}`}
-            title="I am the BridgeKeeper!"
-          >
-            🧙‍♂️
-          </span>
-          <span className="text-[9px] text-muted-foreground/50 font-mono">BridgeKeeper</span>
-        </div>
-      </div>
-
-      {/* Progress */}
-      <div className="flex justify-center gap-1 mt-1.5">
+      {/* Progress dots */}
+      <div className="flex justify-center gap-1 mt-2">
         {CONVERSATION.map((_, i) => (
           <div
             key={i}
