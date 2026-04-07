@@ -355,6 +355,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
   const [showDisplaySettings, setShowDisplaySettings] = useState(false);
   const [viewMode, setViewMode] = useState<"diff" | "struct" | "tone" | "probs" | null>(null);
   const [promptCollapsed, setPromptCollapsed] = useState(false);
+  const [promptBouncing, setPromptBouncing] = useState(false);
   const [logprobTokensA, setLogprobTokensA] = useState<TokenLogprob[] | null>(null);
   const [logprobTokensB, setLogprobTokensB] = useState<TokenLogprob[] | null>(null);
   const [logprobsLoading, setLogprobsLoading] = useState(false);
@@ -466,6 +467,8 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     setLogprobTokensA(null);
     setLogprobTokensB(null);
     dispatch(effectivePrompt);
+    setPromptCollapsed(true);
+    setPromptBouncing(true);
   };
 
   const fetchLogprobs = async () => {
@@ -485,8 +488,8 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
         }),
       });
       const data = await res.json();
-      if (data.resultA?.tokens) setLogprobTokensA(data.resultA.tokens);
-      if (data.resultB?.tokens) setLogprobTokensB(data.resultB.tokens);
+      if (data.A?.tokens?.length) setLogprobTokensA(data.A.tokens);
+      if (data.B?.tokens?.length) setLogprobTokensB(data.B.tokens);
     } catch {
       // silently fail — panel will show "no data" message
     } finally {
@@ -1037,13 +1040,30 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
       <div className="border-t border-border bg-card shrink-0">
         {/* Collapse toggle */}
         <button
-          onClick={() => setPromptCollapsed(c => !c)}
-          className="w-full flex items-center justify-center gap-1 py-0.5 text-[10px] text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/20 transition-colors"
+          onClick={() => {
+            if (promptCollapsed) {
+              setPromptCollapsed(false);
+            } else {
+              setPromptCollapsed(true);
+              setPromptBouncing(true);
+            }
+          }}
+          onAnimationEnd={() => setPromptBouncing(false)}
+          className={`w-full flex items-center justify-center gap-1 py-1 text-[10px] transition-colors ${
+            promptCollapsed
+              ? "text-burgundy hover:bg-burgundy/10"
+              : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/20"
+          } ${promptBouncing ? "prompt-toggle-bounce" : ""}`}
           title={promptCollapsed ? "Show prompt" : "Hide prompt"}
         >
-          {promptCollapsed ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          {promptCollapsed ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3 h-3" />}
         </button>
-        {!promptCollapsed && (
+        <div
+          className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
+            promptCollapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]"
+          }`}
+        >
+        <div className="overflow-hidden">
         <div className="px-6 py-3">
         <div className="flex gap-3 max-w-4xl mx-auto">
           <textarea
@@ -1088,7 +1108,8 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
           </div>
         )}
         </div>
-        )}
+        </div>
+        </div>
       </div>
 
       {/* Logprobs info modal */}

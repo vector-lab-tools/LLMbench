@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, useCallback, type ReactNode } from "react";
 import { Send, Loader2, AlertCircle, ChevronUp, ChevronDown } from "lucide-react";
 import { ModelSelector, type PanelSelection } from "./ModelSelector";
 
@@ -34,76 +34,108 @@ export function AnalysisPromptArea({
   footer,
 }: AnalysisPromptAreaProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [bouncing, setBouncing] = useState(false);
+
+  const collapse = useCallback(() => {
+    setCollapsed(true);
+    setBouncing(true);
+  }, []);
+
+  const handleToggle = useCallback(() => {
+    if (collapsed) {
+      setCollapsed(false);
+    } else {
+      collapse();
+    }
+  }, [collapsed, collapse]);
+
+  const handleSubmit = useCallback(() => {
+    onSubmit();
+    // Slide away after sending so results get full height
+    collapse();
+  }, [onSubmit, collapse]);
 
   return (
     <div className="border-t border-border bg-card">
-      {/* Toggle strip */}
+      {/* Toggle strip — burgundy + bounce when collapsed to hint "tap to restore" */}
       <button
-        onClick={() => setCollapsed(c => !c)}
-        className="w-full flex items-center justify-center gap-1 py-0.5 text-[10px] text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/20 transition-colors"
+        onClick={handleToggle}
+        onAnimationEnd={() => setBouncing(false)}
+        className={`w-full flex items-center justify-center gap-1 py-1 text-[10px] transition-colors ${
+          collapsed
+            ? "text-burgundy hover:bg-burgundy/10"
+            : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/20"
+        } ${bouncing ? "prompt-toggle-bounce" : ""}`}
         title={collapsed ? "Show prompt" : "Hide prompt"}
       >
-        {collapsed ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        {collapsed ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3 h-3" />}
       </button>
 
-      {!collapsed && (
-    <div className="px-6 py-3 space-y-2">
-      {/* Toolbar row: model selector + controls */}
-      <div className="flex items-center gap-3 max-w-4xl mx-auto">
-        <ModelSelector
-          value={panelSelection}
-          onChange={onPanelSelectionChange}
-          disabled={isLoading}
-        />
-        {controls && (
-          <>
-            <div className="h-4 w-px bg-parchment" />
-            {controls}
-          </>
-        )}
-      </div>
+      {/* Sliding content — grid trick gives true height animation */}
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
+          collapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]"
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="px-6 py-3 space-y-2">
+            {/* Toolbar row: model selector + controls */}
+            <div className="flex items-center gap-3 max-w-4xl mx-auto">
+              <ModelSelector
+                value={panelSelection}
+                onChange={onPanelSelectionChange}
+                disabled={isLoading}
+              />
+              {controls && (
+                <>
+                  <div className="h-4 w-px bg-parchment" />
+                  {controls}
+                </>
+              )}
+            </div>
 
-      {/* Input row: textarea + send */}
-      <div className="flex gap-2 max-w-4xl mx-auto items-end">
-        <textarea
-          value={prompt}
-          onChange={(e) => onPromptChange(e.target.value)}
-          placeholder={placeholder}
-          className="input-editorial flex-1 resize-none min-h-[52px] max-h-[160px] text-body-sm"
-          rows={2}
-          disabled={isLoading}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              onSubmit();
-            }
-          }}
-        />
-        <button
-          onClick={() => onSubmit()}
-          disabled={!prompt.trim() || isLoading || disabled}
-          className="btn-editorial-primary px-3 py-2.5 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-        >
-          {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-        </button>
-      </div>
+            {/* Input row: textarea + send */}
+            <div className="flex gap-2 max-w-4xl mx-auto items-end">
+              <textarea
+                value={prompt}
+                onChange={(e) => onPromptChange(e.target.value)}
+                placeholder={placeholder}
+                className="input-editorial flex-1 resize-none min-h-[52px] max-h-[160px] text-body-sm"
+                rows={2}
+                disabled={isLoading}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit();
+                  }
+                }}
+              />
+              <button
+                onClick={handleSubmit}
+                disabled={!prompt.trim() || isLoading || disabled}
+                className="btn-editorial-primary px-3 py-2.5 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+              >
+                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              </button>
+            </div>
 
-      {/* Error */}
-      {error && (
-        <div className="max-w-4xl mx-auto text-caption text-red-500 flex items-center gap-1.5">
-          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          {error}
+            {/* Error */}
+            {error && (
+              <div className="max-w-4xl mx-auto text-caption text-red-500 flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                {error}
+              </div>
+            )}
+
+            {/* Footer (variation chips, info text, etc.) */}
+            {footer && (
+              <div className="max-w-4xl mx-auto">
+                {footer}
+              </div>
+            )}
+          </div>
         </div>
-      )}
-
-      {/* Footer (variation chips, info text, etc.) */}
-      {footer && (
-        <div className="max-w-4xl mx-auto">
-          {footer}
-        </div>
-      )}
-    </div>
-      )}
+      </div>
     </div>
   );
 }
