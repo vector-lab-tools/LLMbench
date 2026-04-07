@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 interface ResultCardProps {
@@ -55,9 +55,9 @@ interface MetricBoxProps {
 
 // Standard explanations for common metric labels
 const METRIC_TOOLTIPS: Record<string, string> = {
-  "Avg Vocabulary Diversity": "Ratio of unique words to total words. Higher values mean the model uses more varied language; lower values indicate repetition.",
-  "Vocabulary Diversity": "Ratio of unique words to total words. Higher = more varied language, lower = more repetitive.",
-  "Vocab Diversity": "Ratio of unique words to total words. Higher = more varied language, lower = more repetitive.",
+  "Avg Vocabulary Diversity": "Percentage of words that are unique (not repeated). E.g. 58% means 58 out of every 100 words are different. Higher = more varied vocabulary, lower = more repetition.",
+  "Vocabulary Diversity": "Percentage of words that are unique (not repeated). Higher = more varied vocabulary, lower = more repetition.",
+  "Vocab Diversity": "Percentage of words that are unique (not repeated). Higher = more varied vocabulary, lower = more repetition.",
   "Avg Pairwise Overlap": "Average percentage of shared vocabulary between all pairs of runs. Lower values mean more variation between runs.",
   "Jaccard Similarity": "Set-based similarity measure: shared words divided by total unique words across both outputs. 100% = identical vocabulary, 0% = no words in common.",
   "Word Overlap": "Percentage of vocabulary shared between the two outputs.",
@@ -81,20 +81,34 @@ const METRIC_TOOLTIPS: Record<string, string> = {
 
 export function MetricBox({ label, value, unit, tooltip }: MetricBoxProps) {
   const explanation = tooltip || METRIC_TOOLTIPS[label];
+  const [showTip, setShowTip] = useState(false);
 
   return (
-    <div
-      className="bg-muted/50 rounded-sm px-3 py-2 text-center group relative"
-      title={explanation}
-    >
+    <div className="bg-muted/50 rounded-sm px-3 py-2 text-center relative">
       <div className="text-display-md font-bold text-foreground tabular-nums">
         {typeof value === "number" ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : value}
         {unit && <span className="text-caption text-muted-foreground ml-0.5">{unit}</span>}
       </div>
       <div className="text-caption text-muted-foreground mt-0.5">
         {label}
-        {explanation && <span className="ml-0.5 text-muted-foreground/50 cursor-help">?</span>}
+        {explanation && (
+          <button
+            onClick={() => setShowTip(!showTip)}
+            className="ml-1 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-muted-foreground/15 text-muted-foreground/60 hover:bg-burgundy/20 hover:text-burgundy text-[9px] font-bold leading-none cursor-pointer transition-colors"
+          >
+            ?
+          </button>
+        )}
       </div>
+      {showTip && explanation && (
+        <>
+          {/* Backdrop to close on click-away */}
+          <div className="fixed inset-0 z-40" onClick={() => setShowTip(false)} />
+          <div className="absolute z-50 left-1/2 -translate-x-1/2 top-full mt-1 w-56 bg-popover border border-parchment rounded-sm shadow-lg p-2.5 text-caption text-left text-foreground leading-relaxed">
+            {explanation}
+          </div>
+        </>
+      )}
     </div>
   );
 }

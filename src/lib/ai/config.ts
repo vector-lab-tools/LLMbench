@@ -30,6 +30,7 @@ const DEFAULT_MODELS: Record<AIProvider, ModelConfig[]> = {
   google: [
     { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", contextWindow: 1048576, maxOutputTokens: 65536 },
     { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", contextWindow: 1048576, maxOutputTokens: 65536 },
+    { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash (logprobs)", contextWindow: 1048576, maxOutputTokens: 8192 },
   ],
   ollama: [
     { id: "llama3.2", name: "Llama 3.2", contextWindow: 128000, maxOutputTokens: 4096 },
