@@ -24,13 +24,17 @@ LLMbench emerges from the convergence of three research programmes.
 
 - **Six-type annotation system.** Each panel supports independent inline annotations with typed categories: observation, question, metaphor, pattern, context, and critique. Annotations appear as colour-coded inline widgets with gutter markers, adapted from the CCS-WB annotation infrastructure.
 
-- **Visual word diff.** Toggle a word-level diff view that highlights textual differences between the two outputs with synchronised scrolling.
+- **Text overlay views.** Three mutually exclusive overlay modes augment the text in place (toggled by buttons in the toolbar; click again to turn off):
 
-- **Structure view.** Toggle a sentence-structure overlay that numbers each sentence in the margin and highlights discourse connectives (however, therefore, moreover, etc.) in a distinct colour. Makes argumentative structure and sentence count differences immediately visible across both panels.
+  - **Diff** — Word-level highlighting of what each model wrote uniquely, with synchronised scrolling between panels. Unique-word counts shown in each panel header.
 
-- **Tone view.** Toggle a register analysis overlay that highlights hedging language (might, perhaps, arguably), confident/assertive language (clearly, certainly, must), and negation (not, never, without) using colour-coded spans. A tone balance bar shows the proportion of each register type, enabling rapid comparison of how assertively or tentatively each model writes.
+  - **Struct** — Numbers each sentence in the margin with a burgundy-tinted badge and highlights discourse connectives (however, therefore, moreover, firstly, consequently, etc.) in burgundy. A footer shows sentence count, how many sentences contain discourse markers, and average words per sentence. Reveals argumentation structure that word diff cannot capture.
 
-- **Export.** Comparisons export as structured JSON, formatted plain text, or side-by-side landscape PDF with coloured annotation badges and optional diff highlighting.
+  - **Tone (Register view)** — Highlights hedging language (might, perhaps, arguably, seemingly) in blue, confident/assertive language (clearly, certainly, must, inevitably) in green, and negation (not, never, without, hardly) in orange. Hover any marked word for its surrounding context, a count of how many times it appears in the output, and a linguistic note explaining the rhetorical function of that specific word. A tone balance bar at the foot of each panel shows the proportion of each register type.
+
+- **Default prompts.** A row of curated example prompts appears below the input when empty. Clicking one fills and immediately runs it. Sending an empty prompt auto-selects a random example.
+
+- **Export.** Comparisons export as structured JSON, formatted plain text, or side-by-side landscape PDF with coloured annotation badges.
 
 ### Analyse Modes
 
@@ -40,9 +44,9 @@ LLMbench emerges from the convergence of three research programmes.
 
 - **Prompt Sensitivity.** Tests how minor prompt changes affect model outputs. Auto-generates variations (adding "please", changing punctuation, rephrasing as question, adding "step by step", etc.) with support for custom user-defined variations.
 
-- **Token Probabilities.** Visualises per-token probability distributions with a colour-coded heatmap. Hover over tokens to see the alternative choices the model considered at each position. Includes Deep Dive token table with CSV export. Supported by Google Gemini and OpenAI.
+- **Token Probabilities.** Visualises how confident the model was at every token position. Components: (1) a colour-coded heatmap (grey = high confidence, red = high uncertainty) where clicking any token pins a probability bar chart for that position in a persistent right-side panel; (2) an entropy distribution histogram showing how many tokens fell into each confidence band — click any band to see the exact tokens and their entropy values; (3) a sentence entropy view showing which sentences carry the most uncertainty, with hover tooltips; (4) an Uncertainty Analysis Deep Dive with confidence split, entropy hotspot list with context windows, and most-considered alternatives. Requires Google Gemini or OpenAI (logprobs support).
 
-- **Cross-Model Divergence.** Quantitative comparison with Jaccard similarity, vocabulary overlap analysis, structural metrics, and response time comparison.
+- **Cross-Model Divergence.** Quantitative comparison with Jaccard similarity, vocabulary overlap analysis, structural metrics, and response time comparison. Per-panel Deep Dives include a sentence breakdown table; a panel-level Comparative Analysis Deep Dive shows top-10 word frequency bars side by side and unique bigram candidates for each output.
 
 ### General Features
 
@@ -50,9 +54,11 @@ LLMbench emerges from the convergence of three research programmes.
 
 - **Multi-provider support.** Anthropic (Claude), OpenAI (GPT), Google (Gemini), Ollama (local models), and any OpenAI-compatible endpoint. API keys are stored persistently in the browser, never sent to a server.
 
+- **Default prompts.** Every mode shows curated example prompts as clickable chips when the input is empty. Clicking runs immediately. Sending an empty input auto-picks a random example — the quickest way to explore a new mode.
+
 - **Streaming results.** Analysis modes stream results progressively as each run completes, with animated ghost cards for pending results. Metrics update live as data arrives.
 
-- **Deep Dive.** Every result card has a collapsible Deep Dive panel revealing detailed analysis: full text, per-run metrics tables, pairwise overlap matrices, vocabulary comparisons, and CSV export.
+- **Deep Dive.** Every result has a collapsible Deep Dive panel. Analysis modes include per-run metrics tables, pairwise overlap matrices, entropy hotspot lists, confidence distribution bars, vocabulary frequency comparisons, and CSV export. Compare mode adds structural breakdowns and word frequency bars.
 
 - **Display controls.** Configurable prose font, font size, annotation brightness, line highlighting intensity, and dark mode.
 
@@ -122,7 +128,7 @@ src/
     operations/                # Mode components (CompareMode, StochasticMode, etc.)
     annotations/               # CodeMirror annotation system (adapted from CCS-WB)
     settings/                  # Provider configuration modal
-    shared/                    # DeepDive, ResultCard, MetricBox
+    shared/                    # DeepDive, ResultCard, MetricBox, DefaultPromptChips, AnalysisPromptArea
     viz/                       # TokenHeatmap, EntropyHistogram, SentenceEntropyView, StructView, ToneView
     workspace/                 # ProsePanel, DiffPanel, theme
   context/                     # Provider settings (localStorage-persisted)
@@ -132,7 +138,7 @@ src/
     diff/                      # Word-level diff computation
     export/                    # JSON, text, PDF export
     metrics/                   # Text metrics (word overlap, Jaccard, entropy)
-    prompts/                   # Prompt variation generator
+    prompts/                   # Prompt variation generator + default prompt sets
   types/                       # TypeScript types for modes, analysis, annotations
 ```
 

@@ -91,9 +91,12 @@ export function EntropyHistogram({ tokens }: EntropyHistogramProps) {
           <span className="font-normal text-muted-foreground/70">({total} tokens)</span>
         </div>
         <p className="text-[10px] text-muted-foreground/60 mt-0.5 leading-relaxed">
-          How often was the model uncertain? Each bar shows how many tokens fell into a confidence band.
-          Low entropy = one token dominated; high entropy = many tokens competed.{" "}
-          <span className="text-muted-foreground/80">Click a bar to explore the tokens in that band.</span>
+          <span className="text-muted-foreground/80 font-medium">Entropy</span> measures how spread out the model&apos;s probability was across candidate tokens at each position.
+          A language model does not simply pick the next word — it assigns a probability to every possible token and samples from that distribution.
+          When one token has near-100% probability, entropy is close to zero (the model was certain).
+          When probability is spread across many tokens, entropy is high (the model was genuinely undecided).
+          Each bar below shows how many tokens in this response fell into a given certainty band.{" "}
+          <span className="text-muted-foreground/80">Click a bar to see which tokens landed there.</span>
         </p>
       </div>
 

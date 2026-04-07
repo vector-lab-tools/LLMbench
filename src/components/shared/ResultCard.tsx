@@ -85,7 +85,7 @@ export function MetricBox({ label, value, unit, tooltip }: MetricBoxProps) {
 
   return (
     <div className="bg-muted/50 rounded-sm px-3 py-2 text-center relative">
-      <div className="text-display-md font-bold text-foreground tabular-nums">
+      <div className="text-body-sm font-bold text-foreground tabular-nums">
         {typeof value === "number" ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : value}
         {unit && <span className="text-caption text-muted-foreground ml-0.5">{unit}</span>}
       </div>

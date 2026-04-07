@@ -123,41 +123,43 @@ export default function Home() {
                 <h3 className="font-semibold mb-1">Getting Started</h3>
                 <p className="text-muted-foreground">
                   Click <strong>Settings</strong> to configure one or two LLM providers with API keys.
-                  You can use any combination of Google Gemini, OpenAI, Anthropic, Ollama, or OpenAI-compatible
-                  providers. Each mode works with one or two models. Use the
-                  <strong> Model A | Model B | Both</strong> selector in analysis modes to choose which model(s) to run.
+                  You can use Google Gemini, OpenAI, Anthropic, Ollama, or any OpenAI-compatible provider.
+                  Each mode works with one or two models; use the <strong>A / B / Both</strong> selector
+                  in analysis modes to choose. If you send an empty prompt, a curated example is chosen automatically &mdash;
+                  or pick one from the <strong>Try:</strong> chips below the input.
                 </p>
               </div>
 
               <div>
-                <h3 className="font-semibold mb-1">Modes</h3>
+                <h3 className="font-semibold mb-1">Compare</h3>
+                <p className="text-muted-foreground mb-1.5">
+                  Side-by-side comparison of two model outputs with inline annotations and export to JSON, text, or PDF.
+                  Three overlay views augment the text in place:
+                </p>
+                <div className="space-y-1 text-muted-foreground pl-3 border-l-2 border-parchment">
+                  <p><strong className="text-foreground">Diff</strong> &mdash; Word-level highlighting of what each model said uniquely, with synchronised scrolling.</p>
+                  <p><strong className="text-foreground">Struct</strong> &mdash; Numbers each sentence in the margin and highlights discourse connectives (however, therefore, moreover&hellip;) in burgundy. Makes argumentative structure visible at a glance.</p>
+                  <p><strong className="text-foreground">Tone</strong> &mdash; Highlights <span className="text-blue-700">hedging language</span> (might, perhaps, arguably), <span className="text-emerald-700">confident assertions</span> (clearly, must, certainly), and <span className="text-orange-700">negation</span> (not, never, without). Hover any marked word for its linguistic note and surrounding context. A tone balance bar shows the register proportions.</p>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-1">Analyse Modes</h3>
                 <div className="space-y-2 text-muted-foreground">
                   <p>
-                    <strong className="text-foreground">Compare</strong> &mdash; Side-by-side comparison of two model outputs
-                    with annotations, word-level diff highlighting, and export to JSON, text, or PDF.
+                    <strong className="text-foreground">Stochastic Variation</strong> &mdash; Sends the same prompt multiple times to measure how outputs differ across runs. Reports word count variation, vocabulary diversity, and pairwise overlap.
                   </p>
                   <p>
-                    <strong className="text-foreground">Stochastic Variation</strong> &mdash; Sends the same prompt to the
-                    same model(s) multiple times to measure how outputs vary across runs.
+                    <strong className="text-foreground">Temperature Gradient</strong> &mdash; Runs the prompt across temperature settings (0.0&ndash;2.0) to show how sampling temperature affects determinism and creativity.
                   </p>
                   <p>
-                    <strong className="text-foreground">Temperature Gradient</strong> &mdash; Runs the same prompt across a
-                    range of temperature settings (0.0 to 2.0) to visualise how sampling temperature
-                    affects output determinism and creativity.
+                    <strong className="text-foreground">Prompt Sensitivity</strong> &mdash; Auto-generates micro-variations of your prompt (adding &ldquo;please&rdquo;, rephrasing as a question, etc.) to show how wording affects output.
                   </p>
                   <p>
-                    <strong className="text-foreground">Prompt Sensitivity</strong> &mdash; Tests how minor prompt changes
-                    affect model outputs.  Auto-generates variations with option to add custom ones.
+                    <strong className="text-foreground">Token Probabilities</strong> &mdash; Visualises how confident the model was at each token position. Includes: a colour-coded heatmap (grey = certain, red = uncertain); an entropy distribution histogram (click any band to see which tokens landed there); a sentence entropy view showing which sentences carry the most uncertainty; and a persistent right-side panel showing the full probability distribution for any clicked token. Requires Google Gemini or OpenAI.
                   </p>
                   <p>
-                    <strong className="text-foreground">Token Probabilities</strong> &mdash; Visualises per-token probability
-                    distributions with a colour-coded heatmap. Hover over tokens to see alternative
-                    choices the model considered. Supported by Google Gemini and OpenAI.
-                  </p>
-                  <p>
-                    <strong className="text-foreground">Cross-Model Divergence</strong> &mdash; Quantitative comparison with
-                    Jaccard similarity, vocabulary overlap analysis, structural metrics, and response
-                    time comparison.
+                    <strong className="text-foreground">Cross-Model Divergence</strong> &mdash; Quantitative comparison with Jaccard similarity, vocabulary overlap, sentence-level structural analysis, and top word frequency comparison across both outputs.
                   </p>
                 </div>
               </div>
@@ -165,16 +167,21 @@ export default function Home() {
               <div>
                 <h3 className="font-semibold mb-1">Deep Dive</h3>
                 <p className="text-muted-foreground">
-                  Each result card has a collapsible Deep Dive panel that reveals detailed
-                  analysis: full text, token tables, vocabulary comparisons, and CSV export.
+                  Every result has a collapsible <strong>Deep Dive</strong> panel. In analysis modes these contain
+                  per-run metrics tables, pairwise overlap matrices, entropy hotspot lists, vocabulary frequency
+                  comparisons, and unique bigram analysis. In Compare mode the Deep Dive shows structural breakdowns
+                  and top-word frequency bars side by side.
                 </p>
               </div>
 
               <div>
-                <h3 className="font-semibold mb-1">Metric Tooltips</h3>
-                <p className="text-muted-foreground">
-                  Hover over any metric with a <strong>?</strong> indicator to see an explanation of what it measures.
-                </p>
+                <h3 className="font-semibold mb-1">Tips</h3>
+                <ul className="text-muted-foreground space-y-1 list-disc pl-4">
+                  <li>Hover any <strong>?</strong> badge on a metric for an explanation of what it measures.</li>
+                  <li>In Token Probabilities, click a token in the heatmap to pin its probability distribution in the right panel.</li>
+                  <li>In the entropy histogram, click any confidence band to see exactly which tokens fell there.</li>
+                  <li>Comparisons save automatically to browser storage; reload them via the History button.</li>
+                </ul>
               </div>
             </div>
           </div>
