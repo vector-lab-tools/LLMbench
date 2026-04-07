@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { Send, Loader2, AlertCircle, BarChart3, Download } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
+import { ModelSelector, type PanelSelection } from "@/components/shared/ModelSelector";
 import { MetricBox } from "@/components/shared/ResultCard";
 import { DeepDive } from "@/components/shared/DeepDive";
 import { TokenHeatmap } from "@/components/viz/TokenHeatmap";
@@ -33,6 +34,7 @@ interface LogprobsModeProps {
 
 export default function LogprobsMode({ isDark }: LogprobsModeProps) {
   const { slots, getSlotLabel, isSlotConfigured } = useProviderSettings();
+  const [panelSelection, setPanelSelection] = useState<PanelSelection>("A");
   const [prompt, setPrompt] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,8 +62,8 @@ export default function LogprobsMode({ isDark }: LogprobsModeProps) {
         body: JSON.stringify({
           prompt,
           topK: 5,
-          slotA: slots.A,
-          slotB: slotBConfigured ? slots.B : null,
+          slotA: panelSelection === "B" ? slots.B : slots.A,
+          slotB: panelSelection === "both" && isSlotConfigured("B") ? slots.B : null,
         }),
       });
 
@@ -78,7 +80,7 @@ export default function LogprobsMode({ isDark }: LogprobsModeProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [prompt, slots, slotBConfigured, isLoading]);
+  }, [prompt, slots, panelSelection, isSlotConfigured, isLoading]);
 
   const exportTokenCSV = (tokens: TokenLogprob[], modelName: string) => {
     const header = "position,token,logprob,probability,alternatives";
@@ -225,6 +227,9 @@ export default function LogprobsMode({ isDark }: LogprobsModeProps) {
 
       {/* Prompt area */}
       <div className="px-6 py-3 border-t border-border bg-card">
+        <div className="mb-2 max-w-4xl mx-auto">
+          <ModelSelector value={panelSelection} onChange={setPanelSelection} disabled={isLoading} />
+        </div>
         <div className="flex gap-3 max-w-4xl mx-auto items-end">
           <textarea
             value={prompt}

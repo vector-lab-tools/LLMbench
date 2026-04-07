@@ -86,7 +86,21 @@ function createAIClient(config: AIRequestConfig) {
   }
 }
 
-// Generate a response from a single provider
+// Delay helper
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Check if an error is a rate limit error
+function isRateLimitError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    return msg.includes("rate limit") || msg.includes("rate_limit") || msg.includes("429") || msg.includes("too many requests");
+  }
+  return false;
+}
+
+// Generate a response from a single provider (with one automatic retry on rate limit)
 export async function generateAIResponse(
   config: AIRequestConfig,
   options: {
@@ -96,71 +110,104 @@ export async function generateAIResponse(
     maxTokens?: number;
   }
 ): Promise<{ text: string; responseTimeMs: number }> {
-  const client = createAIClient(config);
-  const startTime = Date.now();
+  async function attempt(): Promise<{ text: string; responseTimeMs: number }> {
+    const client = createAIClient(config);
+    const startTime = Date.now();
 
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await generateText({
-      model: client(config.model) as any,
-      system: options.systemPrompt || undefined,
-      messages: [{ role: "user", content: options.prompt }],
-      maxOutputTokens: options.maxTokens || 4096,
-      temperature: options.temperature ?? 1.0,
-    });
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await generateText({
+        model: client(config.model) as any,
+        system: options.systemPrompt || undefined,
+        messages: [{ role: "user", content: options.prompt }],
+        maxOutputTokens: options.maxTokens || 4096,
+        temperature: options.temperature ?? 1.0,
+      });
 
-    const responseTimeMs = Date.now() - startTime;
+      const responseTimeMs = Date.now() - startTime;
 
-    if (!result.text || result.text.trim() === "") {
-      throw new Error(
-        `${PROVIDER_CONFIGS[config.provider].name} returned an empty response.`
-      );
-    }
-
-    return { text: result.text, responseTimeMs };
-  } catch (error) {
-    if (error instanceof Error) {
-      const message = error.message.toLowerCase();
-
-      if (message.includes("rate limit")) {
+      if (!result.text || result.text.trim() === "") {
         throw new Error(
-          `Rate limit exceeded for ${PROVIDER_CONFIGS[config.provider].name}. Please wait and try again.`
+          `${PROVIDER_CONFIGS[config.provider].name} returned an empty response.`
         );
       }
 
-      if (
-        message.includes("authentication") ||
-        message.includes("api key") ||
-        message.includes("unauthorized")
-      ) {
-        throw new Error(
-          `Authentication failed for ${PROVIDER_CONFIGS[config.provider].name}. Check your API key.`
-        );
-      }
+      return { text: result.text, responseTimeMs };
+    } catch (error) {
+      if (error instanceof Error) {
+        const message = error.message.toLowerCase();
 
-      if (message.includes("model") && message.includes("not found")) {
-        throw new Error(
-          `Model "${config.model}" not found for ${PROVIDER_CONFIGS[config.provider].name}.`
-        );
-      }
-
-      if (
-        message.includes("connection") ||
-        message.includes("econnrefused")
-      ) {
-        if (config.provider === "ollama") {
+        if (message.includes("rate limit") || message.includes("rate_limit") || message.includes("429") || message.includes("too many requests")) {
           throw new Error(
-            "Cannot connect to Ollama. Ensure Ollama is running with `ollama serve`."
+            `Rate limit exceeded for ${PROVIDER_CONFIGS[config.provider].name}. Please wait and try again.`
           );
         }
-        throw new Error(
-          `Cannot connect to ${PROVIDER_CONFIGS[config.provider].name}.`
-        );
-      }
-    }
 
+        if (
+          message.includes("authentication") ||
+          message.includes("api key") ||
+          message.includes("unauthorized")
+        ) {
+          throw new Error(
+            `Authentication failed for ${PROVIDER_CONFIGS[config.provider].name}. Check your API key.`
+          );
+        }
+
+        if (message.includes("model") && message.includes("not found")) {
+          throw new Error(
+            `Model "${config.model}" not found for ${PROVIDER_CONFIGS[config.provider].name}.`
+          );
+        }
+
+        if (
+          message.includes("connection") ||
+          message.includes("econnrefused")
+        ) {
+          if (config.provider === "ollama") {
+            throw new Error(
+              "Cannot connect to Ollama. Ensure Ollama is running with `ollama serve`."
+            );
+          }
+          throw new Error(
+            `Cannot connect to ${PROVIDER_CONFIGS[config.provider].name}.`
+          );
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  try {
+    return await attempt();
+  } catch (error) {
+    if (isRateLimitError(error)) {
+      // Single automatic retry after a pause
+      console.log(`[LLMbench] Rate limit hit for ${config.provider}, retrying in 3s...`);
+      await delay(3000);
+      return await attempt();
+    }
     throw error;
   }
+}
+
+// Run an array of async tasks sequentially with a delay between each.
+// Prevents rate limiting when sending many requests to the same provider.
+export async function staggeredRun<T>(
+  tasks: (() => Promise<T>)[],
+  delayMs: number = 500
+): Promise<PromiseSettledResult<T>[]> {
+  const results: PromiseSettledResult<T>[] = [];
+  for (let i = 0; i < tasks.length; i++) {
+    if (i > 0) await delay(delayMs);
+    try {
+      const value = await tasks[i]();
+      results.push({ status: "fulfilled", value });
+    } catch (reason) {
+      results.push({ status: "rejected", reason });
+    }
+  }
+  return results;
 }
 
 // Fan-out: dispatch same prompt to two providers in parallel

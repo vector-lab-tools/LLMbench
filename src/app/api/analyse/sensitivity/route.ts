@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateAIConfig, generateAIResponse } from "@/lib/ai/client";
+import { validateAIConfig, generateAIResponse, staggeredRun } from "@/lib/ai/client";
 import { getModelDisplayName } from "@/lib/ai/config";
 import { computeTextMetrics } from "@/lib/metrics/text-metrics";
 import type { AIProvider } from "@/types/ai-settings";
@@ -67,15 +67,14 @@ async function runSlotSensitivity(
     ...variations,
   ];
 
-  const results = await Promise.allSettled(
-    allPrompts.map((v) =>
-      generateAIResponse(config, {
-        prompt: v.prompt,
-        systemPrompt: slot.systemPrompt || undefined,
-        temperature: slot.temperature,
-      })
-    )
+  const tasks = allPrompts.map((v) =>
+    () => generateAIResponse(config, {
+      prompt: v.prompt,
+      systemPrompt: slot.systemPrompt || undefined,
+      temperature: slot.temperature,
+    })
   );
+  const results = await staggeredRun(tasks, 800);
 
   const mapped = results.map((r, i) => {
     if (r.status === "fulfilled") {

@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { Send, Loader2, AlertCircle, Fingerprint, Plus, X } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
+import { ModelSelector, type PanelSelection } from "@/components/shared/ModelSelector";
 import { ResultCard, MetricBox } from "@/components/shared/ResultCard";
 import { DeepDive } from "@/components/shared/DeepDive";
 import { generateVariations, type PromptVariation } from "@/lib/prompts/variations";
@@ -35,6 +36,7 @@ interface SensitivityModeProps {
 
 export default function SensitivityMode({ isDark }: SensitivityModeProps) {
   const { slots, getSlotLabel, isSlotConfigured } = useProviderSettings();
+  const [panelSelection, setPanelSelection] = useState<PanelSelection>("A");
   const [prompt, setPrompt] = useState("");
   const [customVariations, setCustomVariations] = useState<string[]>([]);
   const [newVariation, setNewVariation] = useState("");
@@ -71,8 +73,8 @@ export default function SensitivityMode({ isDark }: SensitivityModeProps) {
         body: JSON.stringify({
           prompt,
           variations: allVariations,
-          slotA: slots.A,
-          slotB: slotBConfigured ? slots.B : null,
+          slotA: panelSelection === "B" ? slots.B : slots.A,
+          slotB: panelSelection === "both" && isSlotConfigured("B") ? slots.B : null,
         }),
       });
 
@@ -89,7 +91,7 @@ export default function SensitivityMode({ isDark }: SensitivityModeProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [prompt, allVariations, slots, slotBConfigured, isLoading]);
+  }, [prompt, allVariations, slots, panelSelection, isSlotConfigured, isLoading]);
 
   const renderPanel = (panel: "A" | "B", result: PanelResult, label: string) => {
     const baseText = result.base.text;
@@ -249,6 +251,9 @@ export default function SensitivityMode({ isDark }: SensitivityModeProps) {
 
       {/* Prompt area */}
       <div className="px-6 py-3 border-t border-border bg-card">
+        <div className="mb-2 max-w-4xl mx-auto">
+          <ModelSelector value={panelSelection} onChange={setPanelSelection} disabled={isLoading} />
+        </div>
         <div className="flex gap-3 max-w-4xl mx-auto items-end">
           <textarea
             value={prompt}

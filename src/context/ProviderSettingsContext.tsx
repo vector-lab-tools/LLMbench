@@ -98,6 +98,7 @@ export function ProviderSettingsProvider({
   const isSlotConfigured = useCallback(
     (panel: "A" | "B") => {
       const slot = slots[panel];
+      if (!slot.enabled) return false;
       if (slot.provider === "ollama") return true;
       return !!slot.apiKey;
     },

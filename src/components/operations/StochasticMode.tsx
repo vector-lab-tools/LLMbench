@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { Send, Loader2, AlertCircle, Dices } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
+import { ModelSelector, type PanelSelection } from "@/components/shared/ModelSelector";
 import { ResultCard, MetricBox } from "@/components/shared/ResultCard";
 import { DeepDive } from "@/components/shared/DeepDive";
 import { computeWordOverlap } from "@/lib/metrics/text-metrics";
@@ -18,6 +19,7 @@ interface StochasticModeProps {
 
 export default function StochasticMode({ isDark }: StochasticModeProps) {
   const { slots, getSlotLabel, isSlotConfigured } = useProviderSettings();
+  const [panelSelection, setPanelSelection] = useState<PanelSelection>("A");
   const [prompt, setPrompt] = useState("");
   const [runCount, setRunCount] = useState(5);
   const [isLoading, setIsLoading] = useState(false);
@@ -42,8 +44,8 @@ export default function StochasticMode({ isDark }: StochasticModeProps) {
         body: JSON.stringify({
           prompt,
           runCount,
-          slotA: slots.A,
-          slotB: slotBConfigured ? slots.B : null,
+          slotA: panelSelection === "B" ? slots.B : slots.A,
+          slotB: panelSelection === "both" && isSlotConfigured("B") ? slots.B : null,
         }),
       });
 
@@ -60,7 +62,7 @@ export default function StochasticMode({ isDark }: StochasticModeProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [prompt, runCount, slots, slotBConfigured, isLoading]);
+  }, [prompt, runCount, slots, panelSelection, isSlotConfigured, isLoading]);
 
   return (
     <>
@@ -74,7 +76,7 @@ export default function StochasticMode({ isDark }: StochasticModeProps) {
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-muted-foreground">
               <Loader2 className="w-8 h-8 mx-auto mb-3 animate-spin opacity-40" />
-              <p className="text-body-sm">Running {runCount} iterations on {slotBConfigured ? "both models" : "one model"}...</p>
+              <p className="text-body-sm">Running {runCount} iterations on {panelSelection === "both" ? "both models" : "one model"}...</p>
             </div>
           </div>
         ) : resultA ? (
@@ -265,6 +267,9 @@ export default function StochasticMode({ isDark }: StochasticModeProps) {
 
       {/* Prompt area */}
       <div className="px-6 py-3 border-t border-border bg-card">
+        <div className="mb-2 max-w-4xl mx-auto">
+          <ModelSelector value={panelSelection} onChange={setPanelSelection} disabled={isLoading} />
+        </div>
         <div className="flex gap-3 max-w-4xl mx-auto items-end">
           <textarea
             value={prompt}

@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { Send, Loader2, AlertCircle, Thermometer } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
+import { ModelSelector, type PanelSelection } from "@/components/shared/ModelSelector";
 import { ResultCard, MetricBox } from "@/components/shared/ResultCard";
 import { DeepDive } from "@/components/shared/DeepDive";
 
@@ -22,6 +23,7 @@ interface TemperatureModeProps {
 
 export default function TemperatureMode({ isDark }: TemperatureModeProps) {
   const { slots, getSlotLabel, isSlotConfigured } = useProviderSettings();
+  const [panelSelection, setPanelSelection] = useState<PanelSelection>("A");
   const [prompt, setPrompt] = useState("");
   const [temperatures, setTemperatures] = useState(DEFAULT_TEMPS);
   const [isLoading, setIsLoading] = useState(false);
@@ -46,8 +48,8 @@ export default function TemperatureMode({ isDark }: TemperatureModeProps) {
         body: JSON.stringify({
           prompt,
           temperatures,
-          slotA: slots.A,
-          slotB: slotBConfigured ? slots.B : null,
+          slotA: panelSelection === "B" ? slots.B : slots.A,
+          slotB: panelSelection === "both" && isSlotConfigured("B") ? slots.B : null,
         }),
       });
 
@@ -64,7 +66,7 @@ export default function TemperatureMode({ isDark }: TemperatureModeProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [prompt, temperatures, slots, slotBConfigured, isLoading]);
+  }, [prompt, temperatures, slots, panelSelection, isSlotConfigured, isLoading]);
 
   const renderPanel = (panel: "A" | "B", result: { runs: TempRun[] }, label: string) => {
     const outputs = result.runs.filter((r) => r.text);
@@ -161,6 +163,9 @@ export default function TemperatureMode({ isDark }: TemperatureModeProps) {
 
       {/* Prompt area */}
       <div className="px-6 py-3 border-t border-border bg-card">
+        <div className="mb-2 max-w-4xl mx-auto">
+          <ModelSelector value={panelSelection} onChange={setPanelSelection} disabled={isLoading} />
+        </div>
         <div className="flex gap-3 max-w-4xl mx-auto items-end">
           <textarea
             value={prompt}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateAIConfig, generateAIResponse } from "@/lib/ai/client";
+import { validateAIConfig, generateAIResponse, staggeredRun } from "@/lib/ai/client";
 import { getModelDisplayName } from "@/lib/ai/config";
 import { computeTextMetrics } from "@/lib/metrics/text-metrics";
 import type { AIProvider } from "@/types/ai-settings";
@@ -34,15 +34,14 @@ async function runSlot(slot: SlotPayload, prompt: string, runCount: number) {
     return { runs: [{ error: validation.error!, provenance: buildProvenance(slot, 0) }] };
   }
 
-  const runs = await Promise.allSettled(
-    Array.from({ length: runCount }, () =>
-      generateAIResponse(config, {
-        prompt,
-        systemPrompt: slot.systemPrompt || undefined,
-        temperature: slot.temperature,
-      })
-    )
+  const tasks = Array.from({ length: runCount }, () =>
+    () => generateAIResponse(config, {
+      prompt,
+      systemPrompt: slot.systemPrompt || undefined,
+      temperature: slot.temperature,
+    })
   );
+  const runs = await staggeredRun(tasks, 800);
 
   return {
     runs: runs.map((r) => {

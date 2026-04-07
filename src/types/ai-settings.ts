@@ -34,6 +34,7 @@ export interface ProviderSlot {
   customModelId?: string;
   temperature: number;
   systemPrompt: string;
+  enabled: boolean;
 }
 
 // Both slots together
@@ -72,6 +73,7 @@ export const DEFAULT_SLOT_A: ProviderSlot = {
   apiKey: "",
   temperature: 1.0,
   systemPrompt: "",
+  enabled: true,
 };
 
 export const DEFAULT_SLOT_B: ProviderSlot = {
@@ -80,4 +82,5 @@ export const DEFAULT_SLOT_B: ProviderSlot = {
   apiKey: "",
   temperature: 1.0,
   systemPrompt: "",
+  enabled: true,
 };
