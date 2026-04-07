@@ -52,7 +52,7 @@ export function TokenHeatmap({ tokens, isDark }: TokenHeatmapProps) {
   const activeToken = activeIndex !== null ? tokens[activeIndex] : null;
 
   return (
-    <div className="flex gap-4 items-start">
+    <div className="flex gap-4 items-start px-4 py-4">
       {/* Left: heatmap text */}
       <div className="flex-1 min-w-0">
         <div className="font-serif text-base leading-relaxed whitespace-pre-wrap">

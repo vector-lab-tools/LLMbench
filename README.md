@@ -4,7 +4,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 1.9.4
+**Version:** 1.9.5
 **Date:** 8 April 2026
 **Licence:** MIT
 
@@ -36,7 +36,9 @@ LLMbench emerges from the convergence of three research programmes.
 
   - **Struct** — Numbers each sentence in the margin with a burgundy-tinted badge and highlights discourse connectives (however, therefore, moreover, firstly, consequently, etc.) in burgundy. A footer shows sentence count, how many sentences contain discourse markers, and average words per sentence. Reveals argumentation structure that word diff cannot capture.
 
-  - **Tone (Register view)** — Applies Hyland's (2005) metadiscourse model across seven categories: **Hedges** (might, perhaps, arguably — blue), **Boosters** (clearly, certainly, must — green), **Limiting** (not, never, without, hardly — orange), **Attitude markers** (important, surprising, problematic — purple), **Intensifiers** (very, extremely, highly — amber), **Self-mentions** (I, we, my, our — rose), and **Engagement markers** (you, consider, note, imagine — teal). Click any legend chip to read its full Hyland (2005) definition and origin note. Use the eye icon beside each chip to hide that category when the text becomes too dense. Hover any marked word for its surrounding context, a frequency count, and a word-specific linguistic note. A register balance bar at the foot of each panel shows the proportion of each category.
+  - **Tone (Register view)** — Applies Hyland's (2005) metadiscourse model across seven categories: **Hedges** (might, perhaps, arguably — blue), **Boosters** (clearly, certainly, must — green), **Limiting** (not, never, without, hardly — orange), **Attitude markers** (important, surprising, problematic — purple), **Intensifiers** (very, extremely, highly — amber), **Self-mentions** (I, we, my, our — rose), and **Engagement markers** (you, consider, note, imagine — teal). Click any chip to toggle that category on or off. Click the **?** beside each chip to open a modal with the full Hyland (2005) definition, term, and bibliographic origin. Hover any marked word for its surrounding context, frequency count, and a word-specific linguistic note. A register balance bar at the foot shows proportions.
+
+  - **Probs** — Re-runs the current prompt through the token probability API and overlays a colour-coded entropy heatmap on each panel (grey = confident, red = uncertain). Requires Google Gemini 2.0 or OpenAI models. If neither panel is configured with a compatible model the button is dimmed; clicking it opens an explanatory modal with model requirements and a link to Settings.
 
 - **Default prompts.** A row of curated example prompts appears below the input when empty. Clicking one fills and immediately runs it. Sending an empty prompt auto-selects a random example.
 
