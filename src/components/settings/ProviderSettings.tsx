@@ -20,6 +20,15 @@ const CUSTOM_PLACEHOLDERS: Record<AIProvider, string> = {
   "openai-compatible": "Enter model identifier",
 };
 
+function useIsLocal(): boolean {
+  const [isLocal, setIsLocal] = useState(false);
+  useEffect(() => {
+    const h = window.location.hostname;
+    setIsLocal(h === "localhost" || h === "127.0.0.1" || h === "0.0.0.0");
+  }, []);
+  return isLocal;
+}
+
 function SlotEditor({
   panel,
   slot,
@@ -32,6 +41,7 @@ function SlotEditor({
   onUpdate: (updates: Partial<ProviderSlot>) => void;
 }) {
   const [showKey, setShowKey] = useState(false);
+  const isLocal = useIsLocal();
 
   // Use dynamic models when loaded, otherwise fall back to static config
   const providerConfig = getProviderConfigWithModels(slot.provider);
@@ -65,11 +75,17 @@ function SlotEditor({
           className="input-editorial w-full"
         >
           {providers.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
+            <option key={p.id} value={p.id} disabled={p.id === "ollama" && !isLocal}>
+              {p.name}{p.id === "ollama" && !isLocal ? " (local only)" : ""}
             </option>
           ))}
         </select>
+
+        {slot.provider === "ollama" && !isLocal && (
+          <p className="mt-1 text-caption text-red-500">
+            Ollama requires a local server. Run LLMbench locally with npm run dev to use Ollama.
+          </p>
+        )}
       </div>
 
       {/* Model select */}

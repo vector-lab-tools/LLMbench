@@ -94,11 +94,14 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Check if an error is a rate limit error
-function isRateLimitError(error: unknown): boolean {
+// Check if an error is retryable (rate limit or server overload)
+function isRetryableError(error: unknown): boolean {
   if (error instanceof Error) {
     const msg = error.message.toLowerCase();
-    return msg.includes("rate limit") || msg.includes("rate_limit") || msg.includes("429") || msg.includes("too many requests");
+    return msg.includes("rate limit") || msg.includes("rate_limit")
+      || msg.includes("429") || msg.includes("too many requests")
+      || msg.includes("high demand") || msg.includes("overloaded")
+      || msg.includes("503") || msg.includes("temporarily unavailable");
   }
   return false;
 }
@@ -206,7 +209,7 @@ export async function generateAIResponse(
   try {
     return await attempt();
   } catch (error) {
-    if (isRateLimitError(error)) {
+    if (isRetryableError(error)) {
       // Single automatic retry after a pause
       console.log(`[LLMbench] Rate limit hit for ${config.provider}, retrying in 3s...`);
       await delay(3000);
