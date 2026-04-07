@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 interface KillerRabbitProps {
   onDismiss: () => void;
@@ -14,44 +14,28 @@ function randPos() {
   };
 }
 
-function randDelay() {
-  return 900 + Math.random() * 900; // 0.9–1.8s
-}
-
 export function KillerRabbit({ onDismiss }: KillerRabbitProps) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [dead, setDead] = useState(false);
   const [fading, setFading] = useState(false);
+  const deadRef = useRef(false);
 
-  // Set initial position client-side (avoids SSR)
+  // Set initial position and start moving on mount
   useEffect(() => {
     setPos(randPos());
+    const id = setInterval(() => {
+      if (!deadRef.current) setPos(randPos());
+    }, 1300);
+    return () => clearInterval(id);
   }, []);
 
-  // Move at random intervals while alive
-  useEffect(() => {
-    if (dead || !pos) return;
-    let cancelled = false;
-    const schedule = () => {
-      const t = setTimeout(() => {
-        if (!cancelled) {
-          setPos(randPos());
-          schedule();
-        }
-      }, randDelay());
-      return t;
-    };
-    const t = schedule();
-    return () => { cancelled = true; clearTimeout(t); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dead, pos === null]);
-
   const handleClick = useCallback(() => {
-    if (dead) return;
+    if (deadRef.current) return;
+    deadRef.current = true;
     setDead(true);
     setTimeout(() => setFading(true), 1400);
     setTimeout(onDismiss, 1900);
-  }, [dead, onDismiss]);
+  }, [onDismiss]);
 
   if (!pos) return null;
 
@@ -66,45 +50,30 @@ export function KillerRabbit({ onDismiss }: KillerRabbitProps) {
         zIndex: 9999,
         cursor: dead ? "default" : "crosshair",
         userSelect: "none",
-        transition: dead
-          ? `opacity 0.5s ease ${fading ? "0s" : "1s"}`
-          : "left 0.55s cubic-bezier(0.4,0,0.2,1), top 0.55s cubic-bezier(0.4,0,0.2,1)",
         opacity: fading ? 0 : 1,
         transform: "translate(-50%, -50%)",
+        transition: dead
+          ? "opacity 0.5s ease"
+          : "left 0.6s cubic-bezier(0.4,0,0.2,1), top 0.6s cubic-bezier(0.4,0,0.2,1)",
       }}
     >
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-        {/* Rabbit emoji — desaturated to match Monty Python palette */}
-        <span
-          style={{
-            fontSize: "2.8rem",
-            display: "block",
-            filter: dead
-              ? "grayscale(100%) brightness(0.4)"
-              : "grayscale(40%) sepia(20%) brightness(0.85)",
-            transition: "filter 0.3s",
-          }}
-        >
+        <span style={{
+          fontSize: "2.8rem",
+          display: "block",
+          filter: dead
+            ? "grayscale(100%) brightness(0.4)"
+            : "grayscale(40%) sepia(20%) brightness(0.85)",
+          transition: "filter 0.3s",
+        }}>
           {dead ? "☠️" : "🐇"}
         </span>
-
         {dead ? (
-          <span style={{
-            fontSize: "10px",
-            fontFamily: "Georgia, serif",
-            color: "#6b1010",
-            whiteSpace: "nowrap",
-            textShadow: "0 1px 0 #00000040",
-          }}>
+          <span style={{ fontSize: "10px", fontFamily: "Georgia, serif", color: "#6b1010", whiteSpace: "nowrap" }}>
             &ldquo;That&rsquo;s no ordinary rabbit!&rdquo;
           </span>
         ) : (
-          <span style={{
-            fontSize: "8px",
-            fontFamily: "monospace",
-            color: "#7a6a58",
-            whiteSpace: "nowrap",
-          }}>
+          <span style={{ fontSize: "8px", fontFamily: "monospace", color: "#7a6a58", whiteSpace: "nowrap" }}>
             Rabbit of Caerbannog
           </span>
         )}
