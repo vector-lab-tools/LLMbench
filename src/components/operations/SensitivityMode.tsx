@@ -246,11 +246,11 @@ export default function SensitivityMode({ isDark }: SensitivityModeProps) {
         </div>
 
         {/* Panel-level Deep Dive */}
-        {isDone && successfulVariations.length > 0 && baseText && (
+        {isDone && filledVariations.length > 0 && (
           <div className="mt-4 bg-card border border-parchment/50 rounded-sm overflow-hidden">
             <DeepDive
               label="Deep Dive"
-              summary={`${successfulVariations.length} variations analysed`}
+              summary={`${filledVariations.length} variations, ${successfulVariations.length} successful`}
             >
               <div>
                 <div className="text-caption font-medium text-muted-foreground mb-2">Variation Overlap Ranking</div>
