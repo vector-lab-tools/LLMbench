@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, useCallback } from "react";
-import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ── Word sets ────────────────────────────────────────────────────────────────
@@ -370,7 +369,7 @@ function classifyWord(word: string): ToneCategory {
 // ── Component ─────────────────────────────────────────────────────────────────
 export function ToneView({ text, fontSize, fontFamily }: ToneViewProps) {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<ToneCategory | null>(null);
+  const [modalCategory, setModalCategory] = useState<Exclude<ToneCategory, "neutral"> | null>(null);
   const [hiddenCategories, setHiddenCategories] = useState<ToneCategory[]>([]);
 
   const toggleHidden = useCallback((cat: ToneCategory) => {
@@ -432,20 +431,18 @@ export function ToneView({ text, fontSize, fontFamily }: ToneViewProps) {
         <span className="text-muted-foreground font-medium">Register view</span>
         {ACTIVE_CATEGORIES.map(cat => {
           const hidden = hiddenCategories.includes(cat);
-          const selected = selectedCategory === cat;
           return (
             <span key={cat} className="flex items-center gap-1">
-              {/* Label chip — click to toggle info */}
+              {/* Chip — click to toggle visibility */}
               <button
-                onClick={() => setSelectedCategory(selected ? null : cat)}
+                onClick={() => toggleHidden(cat)}
                 className={cn(
                   "px-1.5 py-0.5 rounded text-[10px] transition-opacity",
                   TONE_STYLES[cat].bg,
                   TONE_STYLES[cat].text,
                   hidden ? "opacity-30 line-through" : "",
-                  selected ? "ring-1 " + TONE_STYLES[cat].border : ""
                 )}
-                title={`Click to ${selected ? "close" : "show"} description`}
+                title={hidden ? `Show ${TONE_STYLES[cat].label} highlights` : `Hide ${TONE_STYLES[cat].label} highlights`}
               >
                 {TONE_STYLES[cat].label}
               </button>
@@ -453,16 +450,13 @@ export function ToneView({ text, fontSize, fontFamily }: ToneViewProps) {
               <span className={cn("text-muted-foreground", hidden ? "opacity-30" : "")}>
                 {counts[cat]}
               </span>
-              {/* Visibility toggle */}
+              {/* ? — opens definition modal */}
               <button
-                onClick={() => toggleHidden(cat)}
-                className="text-muted-foreground/40 hover:text-muted-foreground transition-colors"
-                title={hidden ? `Show ${TONE_STYLES[cat].label} highlights` : `Hide ${TONE_STYLES[cat].label} highlights`}
+                onClick={() => setModalCategory(cat)}
+                className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-muted-foreground/15 text-muted-foreground/60 hover:bg-burgundy/20 hover:text-burgundy text-[8px] font-bold leading-none cursor-pointer transition-colors"
+                title={`What is ${TONE_STYLES[cat].label}?`}
               >
-                {hidden
-                  ? <EyeOff className="w-2.5 h-2.5" />
-                  : <Eye className="w-2.5 h-2.5" />
-                }
+                ?
               </button>
             </span>
           );
@@ -474,25 +468,34 @@ export function ToneView({ text, fontSize, fontFamily }: ToneViewProps) {
         )}
       </div>
 
-      {/* Category info panel */}
-      {selectedCategory !== null && selectedCategory !== "neutral" && (
-        <div className={cn(
-          "px-4 py-3 border-b text-[10px] leading-relaxed space-y-1.5",
-          TONE_STYLES[selectedCategory].border,
-          "bg-card"
-        )}>
-          <div className="flex items-baseline gap-2">
-            <span className={cn("font-semibold", TONE_STYLES[selectedCategory].text)}>
-              {TONE_STYLES[selectedCategory].label}
-            </span>
-            <span className="text-muted-foreground/60 italic">
-              Hyland (2005): {CATEGORY_INFO[selectedCategory].hylandTerm}
-            </span>
+      {/* Definition modal */}
+      {modalCategory !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={() => setModalCategory(null)}
+        >
+          <div
+            className={cn(
+              "bg-popover rounded-sm shadow-lg p-5 w-full max-w-md border mx-4",
+              TONE_STYLES[modalCategory].border
+            )}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-baseline gap-2 mb-3">
+              <span className={cn("text-body-sm font-semibold", TONE_STYLES[modalCategory].text)}>
+                {TONE_STYLES[modalCategory].label}
+              </span>
+              <span className="text-caption text-muted-foreground/60 italic">
+                Hyland (2005): {CATEGORY_INFO[modalCategory].hylandTerm}
+              </span>
+            </div>
+            <p className="text-caption text-muted-foreground leading-relaxed mb-3">
+              {CATEGORY_INFO[modalCategory].detail}
+            </p>
+            <p className="text-[10px] text-muted-foreground/60 italic border-t border-parchment/30 pt-2.5 leading-relaxed">
+              {CATEGORY_INFO[modalCategory].origin}
+            </p>
           </div>
-          <p className="text-muted-foreground">{CATEGORY_INFO[selectedCategory].detail}</p>
-          <p className="text-muted-foreground/60 italic border-t border-parchment/30 pt-1.5">
-            {CATEGORY_INFO[selectedCategory].origin}
-          </p>
         </div>
       )}
 
