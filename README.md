@@ -4,8 +4,8 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 1.9.1
-**Date:** 7 April 2026
+**Version:** 1.9.2
+**Date:** 8 April 2026
 **Licence:** MIT
 
 LLMbench is a web-based research tool that enables scholars and researchers to subject AI-generated text to the kind of sustained hermeneutic scrutiny that has long been applied to literary, philosophical, and computational texts. It sends prompts to one or two LLMs, displays their responses in annotatable panels, and provides analytical modes for empirically investigating model behaviour: stochastic variation, prompt sensitivity, temperature gradients, token probabilities, and cross-model divergence.

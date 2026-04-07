@@ -18,6 +18,7 @@ import {
   Check,
   Trash2,
   ChevronDown,
+  ChevronUp,
   SlidersHorizontal,
   Minus,
   Plus,
@@ -337,6 +338,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
   const [showHistory, setShowHistory] = useState(false);
   const [showDisplaySettings, setShowDisplaySettings] = useState(false);
   const [viewMode, setViewMode] = useState<"diff" | "struct" | "tone" | null>(null);
+  const [promptCollapsed, setPromptCollapsed] = useState(false);
   const showDiff = viewMode === "diff";
 
   const hasContent = resultA !== null || resultB !== null;
@@ -838,8 +840,11 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
         </div>
       </div>
 
+      {/* Scrollable body: panels + deep dive extend downward */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+
       {/* Dual panels */}
-      <div className="flex-1 flex flex-col md:flex-row min-h-[180px]">
+      <div className="flex flex-col md:flex-row min-h-[50vh]">
         <AnnotatedPanelDisplay
           panel="A"
           result={resultA}
@@ -886,7 +891,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
         const metricsB = computeTextMetrics(textB);
         const overlap = computeWordOverlap(textA, textB);
         return (
-          <div className="border-t border-border shrink-0 max-h-[45vh] overflow-y-auto">
+          <div className="border-t border-border">
             <DeepDive label="Deep Dive" summary={`${overlap.shared.length} shared words, ${(overlap.jaccardSimilarity * 100).toFixed(0)}% Jaccard`}>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
                 <MetricBox label="Jaccard Similarity" value={`${(overlap.jaccardSimilarity * 100).toFixed(1)}%`} />
@@ -945,8 +950,21 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
         );
       })()}
 
+      {/* End scrollable body */}
+      </div>
+
       {/* Prompt area */}
-      <div className="px-6 py-3 border-t border-border bg-card">
+      <div className="border-t border-border bg-card shrink-0">
+        {/* Collapse toggle */}
+        <button
+          onClick={() => setPromptCollapsed(c => !c)}
+          className="w-full flex items-center justify-center gap-1 py-0.5 text-[10px] text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/20 transition-colors"
+          title={promptCollapsed ? "Show prompt" : "Hide prompt"}
+        >
+          {promptCollapsed ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        </button>
+        {!promptCollapsed && (
+        <div className="px-6 py-3">
         <div className="flex gap-3 max-w-4xl mx-auto">
           <textarea
             value={prompt}
@@ -988,6 +1006,8 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
             <AlertCircle className="w-3.5 h-3.5" />
             {error}
           </div>
+        )}
+        </div>
         )}
       </div>
 

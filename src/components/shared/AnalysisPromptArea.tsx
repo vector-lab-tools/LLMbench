@@ -1,7 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { Send, Loader2, AlertCircle } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { Send, Loader2, AlertCircle, ChevronUp, ChevronDown } from "lucide-react";
 import { ModelSelector, type PanelSelection } from "./ModelSelector";
 
 interface AnalysisPromptAreaProps {
@@ -33,8 +33,21 @@ export function AnalysisPromptArea({
   controls,
   footer,
 }: AnalysisPromptAreaProps) {
+  const [collapsed, setCollapsed] = useState(false);
+
   return (
-    <div className="px-6 py-3 border-t border-border bg-card space-y-2">
+    <div className="border-t border-border bg-card">
+      {/* Toggle strip */}
+      <button
+        onClick={() => setCollapsed(c => !c)}
+        className="w-full flex items-center justify-center gap-1 py-0.5 text-[10px] text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/20 transition-colors"
+        title={collapsed ? "Show prompt" : "Hide prompt"}
+      >
+        {collapsed ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+      </button>
+
+      {!collapsed && (
+    <div className="px-6 py-3 space-y-2">
       {/* Toolbar row: model selector + controls */}
       <div className="flex items-center gap-3 max-w-4xl mx-auto">
         <ModelSelector
@@ -88,6 +101,8 @@ export function AnalysisPromptArea({
         <div className="max-w-4xl mx-auto">
           {footer}
         </div>
+      )}
+    </div>
       )}
     </div>
   );
