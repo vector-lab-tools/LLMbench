@@ -72,7 +72,7 @@ function createAIClient(config: AIRequestConfig) {
     case "ollama":
       return createOpenAI({
         apiKey: "ollama",
-        baseURL: (baseUrl || "http://localhost:11434") + "/v1",
+        baseURL: (baseUrl || "http://127.0.0.1:11434") + "/v1",
       });
 
     case "openai-compatible":
