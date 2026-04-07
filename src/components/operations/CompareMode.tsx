@@ -65,6 +65,7 @@ import { DiffRenderedText } from "@/components/workspace/DiffPanel";
 import { computeWordDiff, type DiffSegment } from "@/lib/diff/word-diff";
 import { TokenHeatmap } from "@/components/viz/TokenHeatmap";
 import { BridgeKeeper, isBridgeKeeperPrompt } from "@/components/viz/BridgeKeeper";
+import { KillerRabbit, isKillerRabbitPrompt } from "@/components/viz/KillerRabbit";
 import type { TokenLogprob } from "@/types/analysis";
 import {
   DEFAULT_ANNOTATION_DISPLAY_SETTINGS,
@@ -364,6 +365,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
   const [logprobsLoading, setLogprobsLoading] = useState(false);
   const [showLogprobsInfo, setShowLogprobsInfo] = useState(false);
   const [showBridgeKeeper, setShowBridgeKeeper] = useState(false);
+  const [showKillerRabbit, setShowKillerRabbit] = useState(false);
   const [lastSentPrompt, setLastSentPrompt] = useState("");
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [showProbsExport, setShowProbsExport] = useState(false);
@@ -481,6 +483,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     setProbsSecondIndex(null);
     setLastSentPrompt(effectivePrompt);
     if (isBridgeKeeperPrompt(effectivePrompt)) setShowBridgeKeeper(true);
+    if (isKillerRabbitPrompt(effectivePrompt)) setShowKillerRabbit(true);
     dispatch(effectivePrompt, temperatureOverride !== null ? temperatureOverride : undefined);
     setPromptCollapsed(true);
     setPromptBouncing(true);
@@ -1414,6 +1417,11 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
       {/* BridgeKeeper Easter egg */}
       {showBridgeKeeper && (
         <BridgeKeeper onDismiss={() => setShowBridgeKeeper(false)} />
+      )}
+
+      {/* Killer Rabbit Easter egg */}
+      {showKillerRabbit && (
+        <KillerRabbit onDismiss={() => setShowKillerRabbit(false)} />
       )}
 
       {/* View Prompt modal */}
