@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Loader2, AlertCircle, GitFork } from "lucide-react";
+import { Loader2, AlertCircle, GitFork, RotateCcw } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { AnalysisPromptArea } from "@/components/shared/AnalysisPromptArea";
 import type { PanelSelection } from "@/components/shared/ModelSelector";
@@ -210,9 +210,19 @@ export default function DivergenceMode({ isDark }: DivergenceModeProps) {
                         {result.text}
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2 text-red-500">
-                        <AlertCircle className="w-4 h-4" />
-                        <span className="text-body-sm">{result.error}</span>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-red-500">
+                          <AlertCircle className="w-4 h-4" />
+                          <span className="text-body-sm">{result.error}</span>
+                        </div>
+                        <button
+                          onClick={handleRun}
+                          disabled={isLoading}
+                          className="flex items-center gap-1.5 text-caption text-burgundy hover:text-foreground transition-colors disabled:opacity-40"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          Retry
+                        </button>
                       </div>
                     )}
                   </div>

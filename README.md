@@ -151,7 +151,6 @@ The architecture follows the Manifold Atlas pattern: a thin `page.tsx` manages m
 - [ ] Embedding-based semantic similarity in divergence mode
 - [ ] Prompt history browser
 - [ ] Supabase cloud persistence and sharing
-- [ ] Streaming responses
 - [ ] Tutorial/cards system for guided analytical exercises
 
 ## Related Work

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
-import { AlertCircle, Fingerprint, Plus, X } from "lucide-react";
+import { AlertCircle, Fingerprint, Plus, RotateCcw, X } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { AnalysisPromptArea } from "@/components/shared/AnalysisPromptArea";
 import type { PanelSelection } from "@/components/shared/ModelSelector";
@@ -183,9 +183,19 @@ export default function SensitivityMode({ isDark }: SensitivityModeProps) {
                 {baseText.slice(0, 200)}{baseText.length > 200 ? "..." : ""}
               </p>
             ) : (
-              <div className="flex items-center gap-2 text-red-500">
-                <AlertCircle className="w-4 h-4" />
-                <span className="text-body-sm">{base.error}</span>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-red-500">
+                  <AlertCircle className="w-4 h-4" />
+                  <span className="text-body-sm">{base.error}</span>
+                </div>
+                <button
+                  onClick={handleRun}
+                  disabled={isLoading}
+                  className="flex items-center gap-1.5 text-caption text-burgundy hover:text-foreground transition-colors disabled:opacity-40"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Retry all
+                </button>
               </div>
             )}
           </ResultCard>
@@ -235,9 +245,19 @@ export default function SensitivityMode({ isDark }: SensitivityModeProps) {
                     {v.result.text.slice(0, 200)}{v.result.text.length > 200 ? "..." : ""}
                   </p>
                 ) : (
-                  <div className="flex items-center gap-2 text-red-500">
-                    <AlertCircle className="w-4 h-4" />
-                    <span className="text-body-sm">{v.result.error}</span>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-red-500">
+                      <AlertCircle className="w-4 h-4" />
+                      <span className="text-body-sm">{v.result.error}</span>
+                    </div>
+                    <button
+                      onClick={handleRun}
+                      disabled={isLoading}
+                      className="flex items-center gap-1.5 text-caption text-burgundy hover:text-foreground transition-colors disabled:opacity-40"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Retry all
+                    </button>
                   </div>
                 )}
               </ResultCard>

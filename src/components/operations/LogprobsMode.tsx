@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Loader2, AlertCircle, BarChart3, Download } from "lucide-react";
+import { Loader2, AlertCircle, BarChart3, Download, RotateCcw } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { AnalysisPromptArea } from "@/components/shared/AnalysisPromptArea";
 import type { PanelSelection } from "@/components/shared/ModelSelector";
@@ -109,6 +109,14 @@ export default function LogprobsMode({ isDark }: LogprobsModeProps) {
             <AlertCircle className="w-4 h-4" />
             <span className="text-body-sm">{result.error}</span>
           </div>
+          <button
+            onClick={handleRun}
+            disabled={isLoading}
+            className="mt-2 flex items-center gap-1.5 text-caption text-burgundy hover:text-foreground transition-colors disabled:opacity-40"
+          >
+            <RotateCcw className="w-3 h-3" />
+            Retry
+          </button>
         </div>
       );
     }
