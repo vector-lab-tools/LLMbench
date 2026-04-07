@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
-import { Send, Loader2, AlertCircle, Fingerprint, Plus, X } from "lucide-react";
+import { Loader2, AlertCircle, Fingerprint, Plus, X } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
-import { ModelSelector, type PanelSelection } from "@/components/shared/ModelSelector";
+import { AnalysisPromptArea } from "@/components/shared/AnalysisPromptArea";
+import type { PanelSelection } from "@/components/shared/ModelSelector";
 import { ResultCard, MetricBox } from "@/components/shared/ResultCard";
 import { DeepDive } from "@/components/shared/DeepDive";
 import { generateVariations, type PromptVariation } from "@/lib/prompts/variations";
@@ -250,84 +251,63 @@ export default function SensitivityMode({ isDark }: SensitivityModeProps) {
       )}
 
       {/* Prompt area */}
-      <div className="px-6 py-3 border-t border-border bg-card">
-        <div className="mb-2 max-w-4xl mx-auto">
-          <ModelSelector value={panelSelection} onChange={setPanelSelection} disabled={isLoading} />
-        </div>
-        <div className="flex gap-3 max-w-4xl mx-auto items-end">
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Enter a base prompt to test sensitivity..."
-            className="input-editorial flex-1 resize-none min-h-[60px] max-h-[200px]"
-            rows={2}
-            disabled={isLoading}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleRun();
-              }
-            }}
-          />
-          <button
-            onClick={handleRun}
-            disabled={!prompt.trim() || isLoading || !slotAConfigured || allVariations.length === 0}
-            className="btn-editorial-primary px-4 py-2 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          </button>
-        </div>
+      <AnalysisPromptArea
+        prompt={prompt}
+        onPromptChange={setPrompt}
+        onSubmit={handleRun}
+        isLoading={isLoading}
+        disabled={!slotAConfigured || allVariations.length === 0}
+        error={error}
+        placeholder="Enter a prompt to test sensitivity..."
+        panelSelection={panelSelection}
+        onPanelSelectionChange={setPanelSelection}
+        footer={
+          <>
+            {/* Custom variation input */}
+            <div className="flex gap-2">
+              <input
+                value={newVariation}
+                onChange={(e) => setNewVariation(e.target.value)}
+                placeholder="Add a custom prompt variation..."
+                className="input-editorial flex-1 text-body-sm px-2 py-1"
+                disabled={isLoading}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newVariation.trim()) {
+                    setCustomVariations((prev) => [...prev, newVariation.trim()]);
+                    setNewVariation("");
+                  }
+                }}
+              />
+              <button
+                onClick={() => {
+                  if (newVariation.trim()) {
+                    setCustomVariations((prev) => [...prev, newVariation.trim()]);
+                    setNewVariation("");
+                  }
+                }}
+                disabled={!newVariation.trim()}
+                className="btn-editorial-ghost px-2 py-1 text-caption disabled:opacity-30"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </div>
 
-        {/* Custom variation input */}
-        <div className="mt-2 max-w-4xl mx-auto flex gap-2">
-          <input
-            value={newVariation}
-            onChange={(e) => setNewVariation(e.target.value)}
-            placeholder="Add a custom prompt variation..."
-            className="input-editorial flex-1 text-body-sm px-2 py-1"
-            disabled={isLoading}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && newVariation.trim()) {
-                setCustomVariations((prev) => [...prev, newVariation.trim()]);
-                setNewVariation("");
-              }
-            }}
-          />
-          <button
-            onClick={() => {
-              if (newVariation.trim()) {
-                setCustomVariations((prev) => [...prev, newVariation.trim()]);
-                setNewVariation("");
-              }
-            }}
-            disabled={!newVariation.trim()}
-            className="btn-editorial-ghost px-2 py-1 text-caption disabled:opacity-30"
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        {/* Custom variations list */}
-        {customVariations.length > 0 && (
-          <div className="mt-1 max-w-4xl mx-auto flex flex-wrap gap-1">
-            {customVariations.map((v, i) => (
-              <span key={i} className="text-caption bg-cream px-2 py-0.5 rounded-sm flex items-center gap-1">
-                Custom {i + 1}
-                <button onClick={() => setCustomVariations((prev) => prev.filter((_, j) => j !== i))}>
-                  <X className="w-3 h-3 text-muted-foreground hover:text-red-500" />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-
-        {error && (
-          <div className="mt-2 max-w-4xl mx-auto text-caption text-red-500 flex items-center gap-1.5">
-            <AlertCircle className="w-3.5 h-3.5" />
-            {error}
-          </div>
-        )}
-      </div>
+            {/* Custom variations list */}
+            {customVariations.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {customVariations.map((v, i) => (
+                  <span key={i} className="text-caption bg-cream px-2 py-0.5 rounded-sm flex items-center gap-1">
+                    Custom {i + 1}
+                    <button onClick={() => setCustomVariations((prev) => prev.filter((_, j) => j !== i))}>
+                      <X className="w-3 h-3 text-muted-foreground hover:text-red-500" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </>
+        }
+      />
     </>
   );
 }

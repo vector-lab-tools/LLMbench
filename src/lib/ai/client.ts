@@ -69,11 +69,14 @@ function createAIClient(config: AIRequestConfig) {
     case "google":
       return createGoogleGenerativeAI({ apiKey });
 
-    case "ollama":
+    case "ollama": {
+      // Normalize localhost → 127.0.0.1 to avoid IPv6 resolution issues on macOS
+      const ollamaUrl = (baseUrl || "http://127.0.0.1:11434").replace("://localhost", "://127.0.0.1");
       return createOpenAI({
         apiKey: "ollama",
-        baseURL: (baseUrl || "http://127.0.0.1:11434") + "/v1",
+        baseURL: ollamaUrl + (ollamaUrl.endsWith("/v1") ? "" : "/v1"),
       });
+    }
 
     case "openai-compatible":
       return createOpenAI({
@@ -124,13 +127,7 @@ export async function generateAIResponse(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const providerOptions: Record<string, any> = {};
 
-      // Google Gemini 2.5 "thinking" models: disable thinking budget to avoid
-      // long waits, unless user explicitly wants it in future
-      if (config.provider === "google" && config.model.includes("2.5")) {
-        providerOptions.google = {
-          thinkingConfig: { thinkingBudget: 0 },
-        };
-      }
+      // No special provider options needed - let models use their defaults
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await generateText({

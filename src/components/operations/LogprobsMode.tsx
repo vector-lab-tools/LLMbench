@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Send, Loader2, AlertCircle, BarChart3, Download } from "lucide-react";
+import { Loader2, AlertCircle, BarChart3, Download } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
-import { ModelSelector, type PanelSelection } from "@/components/shared/ModelSelector";
+import { AnalysisPromptArea } from "@/components/shared/AnalysisPromptArea";
+import type { PanelSelection } from "@/components/shared/ModelSelector";
 import { MetricBox } from "@/components/shared/ResultCard";
 import { DeepDive } from "@/components/shared/DeepDive";
 import { TokenHeatmap } from "@/components/viz/TokenHeatmap";
@@ -226,45 +227,24 @@ export default function LogprobsMode({ isDark }: LogprobsModeProps) {
       </div>
 
       {/* Prompt area */}
-      <div className="px-6 py-3 border-t border-border bg-card">
-        <div className="mb-2 max-w-4xl mx-auto">
-          <ModelSelector value={panelSelection} onChange={setPanelSelection} disabled={isLoading} />
-        </div>
-        <div className="flex gap-3 max-w-4xl mx-auto items-end">
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Enter a prompt to analyse token probabilities..."
-            className="input-editorial flex-1 resize-none min-h-[60px] max-h-[200px]"
-            rows={2}
-            disabled={isLoading}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleRun();
-              }
-            }}
-          />
-          <button
-            onClick={handleRun}
-            disabled={!prompt.trim() || isLoading || !slotAConfigured}
-            className="btn-editorial-primary px-4 py-2 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          </button>
-        </div>
-        {!aSupported && slotAConfigured && (
-          <div className="mt-2 max-w-4xl mx-auto text-caption text-amber-600">
-            Panel A ({slots.A.provider}) does not support logprobs. Use Google Gemini or OpenAI.
-          </div>
-        )}
-        {error && (
-          <div className="mt-2 max-w-4xl mx-auto text-caption text-red-500 flex items-center gap-1.5">
-            <AlertCircle className="w-3.5 h-3.5" />
-            {error}
-          </div>
-        )}
-      </div>
+      <AnalysisPromptArea
+        prompt={prompt}
+        onPromptChange={setPrompt}
+        onSubmit={handleRun}
+        isLoading={isLoading}
+        disabled={!slotAConfigured}
+        error={error}
+        placeholder="Enter a prompt to analyse token probabilities..."
+        panelSelection={panelSelection}
+        onPanelSelectionChange={setPanelSelection}
+        footer={
+          !aSupported && slotAConfigured ? (
+            <span className="text-caption text-amber-600">
+              Panel A ({slots.A.provider}) does not support logprobs. Use Google Gemini or OpenAI.
+            </span>
+          ) : undefined
+        }
+      />
     </>
   );
 }

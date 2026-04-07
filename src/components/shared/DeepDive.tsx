@@ -19,15 +19,18 @@ export function DeepDive({ label = "Deep Dive", summary, children, defaultOpen =
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          "w-full flex items-center gap-2 px-5 py-3 text-left",
-          "text-body-sm font-medium text-muted-foreground",
-          "hover:bg-cream/50 transition-colors"
+          "w-full flex items-center gap-2 px-5 py-2.5 text-left",
+          "text-body-sm font-semibold",
+          "transition-colors",
+          open
+            ? "bg-burgundy/5 text-burgundy border-b border-parchment/50"
+            : "bg-cream/40 text-muted-foreground hover:bg-cream/70 hover:text-foreground"
         )}
       >
-        {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         <span>{label}</span>
         {summary && (
-          <span className="ml-auto text-caption text-muted-foreground/70">{summary}</span>
+          <span className="ml-auto text-caption font-normal text-muted-foreground/70">{summary}</span>
         )}
       </button>
       {open && (
