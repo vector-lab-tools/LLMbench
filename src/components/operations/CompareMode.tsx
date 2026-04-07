@@ -878,8 +878,8 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
 
       {/* Export modal */}
       {showExportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-popover rounded-sm shadow-lg p-6 w-full max-w-md border border-parchment">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowExportModal(false)}>
+          <div className="bg-popover rounded-sm shadow-lg p-6 w-full max-w-md border border-parchment" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-display-md font-bold text-foreground">
                 Export Comparison

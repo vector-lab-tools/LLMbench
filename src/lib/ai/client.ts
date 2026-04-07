@@ -114,7 +114,24 @@ export async function generateAIResponse(
     const client = createAIClient(config);
     const startTime = Date.now();
 
+    // Timeout: 120s for most providers, 180s for Google (thinking models can be slow)
+    const timeoutMs = config.provider === "google" ? 180000 : 120000;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
     try {
+      // Build provider-specific options
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const providerOptions: Record<string, any> = {};
+
+      // Google Gemini 2.5 "thinking" models: disable thinking budget to avoid
+      // long waits, unless user explicitly wants it in future
+      if (config.provider === "google" && config.model.includes("2.5")) {
+        providerOptions.google = {
+          thinkingConfig: { thinkingBudget: 0 },
+        };
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await generateText({
         model: client(config.model) as any,
@@ -122,6 +139,8 @@ export async function generateAIResponse(
         messages: [{ role: "user", content: options.prompt }],
         maxOutputTokens: options.maxTokens || 4096,
         temperature: options.temperature ?? 1.0,
+        abortSignal: controller.signal,
+        ...(Object.keys(providerOptions).length > 0 ? { providerOptions } : {}),
       });
 
       const responseTimeMs = Date.now() - startTime;
@@ -136,6 +155,13 @@ export async function generateAIResponse(
     } catch (error) {
       if (error instanceof Error) {
         const message = error.message.toLowerCase();
+
+        // Abort / timeout
+        if (message.includes("abort") || error.name === "AbortError") {
+          throw new Error(
+            `Request to ${PROVIDER_CONFIGS[config.provider].name} timed out after ${timeoutMs / 1000}s. The model may be overloaded or the response too long.`
+          );
+        }
 
         if (message.includes("rate limit") || message.includes("rate_limit") || message.includes("429") || message.includes("too many requests")) {
           throw new Error(
@@ -175,6 +201,8 @@ export async function generateAIResponse(
       }
 
       throw error;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
