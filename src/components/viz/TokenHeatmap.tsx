@@ -285,24 +285,6 @@ export function TokenHeatmap({
           ))}
         </div>
 
-        {/* Legend — continuous gradient confidence key */}
-        <div className="flex items-center gap-3 text-caption text-muted-foreground mt-4">
-          <span>Confidence:</span>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px]">high</span>
-            <div
-              className="w-28 h-3 rounded-sm border border-parchment/20"
-              style={{
-                background: isDark
-                  ? "linear-gradient(to right, hsla(52,95%,20%,0.2), hsla(30,95%,22%,0.55), hsla(5,95%,20%,0.8))"
-                  : "linear-gradient(to right, hsla(52,90%,88%,0.3), hsla(30,92%,65%,0.75), hsla(5,95%,42%,1))",
-              }}
-            />
-            <span className="text-[10px]">low</span>
-          </div>
-          <span className="text-muted-foreground/40">·</span>
-          <span className="text-muted-foreground/50 text-[10px]">no colour = ≥70% probability</span>
-        </div>
       </div>
 
       {/* Right: detail panel(s) */}

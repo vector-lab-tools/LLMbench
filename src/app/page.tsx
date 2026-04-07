@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { SplitSquareHorizontal, Settings, HelpCircle, Info, X } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { TabNav, type TabId } from "@/components/layout/TabNav";
@@ -13,6 +13,7 @@ import LogprobsMode from "@/components/operations/LogprobsMode";
 import DivergenceMode from "@/components/operations/DivergenceMode";
 import { APP_VERSION } from "@/lib/version";
 import { Clippy } from "@/components/easter-eggs/Clippy";
+import { KillerRabbit } from "@/components/viz/KillerRabbit";
 
 const MODE_LABELS: Record<TabId, string> = {
   compare: "Dual Panel",
@@ -29,6 +30,49 @@ export default function Home() {
   const [showHelp, setShowHelp] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const { setShowSettings, noMarkdown, setNoMarkdown } = useProviderSettings();
+
+  // Easter egg state
+  const [showRabbit, setShowRabbit] = useState(false);
+  const [grenadeReady, setGrenadeReady] = useState(false);
+  const [grenadeThrown, setGrenadeThrown] = useState(false);
+  const throwRabbitRef = useRef<(() => void) | null>(null);
+
+  // Keyboard detection for Easter eggs (same pattern as Clippy)
+  useEffect(() => {
+    let buffer = "";
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      buffer += e.key.toLowerCase();
+      if (buffer.length > 15) buffer = buffer.slice(-15);
+
+      if (buffer.endsWith("rabbit")) {
+        buffer = "";
+        setShowRabbit(true);
+        setGrenadeReady(false);
+        setGrenadeThrown(false);
+        throwRabbitRef.current = null;
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  const handleGrenadeReady = useCallback((fn: () => void) => {
+    throwRabbitRef.current = fn;
+    setGrenadeReady(true);
+  }, []);
+
+  const handleThrowGrenade = useCallback(() => {
+    setGrenadeThrown(true);
+    throwRabbitRef.current?.();
+    setTimeout(() => { setGrenadeReady(false); setShowRabbit(false); }, 2200);
+  }, []);
+
+  const handleDismissRabbit = useCallback(() => {
+    setShowRabbit(false);
+    setGrenadeReady(false);
+    setGrenadeThrown(false);
+  }, []);
 
   const toggleDark = () => {
     const next = !isDark;
@@ -120,6 +164,25 @@ export default function Home() {
 
       {/* Easter eggs */}
       <Clippy />
+      {showRabbit && (
+        <KillerRabbit
+          onDismiss={handleDismissRabbit}
+          onGrenadeReady={handleGrenadeReady}
+          grenadeThrown={grenadeThrown}
+        />
+      )}
+      {/* Holy Hand Grenade — fixed position next to LLMbench logo area */}
+      {showRabbit && grenadeReady && (
+        <button
+          onClick={handleThrowGrenade}
+          className="fixed top-2 left-48 z-[9999] px-2 py-1 text-caption flex items-center gap-1.5 rounded-sm transition-all animate-pulse"
+          style={{ background: "#2e1e10", color: "#c8b898", border: "1px solid #5a3a20" }}
+          title="Throw the Holy Hand Grenade of Antioch!"
+        >
+          <span>💣</span>
+          <span style={{ fontFamily: "Georgia, serif", fontSize: 11 }}>Holy Hand Grenade</span>
+        </button>
+      )}
 
       {/* Help modal */}
       {showHelp && (
@@ -175,7 +238,7 @@ export default function Home() {
                     <strong className="text-foreground">Prompt Sensitivity</strong> &mdash; Auto-generates micro-variations of your prompt (adding &ldquo;please&rdquo;, rephrasing as a question, etc.) to show how wording affects output.
                   </p>
                   <p>
-                    <strong className="text-foreground">Token Probabilities</strong> &mdash; Visualises how confident the model was at each token position. Includes: a colour-coded heatmap (grey = certain, red = uncertain); an entropy distribution histogram (click any band to see which tokens landed there); a sentence entropy view showing which sentences carry the most uncertainty; and a persistent right-side panel showing the full probability distribution for any clicked token. Requires Google Gemini or OpenAI.
+                    <strong className="text-foreground">Token Probabilities</strong> &mdash; Visualises how confident the model was at each token position. A continuous heatmap shades tokens from pale yellow (moderate uncertainty) to deep red (very low probability); tokens above 70% are uncoloured. A navigation strip provides step buttons and three analytical chips: <em>Uncertain</em> (highest entropy positions), <em>Forks</em> (chosen token &lt;70%), and <em>≠&nbsp;Diverge</em> (where A and B chose different tokens). Click any token to pin its probability distribution; ⌘/Ctrl+click for a second. Requires Google Gemini or OpenAI.
                   </p>
                   <p>
                     <strong className="text-foreground">Cross-Model Divergence</strong> &mdash; Quantitative comparison with Jaccard similarity, vocabulary overlap, sentence-level structural analysis, and top word frequency comparison across both outputs.
@@ -197,8 +260,9 @@ export default function Home() {
                 <h3 className="font-semibold mb-1">Tips</h3>
                 <ul className="text-muted-foreground space-y-1 list-disc pl-4">
                   <li>Hover any <strong>?</strong> badge on a metric for an explanation of what it measures.</li>
-                  <li>In Token Probabilities, click a token in the heatmap to pin its probability distribution in the right panel.</li>
+                  <li>In Token Probabilities, click a token to pin its distribution. Use the <em>Forks</em> and <em>Uncertain</em> chips to jump to the most analytically interesting positions.</li>
                   <li>In the entropy histogram, click any confidence band to see exactly which tokens fell there.</li>
+                  <li>Type <strong>rabbit</strong> on the keyboard for a surprise.</li>
                   <li>Comparisons save automatically to browser storage; reload them via the History button.</li>
                 </ul>
               </div>
