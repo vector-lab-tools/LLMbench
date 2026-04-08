@@ -34,8 +34,8 @@ function randPos() {
 function KillerRabbitSVG({ dead }: { dead: boolean }) {
   return (
     <svg
-      width="200"
-      height="220"
+      width="140"
+      height="154"
       viewBox="0 0 200 220"
       xmlns="http://www.w3.org/2000/svg"
       style={{
@@ -130,28 +130,26 @@ export function KillerRabbit({ onDismiss, onGrenadeReady, grenadeThrown }: Kille
   const [warnStep, setWarnStep] = useState(0);
   const deadRef = useRef(false);
 
-  // Scurry on mount
+  // Scurry on mount + immediately signal grenade ready
   useEffect(() => {
     setRabbitPos(randPos());
     const id = setInterval(() => {
       if (!deadRef.current) setRabbitPos(randPos());
     }, 1500);
+    const throwFn = () => {
+      if (deadRef.current) return;
+      deadRef.current = true;
+      setDead(true);
+      setTimeout(() => setFading(true), 1600);
+      setTimeout(onDismiss, 2100);
+    };
+    onGrenadeReady(throwFn);
     return () => clearInterval(id);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cycle warning quotes
   useEffect(() => {
-    if (warnStep >= WARNINGS.length - 1) {
-      const throwFn = () => {
-        if (deadRef.current) return;
-        deadRef.current = true;
-        setDead(true);
-        setTimeout(() => setFading(true), 1600);
-        setTimeout(onDismiss, 2100);
-      };
-      onGrenadeReady(throwFn);
-      return;
-    }
+    if (warnStep >= WARNINGS.length - 1) return;
     const t = setTimeout(() => setWarnStep(s => s + 1), WARN_DELAY);
     return () => clearTimeout(t);
   }, [warnStep, onDismiss, onGrenadeReady]);
@@ -200,11 +198,11 @@ export function KillerRabbit({ onDismiss, onGrenadeReady, grenadeThrown }: Kille
         </div>
       )}
 
-      {/* Tim the Enchanter warning — bottom-left */}
+      {/* Tim the Enchanter warning — bottom-right (clippy position) */}
       <div style={{
         position: "fixed",
         bottom: 24,
-        left: 24,
+        right: 24,
         zIndex: 9999,
         width: 240,
         opacity: fading ? 0 : 1,
@@ -240,7 +238,7 @@ export function KillerRabbit({ onDismiss, onGrenadeReady, grenadeThrown }: Kille
         {/* Tim */}
         <div style={{ display: "flex", alignItems: "flex-end", gap: 8, paddingLeft: 8 }}>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-            <span style={{ fontSize: "2.2rem", filter: "grayscale(50%) sepia(30%) brightness(0.8)" }} title="Tim the Enchanter">⚡</span>
+            <span style={{ fontSize: "2.2rem", filter: "grayscale(50%) sepia(30%) brightness(0.8)" }} title="Tim the Enchanter">🧙</span>
             <span style={{ fontSize: 8, fontFamily: "monospace", color: "#7a6a58" }}>Tim the Enchanter</span>
           </div>
         </div>

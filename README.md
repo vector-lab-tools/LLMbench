@@ -4,7 +4,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.2.0
+**Version:** 2.3.0
 **Date:** 8 April 2026
 **Licence:** MIT
 
@@ -48,7 +48,7 @@ LLMbench emerges from the convergence of three research programmes.
 
 - **Reset.** All modes include a Reset button that clears results and returns the mode to its initial state without losing the current prompt.
 
-- **Export.** Comparisons export as structured JSON, formatted plain text, or side-by-side landscape PDF with coloured annotation badges. Token probability views additionally export as PDF, PNG, or JSON.
+- **Export.** Comparisons export as structured JSON, formatted plain text, or side-by-side landscape PDF with coloured annotation badges. Token probability views export via a modal (PDF snapshot with continuous gradient heatmap and deep dive metrics, PNG image, or JSON with per-token probabilities, entropy stats, divergence positions, and text analysis metrics).
 
 ### Analyse Modes
 

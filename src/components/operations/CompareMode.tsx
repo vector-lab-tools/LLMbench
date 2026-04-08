@@ -615,13 +615,21 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
 
   // ---- probs export helpers ----
 
+  // Continuous probability → canvas colour, matching the heatmap HSL gradient.
+  // Returns [backgroundColor, foregroundColor].
   function probsColorLight(logprob: number): [string, string] {
-    const u = Math.min(1, Math.abs(logprob) / 5);
-    if (u < 0.1) return ["#f1f5f9", "#334155"];
-    if (u < 0.3) return ["#dbeafe", "#334155"];
-    if (u < 0.5) return ["#fef9c3", "#92400e"];
-    if (u < 0.7) return ["#fed7aa", "#9a3412"];
-    return ["#fecaca", "#991b1b"];
+    const prob = Math.exp(logprob);
+    const THRESHOLD = 0.70;
+    if (prob >= THRESHOLD) return ["#f8fafc", "#334155"]; // near-white, slate text
+    const t = Math.pow(1 - prob / THRESHOLD, 0.75);
+    const hue = Math.round(52 - 47 * t);
+    const sat = Math.round(88 + 7 * t);
+    const lit = Math.round(92 - 50 * t);
+    const alpha = (0.18 + 0.82 * t).toFixed(2);
+    const bg = `hsla(${hue},${sat}%,${lit}%,${alpha})`;
+    // Text: dark slate for pale backgrounds, near-black for saturated ones
+    const fg = t > 0.6 ? "#1a0a0a" : "#334155";
+    return [bg, fg];
   }
 
   const exportProbsJSON = useCallback(() => {
@@ -649,9 +657,64 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     };
     if (logprobTokensA) payload.panelA = makePanel(logprobTokensA, getSlotLabel("A"));
     if (logprobTokensB) payload.panelB = makePanel(logprobTokensB, getSlotLabel("B"));
+
+    // Deep dive metrics
+    const textA = resultA && isPanelOutput(resultA) ? resultA.text : null;
+    const textB = resultB && isPanelOutput(resultB) ? resultB.text : null;
+    if (textA && textB) {
+      const metricsA = computeTextMetrics(textA);
+      const metricsB = computeTextMetrics(textB);
+      const overlap = computeWordOverlap(textA, textB);
+      payload.deepDive = {
+        panelA: { words: metricsA.wordCount, sentences: metricsA.sentenceCount, avgSentenceLength: metricsA.avgSentenceLength, vocabularyDiversity: metricsA.vocabularyDiversity },
+        panelB: { words: metricsB.wordCount, sentences: metricsB.sentenceCount, avgSentenceLength: metricsB.avgSentenceLength, vocabularyDiversity: metricsB.vocabularyDiversity },
+        jaccardSimilarity: overlap.jaccardSimilarity,
+        wordOverlap: overlap.overlapPercentage,
+        sharedWords: overlap.shared,
+        uniqueToA: overlap.uniqueA,
+        uniqueToB: overlap.uniqueB,
+      };
+    } else if (textA) {
+      payload.deepDive = { panelA: computeTextMetrics(textA) };
+    } else if (textB) {
+      payload.deepDive = { panelB: computeTextMetrics(textB) };
+    }
+
+    // Per-panel entropy summary
+    const entropyStats = (tokens: TokenLogprob[]) => {
+      const entropies = tokens.map(t => computeTokenEntropy(t));
+      const mean = entropies.reduce((a, b) => a + b, 0) / entropies.length;
+      const forks = tokens.filter(t => Math.exp(t.logprob) < 0.70).length;
+      const sorted = [...entropies].sort((a, b) => b - a);
+      return {
+        meanEntropy: parseFloat(mean.toFixed(4)),
+        maxEntropy: parseFloat(sorted[0]?.toFixed(4) ?? "0"),
+        forkCount: forks,
+        totalTokens: tokens.length,
+        top5UncertainPositions: sorted.slice(0, 5).map((e, i) => {
+          const idx = entropies.indexOf(e);
+          return { position: idx + 1, token: tokens[idx].token, entropy: parseFloat(e.toFixed(4)) };
+        }),
+      };
+    };
+    if (logprobTokensA) (payload.panelA as Record<string, unknown>).entropyStats = entropyStats(logprobTokensA);
+    if (logprobTokensB) (payload.panelB as Record<string, unknown>).entropyStats = entropyStats(logprobTokensB);
+
+    // Divergence positions (when both panels)
+    if (logprobTokensA && logprobTokensB) {
+      const minLen = Math.min(logprobTokensA.length, logprobTokensB.length);
+      const divergePositions: { position: number; tokenA: string; tokenB: string }[] = [];
+      for (let i = 0; i < minLen; i++) {
+        if (logprobTokensA[i].token !== logprobTokensB[i].token) {
+          divergePositions.push({ position: i + 1, tokenA: logprobTokensA[i].token, tokenB: logprobTokensB[i].token });
+        }
+      }
+      payload.divergePositions = divergePositions;
+    }
+
     const name = comparisonName.replace(/[^a-z0-9]/gi, "-").toLowerCase();
     downloadFile(JSON.stringify(payload, null, 2), `${name}-probs.json`, "application/json");
-  }, [logprobTokensA, logprobTokensB, lastSentPrompt, getSlotLabel, comparisonName]);
+  }, [logprobTokensA, logprobTokensB, lastSentPrompt, getSlotLabel, comparisonName, resultA, resultB]);
 
   const exportProbsPDF = useCallback(async () => {
     // Build canvas (shared logic with image export)
@@ -682,7 +745,12 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     const linesA = logprobTokensA ? layoutPanel(logprobTokensA, panelW) : [];
     const linesB = logprobTokensB ? layoutPanel(logprobTokensB, panelW) : [];
     const HEADER_H = 60;
-    const totalH = PAD + HEADER_H + Math.max(linesA.length, linesB.length) * LINE_H + PAD + 32;
+    // Compute deep dive height: legend row + entropy stats + diverge positions
+    const textA = resultA && isPanelOutput(resultA) ? resultA.text : null;
+    const textB = resultB && isPanelOutput(resultB) ? resultB.text : null;
+    const hasDive = !!(textA || textB);
+    const DIVE_H = hasDive ? 220 : 0;
+    const totalH = PAD + HEADER_H + Math.max(linesA.length, linesB.length) * LINE_H + PAD + 32 + DIVE_H;
     canvas.height = Math.max(totalH, 200);
 
     ctx.fillStyle = "#fff";
@@ -720,19 +788,81 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     if (logprobTokensA) drawPanel(logprobTokensA, linesA, PAD, getSlotLabel("A"));
     if (logprobTokensB) drawPanel(logprobTokensB, linesB, PAD + panelW + PAD, getSlotLabel("B"));
 
-    // Legend
+    // Legend — gradient bar matching the heatmap
     const ly = canvas.height - PAD + 6;
     ctx.font = META_FONT;
     ctx.fillStyle = "#64748b";
     ctx.fillText("Confidence:", PAD, ly);
-    const legendItems: [string, string][] = [["#f1f5f9", "High"], ["#fef9c3", "Medium"], ["#fecaca", "Low"]];
-    let lx = PAD + 90;
-    for (const [color, lbl] of legendItems) {
-      ctx.fillStyle = color;
-      ctx.fillRect(lx, ly - 7, 14, 14);
-      ctx.fillStyle = "#64748b";
-      ctx.fillText(lbl, lx + 18, ly);
-      lx += 64;
+    const gradW = 200;
+    const gradH = 14;
+    const gx = PAD + 90;
+    for (let px = 0; px < gradW; px++) {
+      const t = px / gradW;
+      const hue = Math.round(52 - 47 * t);
+      const sat = Math.round(88 + 7 * t);
+      const lit = Math.round(92 - 50 * t);
+      const alpha = (0.18 + 0.82 * t).toFixed(2);
+      ctx.fillStyle = `hsla(${hue},${sat}%,${lit}%,${alpha})`;
+      ctx.fillRect(gx + px, ly - 7, 1, gradH);
+    }
+    ctx.fillStyle = "#64748b";
+    ctx.fillText("high", gx - 30, ly);
+    ctx.fillText("low", gx + gradW + 6, ly);
+    ctx.fillText("no colour = ≥70%", gx + gradW + 40, ly);
+
+    // Deep dive section
+    if (hasDive) {
+      let dy = ly + 28;
+      ctx.font = HEADER_FONT;
+      ctx.fillStyle = "#1e293b";
+      ctx.fillText("Deep Dive", PAD, dy);
+      dy += 22;
+      ctx.font = META_FONT;
+      ctx.fillStyle = "#334155";
+
+      const renderStats = (tokens: TokenLogprob[], label: string, ox: number) => {
+        const entropies = tokens.map(t => computeTokenEntropy(t));
+        const mean = entropies.reduce((a, b) => a + b, 0) / entropies.length;
+        const forks = tokens.filter(t => Math.exp(t.logprob) < 0.70).length;
+        const maxE = Math.max(...entropies);
+        const maxIdx = entropies.indexOf(maxE);
+        ctx.fillStyle = "#64748b";
+        ctx.fillText(`${label}:`, ox, dy);
+        ctx.fillStyle = "#334155";
+        ctx.fillText(`${tokens.length} tokens · Mean entropy: ${mean.toFixed(2)} bits · Forks (<70%): ${forks} · Max entropy: ${maxE.toFixed(2)} at "${tokens[maxIdx]?.token}"`, ox + 60, dy);
+      };
+
+      if (logprobTokensA) { renderStats(logprobTokensA, getSlotLabel("A"), PAD); dy += 20; }
+      if (logprobTokensB) { renderStats(logprobTokensB, getSlotLabel("B"), PAD); dy += 20; }
+
+      if (textA && textB) {
+        const overlap = computeWordOverlap(textA, textB);
+        const mA = computeTextMetrics(textA);
+        const mB = computeTextMetrics(textB);
+        dy += 6;
+        ctx.fillStyle = "#64748b";
+        ctx.fillText(`Jaccard: ${(overlap.jaccardSimilarity * 100).toFixed(1)}% · Word overlap: ${overlap.overlapPercentage.toFixed(1)}% · Shared: ${overlap.shared.length} · Unique A: ${overlap.uniqueA.length} · Unique B: ${overlap.uniqueB.length}`, PAD, dy);
+        dy += 18;
+        ctx.fillText(`Panel A: ${mA.wordCount} words, ${mA.sentenceCount} sentences, ${mA.avgSentenceLength.toFixed(0)} avg/sent, ${(mA.vocabularyDiversity * 100).toFixed(0)}% vocab diversity`, PAD, dy);
+        dy += 18;
+        ctx.fillText(`Panel B: ${mB.wordCount} words, ${mB.sentenceCount} sentences, ${mB.avgSentenceLength.toFixed(0)} avg/sent, ${(mB.vocabularyDiversity * 100).toFixed(0)}% vocab diversity`, PAD, dy);
+      }
+
+      // Divergence positions (top 10)
+      if (logprobTokensA && logprobTokensB) {
+        dy += 24;
+        const minLen = Math.min(logprobTokensA.length, logprobTokensB.length);
+        const diverge: string[] = [];
+        for (let i = 0; i < minLen && diverge.length < 10; i++) {
+          if (logprobTokensA[i].token !== logprobTokensB[i].token) {
+            diverge.push(`${i + 1}: "${logprobTokensA[i].token}" vs "${logprobTokensB[i].token}"`);
+          }
+        }
+        if (diverge.length > 0) {
+          ctx.fillStyle = "#64748b";
+          ctx.fillText(`Token divergences (first ${diverge.length}): ${diverge.join("  ·  ")}`, PAD, dy);
+        }
+      }
     }
 
     // Embed canvas into PDF via jsPDF
@@ -808,21 +938,28 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     if (logprobTokensA) drawPanel(logprobTokensA, linesA, PAD, getSlotLabel("A"));
     if (logprobTokensB) drawPanel(logprobTokensB, linesB, PAD + panelW + PAD, getSlotLabel("B"));
 
-    // Legend
+    // Legend — gradient bar
     const ly = canvas.height - PAD + 4;
     ctx.font = "11px system-ui, sans-serif";
     ctx.fillStyle = "#64748b";
     ctx.textBaseline = "middle";
+    const gradW = 160;
+    const gradH = 12;
+    const gx = PAD + 80;
     ctx.fillText("Confidence:", PAD, ly);
-    const legendItems: [string, string][] = [["#f1f5f9", "High"], ["#fef9c3", "Medium"], ["#fecaca", "Low"]];
-    let lx = PAD + 80;
-    for (const [color, label] of legendItems) {
-      ctx.fillStyle = color;
-      ctx.fillRect(lx, ly - 6, 14, 12);
-      ctx.fillStyle = "#64748b";
-      ctx.fillText(label, lx + 18, ly);
-      lx += 60;
+    for (let px = 0; px < gradW; px++) {
+      const t = px / gradW;
+      const hue = Math.round(52 - 47 * t);
+      const sat = Math.round(88 + 7 * t);
+      const lit = Math.round(92 - 50 * t);
+      const alpha = (0.18 + 0.82 * t).toFixed(2);
+      ctx.fillStyle = `hsla(${hue},${sat}%,${lit}%,${alpha})`;
+      ctx.fillRect(gx + px, ly - 6, 1, gradH);
     }
+    ctx.fillStyle = "#64748b";
+    ctx.fillText("high", gx - 28, ly);
+    ctx.fillText("low", gx + gradW + 4, ly);
+    ctx.fillText("≥70% = no colour", gx + gradW + 32, ly);
 
     const url = canvas.toDataURL("image/png");
     const a = document.createElement("a");
@@ -1197,31 +1334,22 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
           );
         })()}
 
-        {/* Probs export chips — visible inline when probs data exists */}
+        {/* Probs export — single button opening modal */}
         {(logprobTokensA || logprobTokensB) && viewMode === "probs" && (
           <>
             <div className="w-px h-4 bg-parchment/60" />
-            <button onClick={exportProbsPDF}
+            <button
+              onClick={() => setShowProbsExport(true)}
               className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5"
-              title="Export token heatmap as PDF">
-              <FileType className="w-3.5 h-3.5" /><span>PDF</span>
-            </button>
-            <button onClick={exportProbsImage}
-              className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5"
-              title="Export token heatmap as PNG image">
-              <FileCode className="w-3.5 h-3.5" /><span>PNG</span>
-            </button>
-            <button onClick={exportProbsJSON}
-              className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5"
-              title="Export full token probability data as JSON">
-              <FileJson className="w-3.5 h-3.5" /><span>JSON</span>
+              title="Export token probability data"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export</span>
             </button>
           </>
         )}
 
-        <div className="flex-1" />
-
-        {/* History dropdown */}
+        {/* History — inline in toolbar */}
         <div className="relative" ref={historyRef}>
           <button
             onClick={() => setShowHistory(!showHistory)}
@@ -1275,6 +1403,8 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
             </div>
           )}
         </div>
+
+        <div className="flex-1" />
       </div>
 
       {/* Scrollable body: panels + deep dive extend downward */}
@@ -1667,6 +1797,61 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
                   Open Settings
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Probs export modal */}
+      {showProbsExport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowProbsExport(false)}>
+          <div className="bg-popover rounded-sm shadow-lg p-5 w-full max-w-sm border border-parchment mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-display-md font-bold text-foreground flex items-center gap-2">
+                <Download className="w-4 h-4 text-burgundy" />
+                Export Probabilities
+              </h2>
+              <button onClick={() => setShowProbsExport(false)} className="p-1 text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              <button
+                onClick={() => { exportProbsPDF(); setShowProbsExport(false); }}
+                className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <FileType className="w-5 h-5 text-burgundy shrink-0" />
+                  <div>
+                    <div className="text-body-sm font-medium text-foreground">PDF snapshot</div>
+                    <div className="text-caption text-muted-foreground">Heatmap with confidence gradient, prompt, and panel labels</div>
+                  </div>
+                </div>
+              </button>
+              <button
+                onClick={() => { exportProbsImage(); setShowProbsExport(false); }}
+                className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <FileCode className="w-5 h-5 text-burgundy shrink-0" />
+                  <div>
+                    <div className="text-body-sm font-medium text-foreground">PNG image</div>
+                    <div className="text-caption text-muted-foreground">High-resolution heatmap image for papers and presentations</div>
+                  </div>
+                </div>
+              </button>
+              <button
+                onClick={() => { exportProbsJSON(); setShowProbsExport(false); }}
+                className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <FileJson className="w-5 h-5 text-burgundy shrink-0" />
+                  <div>
+                    <div className="text-body-sm font-medium text-foreground">JSON data</div>
+                    <div className="text-caption text-muted-foreground">Per-token probabilities, entropy stats, deep dive metrics, and divergence positions</div>
+                  </div>
+                </div>
+              </button>
             </div>
           </div>
         </div>
