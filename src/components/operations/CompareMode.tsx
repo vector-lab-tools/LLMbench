@@ -1546,15 +1546,15 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
             🟨 Pixels
           </button>
 
-          {/* Toggle: 3D Skyline */}
+          {/* Toggle: 3D Uncertainty Net */}
           <button
             onClick={() => setShowSkyline((v) => !v)}
             className={`px-2 py-0.5 rounded-sm text-[10px] font-medium transition-colors ${
               showSkyline ? "bg-burgundy/90 text-white" : "btn-editorial-ghost"
             }`}
-            title="Toggle 3D probability skyline — rotatable top-k distribution around cursor"
+            title="Toggle 3D uncertainty net — rotatable mesh surface where peaks are uncertain words"
           >
-            🏙️ Skyline
+            🕸️ Net
           </button>
         </div>
       )}

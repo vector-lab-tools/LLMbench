@@ -2,169 +2,294 @@
 
 import { useMemo, useState } from "react";
 import { Canvas, type ThreeEvent } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
+import { OrbitControls, Text } from "@react-three/drei";
 import * as THREE from "three";
+import { computeTokenEntropy } from "@/lib/metrics/text-metrics";
 import type { TokenLogprob } from "@/types/analysis";
 
 // ---------- Config ----------
 
-const WINDOW_HALF = 15; // tokens each side of cursor
-const TOP_K = 5; // alternatives to render per position
+// Net geometry is a grid of cols × rows cells laid flat on the XZ plane.
+// Each vertex corresponds to one token position. Its Y height is driven by
+// the entropy of that token, so peaks = uncertain tokens, valleys = committed.
+const CELL_SIZE = 0.5; // world units between grid vertices
+const HEIGHT_SCALE = 2.6; // max entropy maps to this world height
+const TARGET_ASPECT = 1.6; // width / depth ratio for the grid
+const WIREFRAME_OFFSET = 0.015;
+const PEAK_COUNT = 5; // how many peak labels to render
 
-// Spacing in world units
-const X_SPACING = 0.55; // along position axis
-const Z_SPACING = 0.6; // along rank axis
-const HEIGHT_SCALE = 3.0; // probability (0..1) × this = world height
-const BAR_WIDTH = 0.36; // x dimension of each bar
-const BAR_DEPTH = 0.42; // z dimension of each bar
+function chooseCols(n: number): number {
+  if (n <= 4) return Math.max(1, n);
+  return Math.max(2, Math.ceil(Math.sqrt(n * TARGET_ASPECT)));
+}
 
 // ---------- Data ----------
 
-interface Bar {
-  tokenIndex: number; // original index in full sequence
-  position: number; // x offset relative to cursor
-  rank: number; // 0..TOP_K-1
-  prob: number;
-  token: string;
-  isChosen: boolean;
-  color: THREE.Color;
+interface NetData {
+  cols: number;
+  rows: number;
+  entropies: number[];
+  maxEntropy: number;
+  meanEntropy: number;
+  peaks: { index: number; entropy: number; token: string }[];
 }
 
-function probToColor(prob: number): THREE.Color {
-  // t = 0 confident, t = 1 uncertain
-  const t = Math.pow(1 - Math.max(0, Math.min(1, prob)), 0.75);
-  // Hue: yellow (52°) → red (0°)
+function buildNetData(tokens: TokenLogprob[]): NetData {
+  const entropies = tokens.map(computeTokenEntropy);
+  const n = entropies.length;
+  const cols = chooseCols(n);
+  const rows = Math.max(1, Math.ceil(n / cols));
+  const maxEntropy = entropies.reduce((a, b) => Math.max(a, b), 1e-6);
+  const meanEntropy = n > 0 ? entropies.reduce((a, b) => a + b, 0) / n : 0;
+
+  // Top-N peaks by entropy — these are the most uncertain positions
+  const peaks = entropies
+    .map((e, i) => ({ index: i, entropy: e, token: tokens[i].token }))
+    .sort((a, b) => b.entropy - a.entropy)
+    .slice(0, PEAK_COUNT);
+
+  return { cols, rows, entropies, maxEntropy, meanEntropy, peaks };
+}
+
+// Convert an entropy value to a colour on a continuous yellow → red scale.
+// Confident (low entropy) = pale yellow, uncertain (high entropy) = deep red.
+function entropyColor(entropy: number, maxEntropy: number): THREE.Color {
+  const t = Math.min(1, Math.max(0, entropy / maxEntropy));
   const hue = (52 - 52 * t) / 360;
-  const sat = 0.88 + 0.07 * t;
-  const light = 0.62 - 0.22 * t;
-  const c = new THREE.Color();
-  c.setHSL(hue, sat, light);
-  return c;
+  const sat = 0.85 + 0.1 * t;
+  const light = 0.66 - 0.26 * t;
+  return new THREE.Color().setHSL(hue, sat, light);
 }
 
-function buildBars(
-  tokens: TokenLogprob[],
-  cursorIndex: number
-): { bars: Bar[]; windowStart: number; windowEnd: number } {
-  if (tokens.length === 0)
-    return { bars: [], windowStart: 0, windowEnd: 0 };
+// ---------- Net surface ----------
 
-  const clampedCursor = Math.max(0, Math.min(tokens.length - 1, cursorIndex));
-  const windowStart = Math.max(0, clampedCursor - WINDOW_HALF);
-  const windowEnd = Math.min(tokens.length - 1, clampedCursor + WINDOW_HALF);
+interface NetSurfaceProps {
+  data: NetData;
+  tokens: TokenLogprob[];
+  cursorIndex: number;
+  onCursorChange: (i: number) => void;
+  onHover: (
+    info: { index: number; token: string; entropy: number; prob: number } | null
+  ) => void;
+  isDark: boolean;
+}
 
-  const bars: Bar[] = [];
+function NetSurface({
+  data,
+  tokens,
+  cursorIndex,
+  onCursorChange,
+  onHover,
+  isDark,
+}: NetSurfaceProps) {
+  const { cols, rows, entropies, maxEntropy, peaks } = data;
 
-  for (let i = windowStart; i <= windowEnd; i++) {
-    const tok = tokens[i];
-    const chosenProb = Math.exp(tok.logprob);
+  const {
+    geometry,
+    gridWidth,
+    gridDepth,
+    cursorMarker,
+    peakMarkers,
+    entScale,
+  } = useMemo(() => {
+    const gridWidth = Math.max(CELL_SIZE, (cols - 1) * CELL_SIZE);
+    const gridDepth = Math.max(CELL_SIZE, (rows - 1) * CELL_SIZE);
+    const entScale = HEIGHT_SCALE / maxEntropy;
 
-    // Combine chosen + alternatives, sort by probability descending
-    const all = [
-      { token: tok.token, prob: chosenProb, isChosen: true },
-      ...tok.topAlternatives.map((a) => ({
-        token: a.token,
-        prob: Math.exp(a.logprob),
-        isChosen: false,
-      })),
-    ]
-      .sort((a, b) => b.prob - a.prob)
-      .slice(0, TOP_K);
+    const widthSegs = Math.max(1, cols - 1);
+    const depthSegs = Math.max(1, rows - 1);
 
-    all.forEach((alt, rank) => {
-      bars.push({
-        tokenIndex: i,
-        position: i - clampedCursor,
-        rank,
-        prob: alt.prob,
-        token: alt.token,
-        isChosen: alt.isChosen,
-        color: probToColor(alt.prob),
+    // PlaneGeometry vertices are ordered row-by-row on the XY plane. After
+    // rotating around X, the original Y axis becomes -Z, so "row 0" on the
+    // plane ends up at negative Z in world space — which lines up with our
+    // sequential token layout if we flip the row index.
+    const geom = new THREE.PlaneGeometry(
+      gridWidth,
+      gridDepth,
+      widthSegs,
+      depthSegs
+    );
+    geom.rotateX(-Math.PI / 2);
+
+    const posAttr = geom.getAttribute("position") as THREE.BufferAttribute;
+    const colors = new Float32Array(posAttr.count * 3);
+
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const vIdx = row * cols + col;
+        const tokIdx = row * cols + col;
+        const entropy = tokIdx < entropies.length ? entropies[tokIdx] : 0;
+        const y = entropy * entScale;
+        posAttr.setY(vIdx, y);
+
+        const c = entropyColor(entropy, maxEntropy);
+        colors[vIdx * 3] = c.r;
+        colors[vIdx * 3 + 1] = c.g;
+        colors[vIdx * 3 + 2] = c.b;
+      }
+    }
+
+    posAttr.needsUpdate = true;
+    geom.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    geom.computeVertexNormals();
+
+    // World position of a given token index on the flattened grid
+    const posOf = (tokIdx: number): [number, number, number] => {
+      const col = tokIdx % cols;
+      const row = Math.floor(tokIdx / cols);
+      const x = col * CELL_SIZE - gridWidth / 2;
+      const z = row * CELL_SIZE - gridDepth / 2;
+      const y = (entropies[tokIdx] ?? 0) * entScale;
+      return [x, y, z];
+    };
+
+    const cursorMarker =
+      cursorIndex >= 0 && cursorIndex < entropies.length
+        ? posOf(cursorIndex)
+        : null;
+
+    const peakMarkers = peaks.map((p) => ({
+      pos: posOf(p.index),
+      index: p.index,
+      token: p.token,
+      entropy: p.entropy,
+    }));
+
+    return {
+      geometry: geom,
+      gridWidth,
+      gridDepth,
+      cursorMarker,
+      peakMarkers,
+      entScale,
+    };
+  }, [cols, rows, entropies, maxEntropy, peaks, cursorIndex]);
+
+  // Convert a world-space point (from a ray hit) back to a token index
+  const pointToTokenIndex = (point: THREE.Vector3): number | null => {
+    const localX = point.x + gridWidth / 2;
+    const localZ = point.z + gridDepth / 2;
+    const col = Math.round(localX / CELL_SIZE);
+    const row = Math.round(localZ / CELL_SIZE);
+    if (col < 0 || col >= cols || row < 0 || row >= rows) return null;
+    const idx = row * cols + col;
+    if (idx < 0 || idx >= tokens.length) return null;
+    return idx;
+  };
+
+  const handleClick = (e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation();
+    const idx = pointToTokenIndex(e.point);
+    if (idx !== null) onCursorChange(idx);
+  };
+
+  const handleMove = (e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
+    const idx = pointToTokenIndex(e.point);
+    if (idx !== null) {
+      onHover({
+        index: idx,
+        token: tokens[idx].token,
+        entropy: entropies[idx],
+        prob: Math.exp(tokens[idx].logprob),
       });
-    });
-  }
+      document.body.style.cursor = "pointer";
+    } else {
+      onHover(null);
+      document.body.style.cursor = "default";
+    }
+  };
 
-  return { bars, windowStart, windowEnd };
-}
+  const handleOut = () => {
+    onHover(null);
+    document.body.style.cursor = "default";
+  };
 
-// ---------- 3D field ----------
-
-interface BarFieldProps {
-  bars: Bar[];
-  cursorTokenIndex: number;
-  onBarClick: (tokenIndex: number) => void;
-  onBarHover: (bar: Bar | null) => void;
-}
-
-function BarField({
-  bars,
-  cursorTokenIndex,
-  onBarClick,
-  onBarHover,
-}: BarFieldProps) {
   return (
     <group>
-      {bars.map((bar, idx) => {
-        const x = bar.position * X_SPACING;
-        const h = Math.max(0.02, bar.prob * HEIGHT_SCALE);
-        const z = (bar.rank - (TOP_K - 1) / 2) * Z_SPACING;
-        const isCursorToken = bar.tokenIndex === cursorTokenIndex;
-
-        return (
-          <mesh
-            key={`${bar.tokenIndex}-${bar.rank}-${idx}`}
-            position={[x, h / 2, z]}
-            onClick={(e: ThreeEvent<MouseEvent>) => {
-              e.stopPropagation();
-              onBarClick(bar.tokenIndex);
-            }}
-            onPointerOver={(e: ThreeEvent<PointerEvent>) => {
-              e.stopPropagation();
-              onBarHover(bar);
-              document.body.style.cursor = "pointer";
-            }}
-            onPointerOut={() => {
-              onBarHover(null);
-              document.body.style.cursor = "default";
-            }}
-          >
-            <boxGeometry args={[BAR_WIDTH, h, BAR_DEPTH]} />
-            <meshStandardMaterial
-              color={bar.color}
-              emissive={
-                isCursorToken
-                  ? new THREE.Color("#7c3aed")
-                  : bar.isChosen
-                  ? bar.color
-                  : new THREE.Color("#000000")
-              }
-              emissiveIntensity={isCursorToken ? 0.5 : bar.isChosen ? 0.15 : 0}
-              metalness={0.1}
-              roughness={0.55}
-            />
-          </mesh>
-        );
-      })}
-
-      {/* Cursor position marker: a translucent vertical column at x=0 */}
-      <mesh position={[0, HEIGHT_SCALE / 2 + 0.3, 0]}>
-        <boxGeometry
-          args={[BAR_WIDTH * 1.4, HEIGHT_SCALE + 0.6, TOP_K * Z_SPACING + 0.3]}
-        />
-        <meshBasicMaterial
-          color="#a78bfa"
+      {/* Solid shaded surface — translucent so the wireframe reads through */}
+      <mesh
+        geometry={geometry}
+        onClick={handleClick}
+        onPointerMove={handleMove}
+        onPointerOut={handleOut}
+      >
+        <meshStandardMaterial
+          vertexColors
+          side={THREE.DoubleSide}
+          metalness={0.15}
+          roughness={0.55}
           transparent
-          opacity={0.08}
-          depthWrite={false}
+          opacity={0.82}
+          flatShading={false}
         />
       </mesh>
+
+      {/* Wireframe overlay — the "net" */}
+      <mesh
+        geometry={geometry}
+        position={[0, WIREFRAME_OFFSET, 0]}
+        raycast={() => null}
+      >
+        <meshBasicMaterial
+          color={isDark ? "#e2e8f0" : "#1e293b"}
+          wireframe
+          transparent
+          opacity={isDark ? 0.35 : 0.28}
+        />
+      </mesh>
+
+      {/* Peak markers for the most uncertain positions */}
+      {peakMarkers.map((peak, i) => (
+        <group key={`peak-${peak.index}-${i}`} position={peak.pos}>
+          <mesh position={[0, 0.18, 0]}>
+            <sphereGeometry args={[0.09, 12, 12]} />
+            <meshStandardMaterial
+              color="#fca5a5"
+              emissive="#dc2626"
+              emissiveIntensity={0.4}
+            />
+          </mesh>
+          <Text
+            position={[0, 0.42, 0]}
+            fontSize={0.18}
+            color={isDark ? "#fecaca" : "#7f1d1d"}
+            anchorX="center"
+            anchorY="bottom"
+            maxWidth={2}
+            outlineWidth={0.008}
+            outlineColor={isDark ? "#0f172a" : "#ffffff"}
+          >
+            {peak.token.replace(/\n/g, "↵").trim() || "↵"}
+          </Text>
+        </group>
+      ))}
+
+      {/* Cursor marker — bright purple sphere at the current token */}
+      {cursorMarker && (
+        <group position={cursorMarker}>
+          <mesh position={[0, 0.22, 0]}>
+            <sphereGeometry args={[0.14, 16, 16]} />
+            <meshStandardMaterial
+              color="#c4b5fd"
+              emissive="#7c3aed"
+              emissiveIntensity={0.7}
+            />
+          </mesh>
+          {/* Vertical guide line from surface up */}
+          <mesh position={[0, 0.5, 0]}>
+            <cylinderGeometry args={[0.015, 0.015, 1.0, 8]} />
+            <meshBasicMaterial color="#a78bfa" transparent opacity={0.6} />
+          </mesh>
+        </group>
+      )}
     </group>
   );
 }
 
 // ---------- Per-panel canvas ----------
 
-interface SkylineCanvasProps {
+interface NetCanvasProps {
   tokens: TokenLogprob[];
   cursorIndex: number;
   onCursorChange: (i: number) => void;
@@ -172,22 +297,24 @@ interface SkylineCanvasProps {
   isDark: boolean;
 }
 
-function SkylineCanvas({
+function NetCanvas({
   tokens,
   cursorIndex,
   onCursorChange,
   label,
   isDark,
-}: SkylineCanvasProps) {
-  const [hovered, setHovered] = useState<Bar | null>(null);
+}: NetCanvasProps) {
+  const [hovered, setHovered] = useState<{
+    index: number;
+    token: string;
+    entropy: number;
+    prob: number;
+  } | null>(null);
 
-  const { bars, windowStart, windowEnd } = useMemo(
-    () => buildBars(tokens, cursorIndex),
-    [tokens, cursorIndex]
-  );
+  const data = useMemo(() => buildNetData(tokens), [tokens]);
 
-  const gridColor1 = isDark ? "#475569" : "#cbd5e1";
-  const gridColor2 = isDark ? "#334155" : "#e2e8f0";
+  const gridColor1 = isDark ? "#1e293b" : "#e2e8f0";
+  const gridColor2 = isDark ? "#0f172a" : "#f1f5f9";
 
   return (
     <div className="relative flex-1 min-w-0 h-full rounded-sm border border-parchment/40 bg-card/40 overflow-hidden">
@@ -195,7 +322,8 @@ function SkylineCanvas({
       <div className="absolute top-1 left-2 z-10 text-[10px] font-medium text-muted-foreground pointer-events-none">
         Panel {label}{" "}
         <span className="font-normal opacity-70">
-          · window {windowStart}–{windowEnd} of {tokens.length}
+          · {tokens.length} tokens · μ {data.meanEntropy.toFixed(2)}b · max{" "}
+          {data.maxEntropy.toFixed(2)}b
         </span>
       </div>
 
@@ -203,61 +331,58 @@ function SkylineCanvas({
       <div className="absolute bottom-1 left-2 right-2 z-10 text-[10px] font-mono text-muted-foreground truncate pointer-events-none">
         {hovered ? (
           <>
-            pos {hovered.tokenIndex} · rank {hovered.rank + 1} ·{" "}
+            pos {hovered.index} ·{" "}
             <span className="text-foreground">
               &ldquo;{hovered.token.replace(/\n/g, "↵") || "↵"}&rdquo;
             </span>{" "}
-            · {(hovered.prob * 100).toFixed(1)}%
-            {hovered.isChosen && <span className="text-burgundy"> · chosen</span>}
+            · H {hovered.entropy.toFixed(2)}b · p{" "}
+            {(hovered.prob * 100).toFixed(1)}%
           </>
         ) : (
           <span className="opacity-60 italic">
-            drag to rotate · scroll to zoom · click a bar to jump cursor
+            drag to rotate · scroll to zoom · click a cell to jump cursor · peaks = uncertain words
           </span>
         )}
       </div>
 
       <Canvas
-        camera={{ position: [8, 7, 14], fov: 42 }}
+        camera={{ position: [6, 6, 10], fov: 42 }}
         dpr={[1, 2]}
         gl={{ antialias: true, alpha: true }}
         style={{ width: "100%", height: "100%" }}
       >
         <color attach="background" args={[isDark ? "#0f172a" : "#f8fafc"]} />
-        <fog attach="fog" args={[isDark ? "#0f172a" : "#f8fafc", 18, 40]} />
+        <fog attach="fog" args={[isDark ? "#0f172a" : "#f8fafc", 14, 36]} />
 
-        {/* Lighting */}
-        <ambientLight intensity={0.6} />
-        <directionalLight
-          position={[10, 14, 8]}
-          intensity={1.1}
-          castShadow={false}
-        />
-        <directionalLight position={[-8, 6, -6]} intensity={0.3} />
+        {/* Lighting — soft key + fill + rim to shade the net contours */}
+        <ambientLight intensity={0.55} />
+        <directionalLight position={[8, 12, 6]} intensity={1.1} />
+        <directionalLight position={[-6, 4, -8]} intensity={0.35} />
+        <pointLight position={[0, 6, 0]} intensity={0.4} color="#fbbf24" />
 
-        {/* Ground grid */}
+        {/* Ground grid for spatial reference */}
         <gridHelper
-          args={[30, 30, gridColor1, gridColor2]}
-          position={[0, 0, 0]}
+          args={[24, 24, gridColor1, gridColor2]}
+          position={[0, -0.01, 0]}
         />
 
-        {/* Axes helper: tiny coloured arrows at origin for orientation */}
-        <axesHelper args={[1.2]} />
-
-        <BarField
-          bars={bars}
-          cursorTokenIndex={cursorIndex}
-          onBarClick={onCursorChange}
-          onBarHover={setHovered}
+        <NetSurface
+          data={data}
+          tokens={tokens}
+          cursorIndex={cursorIndex}
+          onCursorChange={onCursorChange}
+          onHover={setHovered}
+          isDark={isDark}
         />
 
         <OrbitControls
           enablePan={false}
           enableDamping
           dampingFactor={0.08}
-          minDistance={6}
-          maxDistance={30}
-          target={[0, 1.2, 0]}
+          minDistance={4}
+          maxDistance={26}
+          target={[0, 0.6, 0]}
+          maxPolarAngle={Math.PI / 2 - 0.05}
         />
       </Canvas>
     </div>
@@ -298,10 +423,10 @@ export function ProbabilitySkyline({
       <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-            Probability skyline
+            Uncertainty net
           </span>
           <span className="text-[10px] text-muted-foreground/70 italic">
-            top-{TOP_K} distribution · window ±{WINDOW_HALF} around cursor · X=position · Y=probability · Z=rank
+            each vertex = one token · height = entropy · peaks = uncertain words
           </span>
         </div>
         <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
@@ -317,16 +442,20 @@ export function ProbabilitySkyline({
             <span className="inline-block w-2 h-2 rounded-sm bg-[#a78bfa]" />
             cursor
           </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-2 h-2 rounded-full bg-[#fca5a5] border border-[#dc2626]" />
+            top-{PEAK_COUNT} peaks
+          </span>
         </div>
       </div>
 
       {/* Canvases */}
       <div
         className={`flex gap-3 ${both ? "flex-col md:flex-row" : ""}`}
-        style={{ height: 340 }}
+        style={{ height: 360 }}
       >
         {hasA && (
-          <SkylineCanvas
+          <NetCanvas
             tokens={tokensA!}
             cursorIndex={effectiveCursor}
             onCursorChange={handleChange}
@@ -335,7 +464,7 @@ export function ProbabilitySkyline({
           />
         )}
         {hasB && (
-          <SkylineCanvas
+          <NetCanvas
             tokens={tokensB!}
             cursorIndex={effectiveCursor}
             onCursorChange={handleChange}
