@@ -66,6 +66,8 @@ import { computeTextMetrics, computeWordOverlap, computeTokenEntropy } from "@/l
 import { DiffRenderedText } from "@/components/workspace/DiffPanel";
 import { computeWordDiff, type DiffSegment } from "@/lib/diff/word-diff";
 import { TokenHeatmap } from "@/components/viz/TokenHeatmap";
+import { EntropyCurve } from "@/components/viz/EntropyCurve";
+import { TokenPixelMap } from "@/components/viz/TokenPixelMap";
 import { BridgeKeeper, isBridgeKeeperPrompt } from "@/components/viz/BridgeKeeper";
 import type { TokenLogprob } from "@/types/analysis";
 import {
@@ -416,6 +418,8 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
   const [showProbsExport, setShowProbsExport] = useState(false);
   const [probsNavIndex, setProbsNavIndex] = useState<number | null>(null);
   const [probsSecondIndex, setProbsSecondIndex] = useState<number | null>(null);
+  const [showEntropyCurve, setShowEntropyCurve] = useState(false);
+  const [showPixelMap, setShowPixelMap] = useState(false);
   // Temperature override: null = use slot default
   const [temperatureOverride, setTemperatureOverride] = useState<number | null>(null);
   const showDiff = viewMode === "diff";
@@ -1485,7 +1489,54 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
               ≠ Diverge {probsChipMode === "diverge" ? `(${probsChipCursor + 1}/${probsDivergePositions.length})` : `(${probsDivergePositions.length})`}
             </button>
           )}
+
+          <div className="flex-1" />
+
+          {/* Toggle: Entropy curve */}
+          <button
+            onClick={() => setShowEntropyCurve((v) => !v)}
+            className={`px-2 py-0.5 rounded-sm text-[10px] font-medium transition-colors ${
+              showEntropyCurve ? "bg-burgundy/90 text-white" : "btn-editorial-ghost"
+            }`}
+            title="Toggle entropy curve — shows uncertainty landscape across token position"
+          >
+            📈 Graph
+          </button>
+
+          {/* Toggle: Pixel map */}
+          <button
+            onClick={() => setShowPixelMap((v) => !v)}
+            className={`px-2 py-0.5 rounded-sm text-[10px] font-medium transition-colors ${
+              showPixelMap ? "bg-burgundy/90 text-white" : "btn-editorial-ghost"
+            }`}
+            title="Toggle bird's-eye pixel map — each token as a coloured cell"
+          >
+            🟨 Pixels
+          </button>
         </div>
+      )}
+
+      {/* Entropy curve band */}
+      {viewMode === "probs" && showEntropyCurve && (logprobTokensA || logprobTokensB) && (
+        <EntropyCurve
+          tokensA={logprobTokensA}
+          tokensB={logprobTokensB}
+          divergePositions={probsDivergePositions}
+          cursorIndex={probsNavIndex}
+          onCursorChange={setProbsNavIndex}
+          isDark={isDark}
+        />
+      )}
+
+      {/* Pixel map band */}
+      {viewMode === "probs" && showPixelMap && (logprobTokensA || logprobTokensB) && (
+        <TokenPixelMap
+          tokensA={logprobTokensA}
+          tokensB={logprobTokensB}
+          cursorIndex={probsNavIndex}
+          onCursorChange={setProbsNavIndex}
+          isDark={isDark}
+        />
       )}
 
       {/* Dual panels */}

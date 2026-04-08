@@ -28,6 +28,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<TabId>("compare");
   const [isDark, setIsDark] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showLogprobsExplainer, setShowLogprobsExplainer] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const { setShowSettings, noMarkdown, setNoMarkdown } = useProviderSettings();
 
@@ -237,7 +238,13 @@ export default function Home() {
                     <strong className="text-foreground">Prompt Sensitivity</strong> &mdash; Auto-generates micro-variations of your prompt (adding &ldquo;please&rdquo;, rephrasing as a question, etc.) to show how wording affects output.
                   </p>
                   <p>
-                    <strong className="text-foreground">Token Probabilities</strong> &mdash; Visualises how confident the model was at each token position. A continuous heatmap shades tokens from pale yellow (moderate uncertainty) to deep red (very low probability); tokens above 70% are uncoloured. A navigation strip provides step buttons and three analytical chips: <em>Uncertain</em> (highest entropy positions), <em>Forks</em> (chosen token &lt;70%), and <em>≠&nbsp;Diverge</em> (where A and B chose different tokens). Click any token to pin its probability distribution; ⌘/Ctrl+click for a second. Requires Google Gemini or OpenAI.
+                    <strong className="text-foreground">Token Probabilities</strong> &mdash; Visualises how confident the model was at each token position. A continuous heatmap shades tokens from pale yellow (moderate uncertainty) to deep red (very low probability); tokens above 70% are uncoloured. A navigation strip provides step buttons and three analytical chips: <em>Uncertain</em> (highest entropy positions), <em>Forks</em> (chosen token &lt;70%), and <em>≠&nbsp;Diverge</em> (where A and B chose different tokens). Click any token to pin its probability distribution; ⌘/Ctrl+click for a second. Requires Google Gemini or OpenAI.{" "}
+                    <button
+                      onClick={() => setShowLogprobsExplainer(true)}
+                      className="text-burgundy hover:underline font-medium"
+                    >
+                      Learn more about logprobs &rarr;
+                    </button>
                   </p>
                   <p>
                     <strong className="text-foreground">Cross-Model Divergence</strong> &mdash; Quantitative comparison with Jaccard similarity, vocabulary overlap, sentence-level structural analysis, and top word frequency comparison across both outputs.
@@ -265,6 +272,171 @@ export default function Home() {
                   <li>Comparisons save automatically to browser storage; reload them via the History button.</li>
                 </ul>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Logprobs explainer subwindow */}
+      {showLogprobsExplainer && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+          onClick={() => setShowLogprobsExplainer(false)}
+        >
+          <div
+            className="bg-popover rounded-sm shadow-xl p-6 w-full max-w-2xl border border-parchment max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-display-md font-bold text-foreground">
+                Understanding Log Probabilities
+              </h2>
+              <button
+                onClick={() => setShowLogprobsExplainer(false)}
+                className="p-1 text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-body-sm text-foreground leading-relaxed">
+              <section>
+                <h3 className="font-semibold text-foreground mb-1.5">
+                  Log probabilities (logprobs) &mdash; what they are
+                </h3>
+                <p className="text-muted-foreground mb-2">
+                  When a language model generates text, it doesn&rsquo;t just pick words. At every position it produces a{" "}
+                  <strong className="text-foreground">probability distribution over its entire vocabulary</strong>{" "}
+                  &mdash; typically 50,000 to 200,000 candidate tokens, each with a score representing how likely the
+                  model thinks that token is the right next one.
+                </p>
+                <p className="text-muted-foreground mb-2">
+                  Those raw probabilities are tiny numbers (0.0466, 0.1605, 0.0001&hellip;), so the model stores and
+                  returns them as <strong className="text-foreground">logarithms</strong>:{" "}
+                  <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">logprob = ln(probability)</code>. Hence
+                  &ldquo;logprobs.&rdquo; Logs are easier to work with numerically (you add them instead of multiplying
+                  them, they don&rsquo;t underflow to zero), and most APIs &mdash; OpenAI, Gemini &mdash; expose them
+                  directly.
+                </p>
+                <p className="text-muted-foreground">
+                  To convert back for display:{" "}
+                  <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">probability = exp(logprob)</code>.
+                  That&rsquo;s the 4.66%, 16.05% etc. you see in the panel.
+                </p>
+              </section>
+
+              <section>
+                <h3 className="font-semibold text-foreground mb-1.5">How the inspector panel works</h3>
+                <p className="text-muted-foreground mb-2">
+                  <strong className="text-foreground">Position 32 / 239.</strong> You&rsquo;re inspecting the 32nd token
+                  out of 239 the model generated. Each token is roughly a word or word fragment.
+                </p>
+                <p className="text-muted-foreground mb-2">
+                  <strong className="text-foreground">Entropy: 1.862 bits.</strong> This is Shannon entropy computed
+                  across the top-k candidate distribution:{" "}
+                  <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">H = -Σ p·log₂(p)</code>. It measures how{" "}
+                  <em>spread out</em> the distribution is. Zero bits means the model was certain; high bits mean it was
+                  hedging between many options. 1.86 bits is moderate uncertainty &mdash; several tokens were live
+                  contenders. The colour of the token in the heatmap is driven by this (the continuous yellow&rarr;red
+                  gradient).
+                </p>
+                <p className="text-muted-foreground mb-2">
+                  <strong className="text-foreground">Chosen: 4.66%.</strong> The token actually emitted
+                  (&ldquo;&nbsp;processes&rdquo;) had only a 4.66% probability. Notice that the chosen token is{" "}
+                  <em>not</em> the most likely one &mdash; &ldquo;&nbsp;similarity&rdquo; at 16.05% was. This is because
+                  the model is sampling with temperature &gt; 0, which draws from the full distribution rather than
+                  always taking the argmax. That&rsquo;s why you get different outputs on reruns of the same prompt.
+                </p>
+                <p className="text-muted-foreground mb-2">
+                  <strong className="text-foreground">Probability distribution (top-k).</strong> The API returns the
+                  top few alternatives at each position. A typical top-four plus &ldquo;other&rdquo; readout might look
+                  like:
+                </p>
+                <div className="bg-muted/40 rounded-sm p-3 mb-2 text-[12px]">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="text-left text-muted-foreground border-b border-parchment/50">
+                        <th className="pb-1 font-medium">Rank</th>
+                        <th className="pb-1 font-medium">Token</th>
+                        <th className="pb-1 font-medium text-right">Probability</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-foreground">
+                      <tr>
+                        <td className="py-0.5">1</td>
+                        <td className="py-0.5">
+                          <code>&ldquo; processes&rdquo;</code> &larr; chosen
+                        </td>
+                        <td className="py-0.5 text-right">4.66%</td>
+                      </tr>
+                      <tr>
+                        <td className="py-0.5">2</td>
+                        <td className="py-0.5">
+                          <code>&ldquo; similarity&rdquo;</code>
+                        </td>
+                        <td className="py-0.5 text-right">16.05%</td>
+                      </tr>
+                      <tr>
+                        <td className="py-0.5">3</td>
+                        <td className="py-0.5">
+                          <code>&ldquo; compositio&hellip;&rdquo;</code>
+                        </td>
+                        <td className="py-0.5 text-right">9.70%</td>
+                      </tr>
+                      <tr>
+                        <td className="py-0.5">4</td>
+                        <td className="py-0.5">
+                          <code>&ldquo; plaus&rdquo;</code>
+                        </td>
+                        <td className="py-0.5 text-right">7.47%</td>
+                      </tr>
+                      <tr className="text-muted-foreground italic">
+                        <td className="py-0.5">&mdash;</td>
+                        <td className="py-0.5">other (all remaining vocabulary)</td>
+                        <td className="py-0.5 text-right">62.1%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-muted-foreground mb-2">
+                  The fact that &ldquo;other&rdquo; is 62% tells you the distribution has a long tail: no single
+                  alternative dominated, but the probability was thinly spread across thousands of remaining tokens.
+                  That&rsquo;s consistent with the 1.86-bit entropy reading.
+                </p>
+                <p className="text-muted-foreground mb-2">
+                  <strong className="text-foreground">Divergence annotation.</strong> This is LLMbench&rsquo;s own
+                  overlay, not something the API provides. Because you&rsquo;re comparing two panels, the tool has
+                  aligned the two token streams and noticed that at a given position the other panel emitted a
+                  different token. From that branch point the two outputs will tend to diverge further and further,
+                  because each new token conditions on everything before it.
+                </p>
+                <p className="text-muted-foreground">
+                  <strong className="text-foreground">Uncertainty annotation.</strong> Again LLMbench&rsquo;s
+                  interpretation of the entropy number. The threshold logic is: low entropy = confident, moderate =
+                  plausible alternatives existed, high = a genuine fork where temperature/sampling is doing real work.
+                </p>
+              </section>
+
+              <section>
+                <h3 className="font-semibold text-foreground mb-1.5">Why this matters interpretively</h3>
+                <p className="text-muted-foreground mb-2">
+                  What you&rsquo;re really looking at is the model&rsquo;s{" "}
+                  <strong className="text-foreground">counterfactual history</strong>: every token is a road taken, and
+                  the distribution shows the roads not taken. A high-entropy position is a moment where the text could
+                  plausibly have gone several ways; a low-entropy position (e.g. &ldquo;&nbsp;the&rdquo; after
+                  &ldquo;&nbsp;in&rdquo;) is one where the model was effectively constrained. Reading a generation
+                  through its logprobs is the closest we get to seeing where the prose is load-bearing (the model was
+                  committed) versus where it is contingent (the model was rolling dice within a cloud of
+                  near-equivalents).
+                </p>
+                <p className="text-muted-foreground">
+                  This is also why comparing two panels at divergence points is interesting: it shows you that two
+                  different tokens were both live options in both models&rsquo; distributions, and sampling happened to
+                  pull them in different directions. An apparent semantic difference between, say, &ldquo;biological
+                  human&rdquo; and &ldquo;biological processes&rdquo; isn&rsquo;t always a difference of{" "}
+                  <em>belief</em> &mdash; sometimes it is simply a difference of <em>draw</em>.
+                </p>
+              </section>
             </div>
           </div>
         </div>
