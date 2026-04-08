@@ -1023,6 +1023,16 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     annA.setAllAnnotations([]);
     annB.setAllAnnotations([]);
     setSaveStatus("idle");
+    // Reset probs-mode state so New doesn't leave the UI stuck showing
+    // stale token heatmaps, nav cursors, or overlays from the previous run.
+    setViewMode(null);
+    setLogprobTokensA(null);
+    setLogprobTokensB(null);
+    setLogprobsLoading(false);
+    setProbsNavIndex(null);
+    setProbsSecondIndex(null);
+    setProbsChipMode(null);
+    setProbsChipCursor(0);
   }, [reset, annA, annB]);
 
   const safeFilename = useCallback(

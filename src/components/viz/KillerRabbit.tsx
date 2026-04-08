@@ -13,6 +13,7 @@ interface KillerRabbitProps {
 
 const WARNINGS = [
   "Wait! There's something you should know...",
+  "Behold — the Rabbit of Caerbannog! Guardian of the Cave!",
   "That's the most foul, cruel, and bad-tempered rodent you ever set eyes on!",
   "Look, that rabbit's got a vicious streak a mile wide! It's a killer!",
   "He's got huge, sharp... er... He can leap about. Look at the bones!",
