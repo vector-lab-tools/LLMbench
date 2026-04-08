@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { DefaultPromptChips } from "@/components/shared/DefaultPromptChips";
 import { MODE_DEFAULTS, getRandomDefault } from "@/lib/prompts/defaults";
 import {
@@ -69,6 +70,23 @@ import { TokenHeatmap } from "@/components/viz/TokenHeatmap";
 import { EntropyCurve } from "@/components/viz/EntropyCurve";
 import { TokenPixelMap } from "@/components/viz/TokenPixelMap";
 import { BridgeKeeper, isBridgeKeeperPrompt } from "@/components/viz/BridgeKeeper";
+
+// Lazy-load the 3D skyline so Three.js only enters the bundle when the user
+// actually toggles the view — keeps the initial page load lean.
+const ProbabilitySkyline = dynamic(
+  () =>
+    import("@/components/viz/ProbabilitySkyline").then(
+      (m) => m.ProbabilitySkyline
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="w-full px-3 py-8 text-center text-[10px] text-muted-foreground italic border-y border-parchment/40 bg-card/40">
+        Loading 3D skyline…
+      </div>
+    ),
+  }
+);
 import type { TokenLogprob } from "@/types/analysis";
 import {
   DEFAULT_ANNOTATION_DISPLAY_SETTINGS,
@@ -420,6 +438,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
   const [probsSecondIndex, setProbsSecondIndex] = useState<number | null>(null);
   const [showEntropyCurve, setShowEntropyCurve] = useState(false);
   const [showPixelMap, setShowPixelMap] = useState(false);
+  const [showSkyline, setShowSkyline] = useState(false);
   // Temperature override: null = use slot default
   const [temperatureOverride, setTemperatureOverride] = useState<number | null>(null);
   const showDiff = viewMode === "diff";
@@ -1033,6 +1052,9 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     setProbsSecondIndex(null);
     setProbsChipMode(null);
     setProbsChipCursor(0);
+    setShowEntropyCurve(false);
+    setShowPixelMap(false);
+    setShowSkyline(false);
   }, [reset, annA, annB]);
 
   const safeFilename = useCallback(
@@ -1523,6 +1545,17 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
           >
             🟨 Pixels
           </button>
+
+          {/* Toggle: 3D Skyline */}
+          <button
+            onClick={() => setShowSkyline((v) => !v)}
+            className={`px-2 py-0.5 rounded-sm text-[10px] font-medium transition-colors ${
+              showSkyline ? "bg-burgundy/90 text-white" : "btn-editorial-ghost"
+            }`}
+            title="Toggle 3D probability skyline — rotatable top-k distribution around cursor"
+          >
+            🏙️ Skyline
+          </button>
         </div>
       )}
 
@@ -1541,6 +1574,17 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
       {/* Pixel map band */}
       {viewMode === "probs" && showPixelMap && (logprobTokensA || logprobTokensB) && (
         <TokenPixelMap
+          tokensA={logprobTokensA}
+          tokensB={logprobTokensB}
+          cursorIndex={probsNavIndex}
+          onCursorChange={setProbsNavIndex}
+          isDark={isDark}
+        />
+      )}
+
+      {/* 3D Skyline band (lazy-loaded) */}
+      {viewMode === "probs" && showSkyline && (logprobTokensA || logprobTokensB) && (
+        <ProbabilitySkyline
           tokensA={logprobTokensA}
           tokensB={logprobTokensB}
           cursorIndex={probsNavIndex}
