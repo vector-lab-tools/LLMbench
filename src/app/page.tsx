@@ -172,15 +172,15 @@ export default function Home() {
           grenadeThrown={grenadeThrown}
         />
       )}
-      {/* Holy Hand Grenade — fixed position next to LLMbench logo */}
+      {/* Holy Hand Grenade — fixed position in the header, clear of the title */}
       {showRabbit && grenadeReady && (
         <button
           onClick={handleThrowGrenade}
-          className="fixed top-1.5 z-[9999] animate-pulse"
-          style={{ left: 120 }}
+          className="fixed z-[9999] animate-bounce hover:scale-110 transition-transform drop-shadow-md"
+          style={{ left: 320, top: 2 }}
           title="Throw the Holy Hand Grenade of Antioch! (First shalt thou take out the Holy Pin...)"
         >
-          <span style={{ fontSize: "1.4rem" }}>💣</span>
+          <span style={{ fontSize: "2rem", display: "inline-block", lineHeight: 1 }}>💣</span>
         </button>
       )}
 
