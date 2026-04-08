@@ -142,6 +142,8 @@ function AnnotatedPanelDisplay({
   onControlledIndexChange,
   secondControlledIndex,
   onSecondControlledIndexChange,
+  logprobsLoading,
+  logprobCapable,
 }: {
   panel: "A" | "B";
   result: PanelResult | null;
@@ -164,6 +166,8 @@ function AnnotatedPanelDisplay({
   onControlledIndexChange?: (i: number) => void;
   secondControlledIndex?: number | null;
   onSecondControlledIndexChange?: (i: number | null) => void;
+  logprobsLoading?: boolean;
+  logprobCapable?: boolean;
 }) {
   const editCallbacks = useMemo(
     () => ({
@@ -291,10 +295,18 @@ function AnnotatedPanelDisplay({
         </div>
       ) : viewMode === "probs" && outputText !== null ? (
         <div className="flex-1 flex items-center justify-center p-6">
-          <p className="text-caption text-muted-foreground text-center">
-            No token probability data for Panel {panel}.<br />
-            Logprobs require Gemini or OpenAI models.
-          </p>
+          {logprobsLoading && logprobCapable ? (
+            <div className="text-center text-muted-foreground">
+              <Loader2 className="w-6 h-6 mx-auto mb-2 animate-spin opacity-60" />
+              <p className="text-caption">Working&hellip;</p>
+              <p className="text-[10px] opacity-70 mt-1">Fetching token probabilities</p>
+            </div>
+          ) : (
+            <p className="text-caption text-muted-foreground text-center">
+              No token probability data for Panel {panel}.<br />
+              Logprobs require Gemini or OpenAI models.
+            </p>
+          )}
         </div>
       ) : viewMode === "struct" && outputText !== null ? (
         <div className="flex-1 min-h-0">
@@ -1089,16 +1101,24 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
 
         <div className="h-4 w-px bg-parchment mx-1" />
 
-        {/* Export button */}
-        <button
-          onClick={() => setShowExportModal(true)}
-          disabled={!hasContent}
-          className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
-          title="Export comparison"
-        >
-          <Download className="w-3.5 h-3.5" />
-          <span>Export</span>
-        </button>
+        {/* Export button — context-aware: opens probs export in probs mode, comparison export otherwise */}
+        {(() => {
+          const inProbsMode = viewMode === "probs" && (logprobTokensA || logprobTokensB);
+          return (
+            <button
+              onClick={() => {
+                if (inProbsMode) setShowProbsExport(true);
+                else setShowExportModal(true);
+              }}
+              disabled={!hasContent}
+              className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
+              title={inProbsMode ? "Export token probability data" : "Export comparison"}
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>{inProbsMode ? "Export Probs" : "Export"}</span>
+            </button>
+          );
+        })()}
 
         <div className="h-4 w-px bg-parchment mx-1" />
 
@@ -1334,21 +1354,6 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
           );
         })()}
 
-        {/* Probs export — single button opening modal */}
-        {(logprobTokensA || logprobTokensB) && viewMode === "probs" && (
-          <>
-            <div className="w-px h-4 bg-parchment/60" />
-            <button
-              onClick={() => setShowProbsExport(true)}
-              className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5"
-              title="Export token probability data"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export</span>
-            </button>
-          </>
-        )}
-
         {/* History — inline in toolbar */}
         <div className="relative" ref={historyRef}>
           <button
@@ -1485,54 +1490,67 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
 
       {/* Dual panels */}
       <div className="flex flex-col md:flex-row flex-1">
-        <AnnotatedPanelDisplay
-          panel="A"
-          result={resultA}
-          isLoading={loadingA}
-          slotLabel={getSlotLabel("A")}
-          ann={annA}
-          fontSize={proseFontSize}
-          displaySettings={annDisplaySettings}
-          proseFontFamily={getFontCss(proseFontFamily)}
-          annotationFontFamily={getFontCss(annotationFontFamily)}
-          annotationFontSize={annotationFontSize}
-          isDark={isDark}
-          viewMode={viewMode}
-          diffSegments={diffResult?.segmentsA}
-          diffUniqueCount={diffResult ? diffUniqueA : undefined}
-          bodyScrollRef={diffScrollARef}
-          logprobTokens={logprobTokensA ?? undefined}
-          siblingTokens={logprobTokensB}
-          controlledIndex={probsNavIndex}
-          onControlledIndexChange={setProbsNavIndex}
-          secondControlledIndex={probsSecondIndex}
-          onSecondControlledIndexChange={setProbsSecondIndex}
-        />
-        <div className="hidden md:block w-px bg-border" />
-        <div className="md:hidden h-px bg-border" />
-        <AnnotatedPanelDisplay
-          panel="B"
-          result={resultB}
-          isLoading={loadingB}
-          slotLabel={getSlotLabel("B")}
-          ann={annB}
-          fontSize={proseFontSize}
-          displaySettings={annDisplaySettings}
-          proseFontFamily={getFontCss(proseFontFamily)}
-          annotationFontFamily={getFontCss(annotationFontFamily)}
-          annotationFontSize={annotationFontSize}
-          isDark={isDark}
-          viewMode={viewMode}
-          diffSegments={diffResult?.segmentsB}
-          diffUniqueCount={diffResult ? diffUniqueB : undefined}
-          bodyScrollRef={diffScrollBRef}
-          logprobTokens={logprobTokensB ?? undefined}
-          siblingTokens={logprobTokensA}
-          controlledIndex={probsNavIndex}
-          onControlledIndexChange={setProbsNavIndex}
-          secondControlledIndex={probsSecondIndex}
-          onSecondControlledIndexChange={setProbsSecondIndex}
-        />
+        {(() => {
+          const isLogprobCapable = (p: string) => p === "google" || p === "openai";
+          const aCapable = isSlotConfigured("A") && isLogprobCapable(slots.A.provider);
+          const bCapable = isSlotConfigured("B") && isLogprobCapable(slots.B.provider);
+          return (
+            <>
+              <AnnotatedPanelDisplay
+                panel="A"
+                result={resultA}
+                isLoading={loadingA}
+                slotLabel={getSlotLabel("A")}
+                ann={annA}
+                fontSize={proseFontSize}
+                displaySettings={annDisplaySettings}
+                proseFontFamily={getFontCss(proseFontFamily)}
+                annotationFontFamily={getFontCss(annotationFontFamily)}
+                annotationFontSize={annotationFontSize}
+                isDark={isDark}
+                viewMode={viewMode}
+                diffSegments={diffResult?.segmentsA}
+                diffUniqueCount={diffResult ? diffUniqueA : undefined}
+                bodyScrollRef={diffScrollARef}
+                logprobTokens={logprobTokensA ?? undefined}
+                siblingTokens={logprobTokensB}
+                controlledIndex={probsNavIndex}
+                onControlledIndexChange={setProbsNavIndex}
+                secondControlledIndex={probsSecondIndex}
+                onSecondControlledIndexChange={setProbsSecondIndex}
+                logprobsLoading={logprobsLoading}
+                logprobCapable={aCapable}
+              />
+              <div className="hidden md:block w-px bg-border" />
+              <div className="md:hidden h-px bg-border" />
+              <AnnotatedPanelDisplay
+                panel="B"
+                result={resultB}
+                isLoading={loadingB}
+                slotLabel={getSlotLabel("B")}
+                ann={annB}
+                fontSize={proseFontSize}
+                displaySettings={annDisplaySettings}
+                proseFontFamily={getFontCss(proseFontFamily)}
+                annotationFontFamily={getFontCss(annotationFontFamily)}
+                annotationFontSize={annotationFontSize}
+                isDark={isDark}
+                viewMode={viewMode}
+                diffSegments={diffResult?.segmentsB}
+                diffUniqueCount={diffResult ? diffUniqueB : undefined}
+                bodyScrollRef={diffScrollBRef}
+                logprobTokens={logprobTokensB ?? undefined}
+                siblingTokens={logprobTokensA}
+                controlledIndex={probsNavIndex}
+                onControlledIndexChange={setProbsNavIndex}
+                secondControlledIndex={probsSecondIndex}
+                onSecondControlledIndexChange={setProbsSecondIndex}
+                logprobsLoading={logprobsLoading}
+                logprobCapable={bCapable}
+              />
+            </>
+          );
+        })()}
       </div>
 
       {/* Deep Dive: comparison analysis */}
