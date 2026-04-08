@@ -266,10 +266,14 @@ export function TokenHeatmap({
     <div className="flex gap-4 items-start px-4 py-4">
       {/* Left: heatmap text */}
       <div className="flex-1 min-w-0">
-        <div className="font-serif text-base leading-relaxed whitespace-pre-wrap">
+        <div
+          className="font-serif text-base leading-relaxed whitespace-pre-wrap"
+          data-token-heatmap
+        >
           {tokens.map((token, i) => (
             <span
               key={i}
+              data-token-index={i}
               className={cn(
                 "cursor-pointer rounded-sm px-0.5 transition-all duration-100",
                 activeIndex === i && "ring-2 ring-burgundy",

@@ -164,6 +164,7 @@ function AnnotatedPanelDisplay({
   onSecondControlledIndexChange,
   logprobsLoading,
   logprobCapable,
+  logprobError,
 }: {
   panel: "A" | "B";
   result: PanelResult | null;
@@ -188,6 +189,7 @@ function AnnotatedPanelDisplay({
   onSecondControlledIndexChange?: (i: number | null) => void;
   logprobsLoading?: boolean;
   logprobCapable?: boolean;
+  logprobError?: string | null;
 }) {
   const editCallbacks = useMemo(
     () => ({
@@ -315,11 +317,33 @@ function AnnotatedPanelDisplay({
         </div>
       ) : viewMode === "probs" && outputText !== null ? (
         <div className="flex-1 flex items-center justify-center p-6">
-          {logprobsLoading && logprobCapable ? (
+          {logprobsLoading ? (
             <div className="text-center text-muted-foreground">
               <Loader2 className="w-6 h-6 mx-auto mb-2 animate-spin opacity-60" />
               <p className="text-caption">Working&hellip;</p>
               <p className="text-[10px] opacity-70 mt-1">Fetching token probabilities</p>
+            </div>
+          ) : logprobError ? (
+            <div className="text-center text-red-500/80 max-w-sm">
+              <AlertCircle className="w-5 h-5 mx-auto mb-2 opacity-60" />
+              <p className="text-caption font-medium">
+                Logprobs request failed for Panel {panel}
+              </p>
+              <p className="text-[10px] opacity-80 mt-1 break-words whitespace-pre-wrap">
+                {logprobError}
+              </p>
+            </div>
+          ) : logprobCapable ? (
+            <div className="text-center text-muted-foreground max-w-xs">
+              <AlertCircle className="w-5 h-5 mx-auto mb-2 opacity-50" />
+              <p className="text-caption">
+                No token probabilities returned for Panel {panel}.
+              </p>
+              <p className="text-[10px] opacity-70 mt-1">
+                The model is logprob-capable, but this response came back without
+                token-level probability data. Try re-sending the prompt, or check
+                that the API key has logprobs enabled.
+              </p>
             </div>
           ) : (
             <p className="text-caption text-muted-foreground text-center">
@@ -428,6 +452,8 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
   const [promptBouncing, setPromptBouncing] = useState(false);
   const [logprobTokensA, setLogprobTokensA] = useState<TokenLogprob[] | null>(null);
   const [logprobTokensB, setLogprobTokensB] = useState<TokenLogprob[] | null>(null);
+  const [logprobErrorA, setLogprobErrorA] = useState<string | null>(null);
+  const [logprobErrorB, setLogprobErrorB] = useState<string | null>(null);
   const [logprobsLoading, setLogprobsLoading] = useState(false);
   const [showLogprobsInfo, setShowLogprobsInfo] = useState(false);
   const [showBridgeKeeper, setShowBridgeKeeper] = useState(false);
@@ -566,6 +592,119 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     setProbsChipMode(null);
   }, [probsNavIndex, probsMaxIndex]);
 
+  // Move probs cursor vertically by one visual row in the DOM heatmap.
+  // Reads bounding rects of the rendered token spans so wrapping behaviour
+  // is respected even though the heatmap uses inline flow with flex-wrap.
+  const handleProbsVertical = useCallback((direction: -1 | 1) => {
+    if (typeof document === "undefined") return;
+    const container = document.querySelector<HTMLElement>("[data-token-heatmap]");
+    if (!container) return;
+    const spans = Array.from(
+      container.querySelectorAll<HTMLElement>("[data-token-index]")
+    );
+    if (spans.length === 0) return;
+
+    const currentIdx = probsNavIndex ?? 0;
+    const currentEl = spans[currentIdx];
+    if (!currentEl) return;
+    const currentRect = currentEl.getBoundingClientRect();
+    const currentMidY = currentRect.top + currentRect.height / 2;
+    const currentMidX = currentRect.left + currentRect.width / 2;
+
+    // Find the next/previous row by Y position. A row is any span whose
+    // vertical midpoint sits clearly above/below the current span's midpoint.
+    const ROW_EPS = Math.max(4, currentRect.height * 0.4);
+    let targetRowY: number | null = null;
+    for (const el of spans) {
+      const r = el.getBoundingClientRect();
+      const midY = r.top + r.height / 2;
+      if (direction === -1 && midY < currentMidY - ROW_EPS) {
+        if (targetRowY === null || midY > targetRowY) targetRowY = midY;
+      } else if (direction === 1 && midY > currentMidY + ROW_EPS) {
+        if (targetRowY === null || midY < targetRowY) targetRowY = midY;
+      }
+    }
+    if (targetRowY === null) return; // no row above/below
+
+    // Within the target row, pick the span whose X-midpoint is closest.
+    let bestIdx = -1;
+    let bestDx = Infinity;
+    for (let i = 0; i < spans.length; i++) {
+      const r = spans[i].getBoundingClientRect();
+      const midY = r.top + r.height / 2;
+      if (Math.abs(midY - targetRowY) > ROW_EPS) continue;
+      const midX = r.left + r.width / 2;
+      const dx = Math.abs(midX - currentMidX);
+      if (dx < bestDx) {
+        bestDx = dx;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx >= 0) {
+      setProbsNavIndex(bestIdx);
+      setProbsChipMode(null);
+      spans[bestIdx]?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  }, [probsNavIndex]);
+
+  // Arrow-key navigation across the probs heatmap. Active only in probs view
+  // and skipped when the user is typing into an editable field.
+  useEffect(() => {
+    if (viewMode !== "probs") return;
+    if (logprobTokensA === null && logprobTokensB === null) return;
+
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (
+          tag === "INPUT" ||
+          tag === "TEXTAREA" ||
+          target.isContentEditable
+        ) {
+          return;
+        }
+      }
+      switch (e.key) {
+        case "ArrowLeft":
+          e.preventDefault();
+          handleProbsStep(-1);
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          handleProbsStep(1);
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          handleProbsVertical(-1);
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          handleProbsVertical(1);
+          break;
+        case "Home":
+          e.preventDefault();
+          setProbsNavIndex(0);
+          setProbsChipMode(null);
+          break;
+        case "End":
+          e.preventDefault();
+          setProbsNavIndex(probsMaxIndex);
+          setProbsChipMode(null);
+          break;
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [
+    viewMode,
+    logprobTokensA,
+    logprobTokensB,
+    handleProbsStep,
+    handleProbsVertical,
+    probsMaxIndex,
+  ]);
+
   // Click-outside handling for dropdowns
   const historyRef = useRef<HTMLDivElement>(null);
   const displaySettingsRef = useRef<HTMLDivElement>(null);
@@ -613,6 +752,8 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     annB.setAllAnnotations([]);
     setLogprobTokensA(null);
     setLogprobTokensB(null);
+    setLogprobErrorA(null);
+    setLogprobErrorB(null);
     setProbsNavIndex(null);
     setProbsSecondIndex(null);
     setLastSentPrompt(effectivePrompt);
@@ -626,6 +767,8 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     const effectivePrompt = prompt.trim();
     if (!effectivePrompt || logprobsLoading) return;
     setLogprobsLoading(true);
+    setLogprobErrorA(null);
+    setLogprobErrorB(null);
     try {
       const res = await fetch("/api/analyse/logprobs", {
         method: "POST",
@@ -639,10 +782,22 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
         }),
       });
       const data = await res.json();
-      if (data.A?.tokens?.length) setLogprobTokensA(data.A.tokens);
-      if (data.B?.tokens?.length) setLogprobTokensB(data.B.tokens);
-    } catch {
-      // silently fail — panel will show "no data" message
+      if (data.A?.tokens?.length) {
+        setLogprobTokensA(data.A.tokens);
+      } else if (data.A?.error) {
+        setLogprobTokensA(null);
+        setLogprobErrorA(data.A.error);
+      }
+      if (data.B?.tokens?.length) {
+        setLogprobTokensB(data.B.tokens);
+      } else if (data.B?.error) {
+        setLogprobTokensB(null);
+        setLogprobErrorB(data.B.error);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Request failed";
+      setLogprobErrorA(msg);
+      setLogprobErrorB(msg);
     } finally {
       setLogprobsLoading(false);
     }
@@ -1047,6 +1202,8 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     setViewMode(null);
     setLogprobTokensA(null);
     setLogprobTokensB(null);
+    setLogprobErrorA(null);
+    setLogprobErrorB(null);
     setLogprobsLoading(false);
     setProbsNavIndex(null);
     setProbsSecondIndex(null);
@@ -1460,7 +1617,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
             onClick={() => handleProbsStep(-1)}
             disabled={probsNavIndex === null || probsNavIndex <= 0}
             className="btn-editorial-ghost px-1.5 py-0.5 disabled:opacity-30"
-            title="Previous token"
+            title="Previous token (←)"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
@@ -1471,7 +1628,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
             onClick={() => handleProbsStep(1)}
             disabled={probsNavIndex === null || probsNavIndex >= probsMaxIndex}
             className="btn-editorial-ghost px-1.5 py-0.5 disabled:opacity-30"
-            title="Next token"
+            title="Next token (→)"
           >
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
@@ -1523,6 +1680,14 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
           )}
 
           <div className="flex-1" />
+
+          {/* Keyboard hint */}
+          <span
+            className="hidden lg:inline text-[10px] text-muted-foreground/60 font-mono mr-1"
+            title="Use arrow keys to move the cursor · Home/End to jump to start/end"
+          >
+            ← → ↑ ↓
+          </span>
 
           {/* Toggle: Entropy curve */}
           <button
@@ -1625,6 +1790,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
                 onSecondControlledIndexChange={setProbsSecondIndex}
                 logprobsLoading={logprobsLoading}
                 logprobCapable={aCapable}
+                logprobError={logprobErrorA}
               />
               <div className="hidden md:block w-px bg-border" />
               <div className="md:hidden h-px bg-border" />
@@ -1652,6 +1818,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
                 onSecondControlledIndexChange={setProbsSecondIndex}
                 logprobsLoading={logprobsLoading}
                 logprobCapable={bCapable}
+                logprobError={logprobErrorB}
               />
             </>
           );
