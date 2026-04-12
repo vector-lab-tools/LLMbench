@@ -37,7 +37,12 @@ const DEFAULT_MODELS: Record<AIProvider, ModelConfig[]> = {
     { id: "llama3.1", name: "Llama 3.1", contextWindow: 128000, maxOutputTokens: 4096 },
     { id: "mistral", name: "Mistral", contextWindow: 32000, maxOutputTokens: 4096 },
   ],
-  "openai-compatible": [],
+  "openai-compatible": [
+    { id: "qwen/qwen-2.5-72b-instruct", name: "Qwen 2.5 72B Instruct (logprobs)", contextWindow: 131072, maxOutputTokens: 8192 },
+    { id: "meta-llama/llama-3.3-70b-instruct", name: "Llama 3.3 70B Instruct (logprobs)", contextWindow: 131072, maxOutputTokens: 8192 },
+    { id: "google/gemini-2.0-flash-001", name: "Gemini 2.0 Flash (logprobs)", contextWindow: 1048576, maxOutputTokens: 8192 },
+    { id: "mistralai/mistral-large", name: "Mistral Large (logprobs)", contextWindow: 128000, maxOutputTokens: 8192 },
+  ],
   huggingface: [
     { id: "meta-llama/Llama-3.3-70B-Instruct", name: "Llama 3.3 70B Instruct", contextWindow: 131072, maxOutputTokens: 4096 },
     { id: "meta-llama/Llama-3.1-8B-Instruct", name: "Llama 3.1 8B Instruct (logprobs)", contextWindow: 131072, maxOutputTokens: 4096 },

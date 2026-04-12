@@ -31,6 +31,13 @@ The first model in each list is the default.
 - `gemini-2.5-flash-lite` - Gemini 2.5 Flash-Lite
 - `gemini-2.0-flash` - Gemini 2.0 Flash (logprobs)
 
+## OpenAI-Compatible API
+
+- `qwen/qwen-2.5-72b-instruct` - Qwen 2.5 72B Instruct (logprobs)
+- `meta-llama/llama-3.3-70b-instruct` - Llama 3.3 70B Instruct (logprobs)
+- `google/gemini-2.0-flash-001` - Gemini 2.0 Flash (logprobs)
+- `mistralai/mistral-large` - Mistral Large (logprobs)
+
 ## Ollama (Local)
 
 - `llama3.2` - Llama 3.2
