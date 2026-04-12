@@ -223,6 +223,7 @@ async function runDirectFetchLogprobs(
 
     const data = await response.json();
     const choice = data.choices?.[0];
+    console.log("[logprobs] raw choice.logprobs:", JSON.stringify(choice?.logprobs));
     const text = (choice?.message?.content as string) || "";
     const logprobsContent: Array<{
       token: string;
