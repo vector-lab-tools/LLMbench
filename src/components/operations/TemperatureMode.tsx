@@ -142,7 +142,7 @@ export default function TemperatureMode({ isDark }: TemperatureModeProps) {
                 title={`t = ${run.temperature.toFixed(1)}`}
                 panel={panel}
                 subtitle={run.text ? `${run.metrics!.wordCount} words` : undefined}
-                badge={run.text ? `${(run.metrics!.vocabularyDiversity * 100).toFixed(0)}% unique words` : "Error"}
+                badge={run.text ? `${(run.metrics!.vocabularyDiversity * 100).toFixed(0)}% lexical diversity` : "Error"}
                 badgeColor={run.text ? undefined : "bg-red-100 text-red-600"}
                 footer={
                   run.text ? (

@@ -149,7 +149,7 @@ export default function StochasticMode({ isDark }: StochasticModeProps) {
                 title={`Run ${i + 1}`}
                 panel={panel}
                 subtitle={isOutput(run) ? `${(run as { metrics: { wordCount: number } }).metrics.wordCount} words` : undefined}
-                badge={isOutput(run) ? `${((run as { metrics: { vocabularyDiversity: number } }).metrics.vocabularyDiversity * 100).toFixed(0)}% unique words` : "Error"}
+                badge={isOutput(run) ? `${((run as { metrics: { vocabularyDiversity: number } }).metrics.vocabularyDiversity * 100).toFixed(0)}% lexical diversity` : "Error"}
                 badgeColor={isOutput(run) ? undefined : "bg-red-100 text-red-600"}
                 footer={
                   isOutput(run) ? (
