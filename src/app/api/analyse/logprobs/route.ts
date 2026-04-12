@@ -173,6 +173,87 @@ async function runOpenAILogprobs(slot: SlotPayload, prompt: string, topK: number
   }
 }
 
+// ---------- Direct fetch logprobs (OpenRouter, HuggingFace, OpenAI-Compatible) ----------
+// The Vercel AI SDK does not reliably surface logprobs via providerMetadata for
+// custom-baseURL providers. A raw fetch against the chat/completions endpoint lets
+// us parse the standard OpenAI logprobs format directly from the response body.
+
+async function runDirectFetchLogprobs(
+  slot: SlotPayload,
+  baseUrl: string,
+  prompt: string,
+  topK: number,
+  noMarkdown = false,
+  extraHeaders: Record<string, string> = {}
+) {
+  const startTime = Date.now();
+  const model = slot.customModelId || slot.model;
+
+  try {
+    const systemPrompt = buildSystemPrompt(slot.systemPrompt || undefined, noMarkdown);
+    const messages: { role: string; content: string }[] = [];
+    if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
+    messages.push({ role: "user", content: prompt });
+
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${slot.apiKey}`,
+        ...extraHeaders,
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: slot.temperature,
+        logprobs: true,
+        top_logprobs: topK,
+      }),
+    });
+
+    const responseTimeMs = Date.now() - startTime;
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return {
+        error: `API error ${response.status}: ${errText}`,
+        provenance: buildProvenance(slot, responseTimeMs),
+      };
+    }
+
+    const data = await response.json();
+    const choice = data.choices?.[0];
+    const text = (choice?.message?.content as string) || "";
+    const logprobsContent: Array<{
+      token: string;
+      logprob: number;
+      top_logprobs: Array<{ token: string; logprob: number }>;
+    }> = choice?.logprobs?.content || [];
+
+    const tokens: TokenLogprob[] = logprobsContent.map((entry) => ({
+      token: entry.token || "",
+      logprob: entry.logprob ?? 0,
+      topAlternatives: (entry.top_logprobs || [])
+        .filter((t) => t.token !== entry.token)
+        .slice(0, topK)
+        .map((t) => ({ token: t.token, logprob: t.logprob })),
+    }));
+
+    return {
+      text,
+      provenance: buildProvenance(slot, responseTimeMs),
+      tokens,
+      meanEntropy: computeMeanEntropy(tokens),
+      maxEntropyToken: computeMaxEntropyToken(tokens),
+    };
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : "Logprobs generation failed",
+      provenance: buildProvenance(slot, Date.now() - startTime),
+    };
+  }
+}
+
 // ---------- Dispatch ----------
 
 async function runSlotLogprobs(slot: SlotPayload, prompt: string, topK: number, noMarkdown = false) {
@@ -204,17 +285,17 @@ async function runSlotLogprobs(slot: SlotPayload, prompt: string, topK: number, 
     case "openai-compatible":
       return runOpenAILogprobs(slot, prompt, topK, noMarkdown);
     case "openrouter":
-      return runOpenAILogprobs(
-        { ...slot, baseUrl: "https://openrouter.ai/api/v1" },
-        prompt, topK, noMarkdown
+      return runDirectFetchLogprobs(
+        slot,
+        "https://openrouter.ai/api/v1",
+        prompt, topK, noMarkdown,
+        { "HTTP-Referer": "https://llm-bench.vercel.app", "X-Title": "LLMbench" }
       );
     case "huggingface":
-      // HF Inference Router is OpenAI-compatible; inject the fixed base URL
-      return runOpenAILogprobs(
-        { ...slot, baseUrl: "https://router.huggingface.co/v1" },
-        prompt,
-        topK,
-        noMarkdown
+      return runDirectFetchLogprobs(
+        slot,
+        "https://router.huggingface.co/v1",
+        prompt, topK, noMarkdown
       );
     default:
       return {
