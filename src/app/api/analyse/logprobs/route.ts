@@ -201,9 +201,17 @@ async function runSlotLogprobs(slot: SlotPayload, prompt: string, topK: number, 
     case "openai":
     case "openai-compatible":
       return runOpenAILogprobs(slot, prompt, topK, noMarkdown);
+    case "huggingface":
+      // HF Inference API is OpenAI-compatible; inject the fixed base URL
+      return runOpenAILogprobs(
+        { ...slot, baseUrl: "https://api-inference.huggingface.co/v1" },
+        prompt,
+        topK,
+        noMarkdown
+      );
     default:
       return {
-        error: `Token probabilities are not supported for ${slot.provider}. Use Google Gemini (2.0) or OpenAI.`,
+        error: `Token probabilities are not supported for ${slot.provider}. Use Google Gemini (2.0), OpenAI, or Hugging Face.`,
         provenance: buildProvenance(slot, 0),
       };
   }

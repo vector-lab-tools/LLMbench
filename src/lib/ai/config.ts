@@ -38,6 +38,18 @@ const DEFAULT_MODELS: Record<AIProvider, ModelConfig[]> = {
     { id: "mistral", name: "Mistral", contextWindow: 32000, maxOutputTokens: 4096 },
   ],
   "openai-compatible": [],
+  huggingface: [
+    { id: "meta-llama/Llama-3.3-70B-Instruct", name: "Llama 3.3 70B Instruct", contextWindow: 131072, maxOutputTokens: 4096 },
+    { id: "meta-llama/Llama-3.1-8B-Instruct", name: "Llama 3.1 8B Instruct (logprobs)", contextWindow: 131072, maxOutputTokens: 4096 },
+    { id: "Qwen/Qwen3-32B", name: "Qwen3 32B", contextWindow: 40960, maxOutputTokens: 4096 },
+    { id: "Qwen/Qwen3.5-27B", name: "Qwen3.5 27B", contextWindow: 262144, maxOutputTokens: 4096 },
+    { id: "Qwen/Qwen2.5-7B-Instruct", name: "Qwen2.5 7B Instruct (logprobs)", contextWindow: 32768, maxOutputTokens: 4096 },
+    { id: "Qwen/Qwen2.5-Coder-32B-Instruct", name: "Qwen2.5 Coder 32B (logprobs)", contextWindow: 131072, maxOutputTokens: 4096 },
+    { id: "mistralai/Mixtral-8x7B-Instruct-v0.1", name: "Mixtral 8x7B Instruct (logprobs)", contextWindow: 32768, maxOutputTokens: 4096 },
+    { id: "google/gemma-4-31B-it", name: "Gemma 4 31B", contextWindow: 262144, maxOutputTokens: 4096 },
+    { id: "deepseek-ai/DeepSeek-R1", name: "DeepSeek R1", contextWindow: 163840, maxOutputTokens: 8192 },
+    { id: "deepseek-ai/DeepSeek-V3", name: "DeepSeek V3", contextWindow: 131072, maxOutputTokens: 8192 },
+  ],
 };
 
 // ---- Provider metadata (does not change at runtime) ----
@@ -56,6 +68,7 @@ const PROVIDER_META: Record<AIProvider, Omit<ProviderConfig, "models">> = {
     description: "GPT models from OpenAI",
     requiresApiKey: true,
     baseUrlConfigurable: false,
+    supportsLogprobs: true,
   },
   google: {
     id: "google",
@@ -63,6 +76,7 @@ const PROVIDER_META: Record<AIProvider, Omit<ProviderConfig, "models">> = {
     description: "Gemini models from Google",
     requiresApiKey: true,
     baseUrlConfigurable: false,
+    supportsLogprobs: true,
   },
   ollama: {
     id: "ollama",
@@ -71,6 +85,7 @@ const PROVIDER_META: Record<AIProvider, Omit<ProviderConfig, "models">> = {
     requiresApiKey: false,
     baseUrlConfigurable: true,
     defaultBaseUrl: "http://localhost:11434",
+    supportsLogprobs: false,
   },
   "openai-compatible": {
     id: "openai-compatible",
@@ -78,6 +93,16 @@ const PROVIDER_META: Record<AIProvider, Omit<ProviderConfig, "models">> = {
     description: "Any API compatible with OpenAI format (Together, Groq, etc.)",
     requiresApiKey: true,
     baseUrlConfigurable: true,
+    supportsLogprobs: true,
+  },
+  huggingface: {
+    id: "huggingface",
+    name: "Hugging Face",
+    description: "Open-weights models via Hugging Face Inference API",
+    requiresApiKey: true,
+    baseUrlConfigurable: false,
+    defaultBaseUrl: "https://api-inference.huggingface.co/v1",
+    supportsLogprobs: true,
   },
 };
 

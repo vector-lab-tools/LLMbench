@@ -6,7 +6,8 @@ export type AIProvider =
   | "openai"
   | "google"
   | "ollama"
-  | "openai-compatible";
+  | "openai-compatible"
+  | "huggingface";
 
 export interface ModelConfig {
   id: string;
@@ -23,6 +24,7 @@ export interface ProviderConfig {
   requiresApiKey: boolean;
   baseUrlConfigurable: boolean;
   defaultBaseUrl?: string;
+  supportsLogprobs?: boolean;
 }
 
 // A single provider slot (Panel A or Panel B)

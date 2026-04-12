@@ -4,8 +4,8 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.5.0
-**Date:** 8 April 2026
+**Version:** 2.6.0
+**Date:** 12 April 2026
 **Licence:** MIT
 
 LLMbench is a web-based research tool that enables scholars and researchers to subject AI-generated text to the kind of sustained hermeneutic scrutiny that has long been applied to literary, philosophical, and computational texts. It sends prompts to one or two LLMs, displays their responses in annotatable panels, and provides six analytical modes for empirically investigating model behaviour: dual-panel comparison, stochastic variation, prompt sensitivity, temperature gradients, token probabilities, and cross-model divergence.
@@ -74,7 +74,7 @@ The Probs view adds a navigation strip with analytical tools and three optional 
 - **🟨 Pixels band.** Toggles a **token pixel map** — a bird's-eye grid where each cell is one token, coloured by probability. Five selectable palettes (Heat, Viridis, Magma, Ice, Mono). Cells are clickable and jump the cursor.
 - **🕸️ Net band.** Toggles a **3D probability skyline** — a rotatable WebGL mesh surface (Three.js) where peaks are uncertain tokens. Each vertex is a token position, Y is displaced by entropy, rendered as a translucent surface with wireframe net overlay. Top-5 peaks carry floating labels; click any point to jump the cursor.
 
-Per-panel error states surface actual API messages (rate-limit text, authentication failures) instead of a generic "not supported" message. Logprobs require Google Gemini or OpenAI models.
+Per-panel error states surface actual API messages (rate-limit text, authentication failures) instead of a generic "not supported" message. Logprobs require Google Gemini (2.0), OpenAI, or Hugging Face models (select open-weights models via Fireworks/Together backends). A **logprobs-compatible only** checkbox in Provider Settings greys out providers and models that do not expose token probabilities.
 
 ## Analyse Modes
 
@@ -94,7 +94,7 @@ A dedicated mode for deep single-response logprob analysis. Where Compare mode's
 3. **SentenceEntropyView.** Sentences colour-coded by mean entropy with hover tooltips, surfacing which sentences carry the most uncertainty.
 4. **Uncertainty Deep Dive.** Confidence-split bar, top entropy hotspots with context windows, and a list of the most frequently considered alternatives across all positions.
 
-Requires Google Gemini or OpenAI (logprobs support).
+Requires Google Gemini (2.0), OpenAI, or Hugging Face with a logprobs-supporting model (logprobs support).
 
 ### Cross-Model Divergence
 Quantitative comparison with Jaccard similarity, vocabulary overlap analysis, structural metrics (word count, sentence count, average sentence length, vocabulary diversity), and response-time comparison. Deep Dives include vocabulary partitions (unique to A / shared / unique to B), top-10 word frequency bar charts side by side, unique bigram candidates, and a per-panel sentence breakdown.
@@ -102,7 +102,7 @@ Quantitative comparison with Jaccard similarity, vocabulary overlap analysis, st
 ## General Features
 
 - **Single or dual model.** All modes work with one or two models. Configure just Panel A for single-model analysis or both panels for comparison.
-- **Multi-provider support.** Anthropic (Claude), OpenAI (GPT), Google (Gemini, with logprobs), Ollama (local models), and any OpenAI-compatible endpoint. API keys are stored in the browser, never sent to a server.
+- **Multi-provider support.** Anthropic (Claude), OpenAI (GPT), Google (Gemini), Hugging Face (open-weights models via Inference API), Ollama (local models), and any OpenAI-compatible endpoint (Together, Groq, OpenRouter, etc.). API keys are stored in the browser, never sent to a server.
 - **Streaming results.** Analysis modes stream results progressively as each run completes, with animated ghost cards for pending results. Metrics update live as data arrives.
 - **Deep Dive.** Every result has a collapsible Deep Dive panel with per-run metric tables, pairwise overlap matrices, entropy hotspot lists, confidence distribution bars, vocabulary frequency comparisons, and CSV export.
 - **Default prompt chips.** Every mode shows curated example prompts when the input is empty. Clicking runs immediately; sending an empty input auto-picks a random example.
@@ -169,7 +169,7 @@ src/
       stochastic/                # N-run stochastic variation endpoint
       temperature/               # Temperature gradient endpoint
       sensitivity/               # Prompt sensitivity endpoint
-      logprobs/                  # Token probabilities endpoint (Google/OpenAI)
+      logprobs/                  # Token probabilities endpoint (Google/OpenAI/HuggingFace)
       divergence/                # Quantitative divergence endpoint
     page.tsx                     # Mode-switching shell + Help modal
   components/
@@ -204,7 +204,7 @@ The architecture follows the Manifold Atlas pattern: a thin `page.tsx` manages m
 - **Next.js 16** with React 19 and App Router
 - **CodeMirror 6** for prose display and annotation
 - **Tailwind CSS v3** with an editorial colour palette (ivory, cream, parchment, burgundy, gold)
-- **Vercel AI SDK** with Anthropic, OpenAI, and Google providers
+- **Vercel AI SDK** with Anthropic, OpenAI, Google, and Hugging Face providers
 - **@google/generative-ai** for token-probability (logprobs) support
 - **Three.js** via `@react-three/fiber` and `@react-three/drei` for the 3D probability skyline
 - **jsPDF** for PDF export

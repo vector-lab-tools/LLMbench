@@ -18,7 +18,13 @@ const CUSTOM_PLACEHOLDERS: Record<AIProvider, string> = {
   google: "e.g. gemini-2.0-flash, gemini-1.5-pro-latest",
   ollama: "e.g. llama3.2:latest, codellama, phi3",
   "openai-compatible": "Enter model identifier",
+  huggingface: "e.g. meta-llama/Llama-3.3-70B-Instruct",
 };
+
+/** Models that support logprobs — detected by name containing "(logprobs)" */
+function modelSupportsLogprobs(modelName: string): boolean {
+  return modelName.toLowerCase().includes("(logprobs)");
+}
 
 function useIsLocal(): boolean {
   const [isLocal, setIsLocal] = useState(false);
@@ -33,11 +39,13 @@ function SlotEditor({
   panel,
   slot,
   modelsLoaded,
+  logprobsFilter,
   onUpdate,
 }: {
   panel: "A" | "B";
   slot: ProviderSlot;
   modelsLoaded: boolean;
+  logprobsFilter: boolean;
   onUpdate: (updates: Partial<ProviderSlot>) => void;
 }) {
   const [showKey, setShowKey] = useState(false);
@@ -47,6 +55,13 @@ function SlotEditor({
   const providerConfig = getProviderConfigWithModels(slot.provider);
   const providers = getAllProviders();
   const showCustomModel = slot.model === "custom";
+
+  // Filtered model list when logprobsFilter is active
+  const visibleModels = logprobsFilter
+    ? providerConfig.models.filter(
+        (m) => m.id === "custom" || modelSupportsLogprobs(m.name)
+      )
+    : providerConfig.models;
 
   return (
     <div className="space-y-3">
@@ -76,11 +91,14 @@ function SlotEditor({
         >
           {providers
             .filter((p) => p.id !== "ollama" || isLocal)
-            .map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
+            .map((p) => {
+              const disabled = logprobsFilter && !p.supportsLogprobs;
+              return (
+                <option key={p.id} value={p.id} disabled={disabled}>
+                  {p.name}{disabled ? " (no logprobs)" : ""}
+                </option>
+              );
+            })}
         </select>
 
         {slot.provider === "ollama" && !isLocal && (
@@ -103,7 +121,7 @@ function SlotEditor({
           onChange={(e) => onUpdate({ model: e.target.value, customModelId: "" })}
           className="input-editorial w-full"
         >
-          {providerConfig.models.map((m) => (
+          {visibleModels.map((m) => (
             <option key={m.id} value={m.id}>
               {m.name}
             </option>
@@ -226,6 +244,7 @@ export default function ProviderSettings({
 
   // Load dynamic models from /models.md on mount
   const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [logprobsFilter, setLogprobsFilter] = useState(false);
   useEffect(() => {
     initializeModels().then(() => setModelsLoaded(true));
   }, []);
@@ -240,12 +259,23 @@ export default function ProviderSettings({
           <h2 className="font-display text-display-md font-bold text-foreground">
             Provider Settings
           </h2>
-          <button
-            onClick={() => setShowSettings(false)}
-            className="btn-editorial-ghost p-1.5"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 text-caption text-muted-foreground cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={logprobsFilter}
+                onChange={(e) => setLogprobsFilter(e.target.checked)}
+                className="rounded"
+              />
+              Logprobs-compatible only
+            </label>
+            <button
+              onClick={() => setShowSettings(false)}
+              className="btn-editorial-ghost p-1.5"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Body: two slot editors side by side */}
@@ -255,6 +285,7 @@ export default function ProviderSettings({
               panel="A"
               slot={slots.A}
               modelsLoaded={modelsLoaded}
+              logprobsFilter={logprobsFilter}
               onUpdate={(updates) => updateSlot("A", updates)}
             />
           </div>
@@ -265,6 +296,7 @@ export default function ProviderSettings({
               panel="B"
               slot={slots.B}
               modelsLoaded={modelsLoaded}
+              logprobsFilter={logprobsFilter}
               onUpdate={(updates) => updateSlot("B", updates)}
             />
           </div>

@@ -19,6 +19,7 @@ export interface LoadedModels {
   google: ModelDefinition[];
   ollama: ModelDefinition[];
   "openai-compatible": ModelDefinition[];
+  huggingface: ModelDefinition[];
 }
 
 /** Map section headers in the MD file to provider keys */
@@ -32,6 +33,8 @@ const SECTION_TO_PROVIDER: Record<string, AIProvider> = {
   ollama: "ollama",
   "openai-compatible": "openai-compatible",
   "openai-compatible api": "openai-compatible",
+  "hugging face": "huggingface",
+  "huggingface": "huggingface",
 };
 
 /**
@@ -46,6 +49,7 @@ export function parseModelsMarkdown(content: string): LoadedModels {
     google: [],
     ollama: [],
     "openai-compatible": [],
+    huggingface: [],
   };
 
   let currentProvider: AIProvider | null = null;

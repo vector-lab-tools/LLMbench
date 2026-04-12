@@ -42,6 +42,12 @@ export function validateAIConfig(config: AIRequestConfig): AIValidationResult {
         error: "Invalid OpenAI API key format. Keys should start with 'sk-'",
       };
     }
+    if (provider === "huggingface" && !apiKey.startsWith("hf_")) {
+      return {
+        valid: false,
+        error: "Invalid Hugging Face token format. Tokens should start with 'hf_'",
+      };
+    }
   }
 
   if (provider === "openai-compatible" && baseUrl) {
@@ -86,6 +92,14 @@ function createAIClient(config: AIRequestConfig) {
       // Return a function that uses .chat() instead of default .responses()
       // OpenAI-compatible providers don't support the Responses API
       return (modelId: string) => compat.chat(modelId);
+    }
+
+    case "huggingface": {
+      const hf = createOpenAI({
+        apiKey,
+        baseURL: "https://api-inference.huggingface.co/v1",
+      });
+      return (modelId: string) => hf.chat(modelId);
     }
 
     default:
