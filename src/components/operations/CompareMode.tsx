@@ -462,8 +462,8 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     if (typeof window === "undefined") return [];
     try { return JSON.parse(localStorage.getItem("llmbench-prompt-history") ?? "[]"); } catch { return []; }
   });
-  const [showHistory, setShowHistory] = useState(false);
-  const historyRef = useRef<HTMLDivElement>(null);
+  const [showPromptHistory, setShowPromptHistory] = useState(false);
+  const promptHistoryRef = useRef<HTMLDivElement>(null);
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [showProbsExport, setShowProbsExport] = useState(false);
   const [probsNavIndex, setProbsNavIndex] = useState<number | null>(null);
@@ -505,15 +505,15 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
 
   // Close prompt history dropdown on outside click
   useEffect(() => {
-    if (!showHistory) return;
+    if (!showPromptHistory) return;
     const handler = (e: MouseEvent) => {
-      if (historyRef.current && !historyRef.current.contains(e.target as Node)) {
-        setShowHistory(false);
+      if (promptHistoryRef.current && !promptHistoryRef.current.contains(e.target as Node)) {
+        setShowPromptHistory(false);
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [showHistory]);
+  }, [showPromptHistory]);
 
   useEffect(() => {
     if (!showDiff) return;
@@ -1968,7 +1968,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
         <div className="overflow-hidden">
         <div className="px-3 py-2">
         <div className="flex gap-2 items-end">
-          <div className="relative flex-1" ref={historyRef}>
+          <div className="relative flex-1" ref={promptHistoryRef}>
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
@@ -1985,18 +1985,18 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
             />
             {promptHistory.length > 0 && (
               <button
-                onClick={() => setShowHistory((v) => !v)}
+                onClick={() => setShowPromptHistory((v) => !v)}
                 className="absolute right-2 bottom-2 p-1 rounded text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/30 transition-colors"
                 title="Recent prompts"
               >
                 <Clock className="w-3.5 h-3.5" />
               </button>
             )}
-            {showHistory && (
+            {showPromptHistory && (
               <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-background border border-border rounded-md shadow-lg overflow-hidden">
                 <div className="flex items-center justify-between px-3 py-1.5 border-b border-border">
                   <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Recent prompts</span>
-                  <button onClick={() => setShowHistory(false)} className="text-muted-foreground/50 hover:text-muted-foreground">
+                  <button onClick={() => setShowPromptHistory(false)} className="text-muted-foreground/50 hover:text-muted-foreground">
                     <X className="w-3 h-3" />
                   </button>
                 </div>
@@ -2004,7 +2004,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
                   {promptHistory.map((p, i) => (
                     <button
                       key={i}
-                      onClick={() => { setPrompt(p); setShowHistory(false); }}
+                      onClick={() => { setPrompt(p); setShowPromptHistory(false); }}
                       className="w-full text-left px-3 py-2 text-[11px] text-foreground hover:bg-muted/40 transition-colors border-b border-border/40 last:border-0 truncate"
                       title={p}
                     >

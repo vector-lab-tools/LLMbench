@@ -187,7 +187,7 @@ export default function Home() {
       {/* Help modal */}
       {showHelp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowHelp(false)}>
-          <div className="bg-popover rounded-sm shadow-lg p-6 w-full max-w-lg border border-parchment max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-popover rounded-sm shadow-lg p-6 w-full max-w-2xl border border-parchment max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-display-md font-bold text-foreground">
                 Help
@@ -214,63 +214,85 @@ export default function Home() {
 
               <div>
                 <h3 className="font-semibold mb-1">Compare</h3>
-                <p className="text-muted-foreground mb-1.5">
-                  Side-by-side comparison of two model outputs with inline annotations and export to JSON, text, or PDF.
-                  A <strong>prompt history</strong> clock button in the input area gives quick access to your last 10 prompts.
-                  Four overlay views augment the text in place:
+                <p className="text-muted-foreground mb-2">
+                  The primary close-reading workspace. Enter a prompt in the bar at the bottom, press <strong>Enter</strong> or the send button, and responses appear side by side. A <strong>clock icon</strong> in the prompt bar gives access to your last 10 prompts. After sending, the prompt bar collapses &mdash; click <strong>Prompt</strong> in the bottom strip to expand it again, or press <strong>New</strong> to clear everything and start fresh.
                 </p>
-                <div className="space-y-1 text-muted-foreground pl-3 border-l-2 border-parchment">
-                  <p><strong className="text-foreground">Diff</strong> &mdash; Word-level highlighting of what each model said uniquely, with synchronised scrolling.</p>
-                  <p><strong className="text-foreground">Struct</strong> &mdash; Numbers each sentence in the margin and highlights discourse connectives (however, therefore, moreover&hellip;) in burgundy. Makes argumentative structure visible at a glance.</p>
-                  <p><strong className="text-foreground">Tone</strong> &mdash; Applies Hyland&rsquo;s (2005) metadiscourse model to highlight seven register categories: <span className="text-blue-700">Hedges</span> (might, perhaps), <span className="text-emerald-700">Boosters</span> (clearly, must), <span className="text-orange-700">Limiting</span> (not, never), <span className="text-purple-700">Attitude</span> (important, surprising), <span className="text-amber-700">Intensifiers</span> (very, extremely), <span className="text-rose-700">Self-mentions</span> (I, we, my), and <span className="text-teal-700">Engagement markers</span> (you, consider, note). Click any category chip to read its Hyland definition. Use the eye icon to hide individual categories when the text becomes too colourful. Hover any marked word for its linguistic note and surrounding context.</p>
+                <p className="text-muted-foreground mb-1.5">
+                  <strong className="text-foreground">Annotations.</strong> Select any text in a panel to annotate it. Six types are available: Observation, Question, Metaphor, Pattern, Context, Critique &mdash; each colour-coded with a gutter marker.
+                </p>
+                <p className="text-muted-foreground mb-1.5">
+                  <strong className="text-foreground">Toolbar overlays</strong> &mdash; click once to activate, click again to turn off:
+                </p>
+                <div className="space-y-1.5 text-muted-foreground pl-3 border-l-2 border-parchment mb-2">
+                  <p><strong className="text-foreground">Diff</strong> &mdash; Word-level highlighting of what each model said uniquely. Words present in one panel but not the other are highlighted; synchronised scrolling keeps both panels aligned.</p>
+                  <p><strong className="text-foreground">Struct</strong> &mdash; Numbers each sentence in the margin and highlights discourse connectives (however, therefore, moreover&hellip;) in burgundy. Reveals the argumentative skeleton of each response.</p>
+                  <p><strong className="text-foreground">Tone</strong> &mdash; Applies Hyland&rsquo;s (2005) metadiscourse model across seven register categories: <span className="text-blue-700">Hedges</span> (might, perhaps), <span className="text-emerald-700">Boosters</span> (clearly, must), <span className="text-orange-700">Limiting</span> (not, never), <span className="text-purple-700">Attitude</span> (important, surprising), <span className="text-amber-700">Intensifiers</span> (very, extremely), <span className="text-rose-700">Self-mentions</span> (I, we), and <span className="text-teal-700">Engagement markers</span> (you, consider, note). Click any chip to read its Hyland definition. Hover any marked word for a linguistic note and surrounding context.</p>
+                  <p><strong className="text-foreground">Probs</strong> &mdash; Overlays a token probability heatmap on both panels and fetches logprob data from the model API. See <em>Using Probs</em> below. Requires Google Gemini (2.0), OpenAI, or OpenRouter (GPT-4o/Mini).</p>
                 </div>
+                <p className="text-muted-foreground mb-1">
+                  <strong className="text-foreground">Export.</strong> Save as structured JSON, formatted plain text, or a side-by-side landscape PDF with annotation badges. In Probs view, Export opens a dedicated modal with PDF snapshot, PNG image, and per-token JSON.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-2">Using Probs (token probabilities in Compare)</h3>
+                <p className="text-muted-foreground mb-2">
+                  Click <strong>Probs</strong> in the toolbar to activate the token probability view. LLMbench re-sends your prompt to the model API and asks for logprob data alongside the response. This takes a few seconds. Once loaded, a continuous heatmap overlays both panels: tokens the model was very confident about are uncoloured; uncertainty glides from pale yellow through orange to deep red. Tokens above 70% probability have no highlight.
+                </p>
+                <p className="text-muted-foreground mb-1.5"><strong className="text-foreground">Navigation strip</strong> (below the toolbar when Probs is on):</p>
+                <div className="space-y-1 text-muted-foreground pl-3 border-l-2 border-parchment mb-2">
+                  <p><strong className="text-foreground">← →</strong> step one token at a time; <strong>↑ ↓</strong> jump a visual row; <strong>Home / End</strong> jump to first/last token. Arrow keys work from the keyboard too.</p>
+                  <p><strong className="text-foreground">Uncertain</strong> chip &mdash; jumps to the highest-entropy positions (where the model was most spread across alternatives). Click again to deselect.</p>
+                  <p><strong className="text-foreground">Forks</strong> chip &mdash; jumps to positions where the chosen token had less than 70% probability. Click again to deselect.</p>
+                  <p><strong className="text-foreground">≠ Diverge</strong> chip &mdash; jumps to positions where Panel A and Panel B chose different tokens (requires both panels to have logprob data). Click again to deselect.</p>
+                  <p><strong className="text-foreground">Click a token</strong> to pin its probability distribution in a side panel. <strong>⌘/Ctrl+click</strong> to pin a second token and compare two positions side by side.</p>
+                </div>
+                <p className="text-muted-foreground mb-1.5"><strong className="text-foreground">Visualisation bands</strong> (toggle from the right of the nav strip):</p>
+                <div className="space-y-1 text-muted-foreground pl-3 border-l-2 border-parchment mb-2">
+                  <p><strong className="text-foreground">📈 Graph</strong> &mdash; Entropy curve: an SVG sparkline of per-token entropy across the whole sequence, with A and B overlaid. Click any point to jump to that token.</p>
+                  <p><strong className="text-foreground">🟨 Pixels</strong> &mdash; Token pixel map: a bird's-eye grid where each cell is one token, coloured by probability. Five palettes (Heat, Viridis, Magma, Ice, Mono). Click any cell to jump the cursor. Both panels use the same cell size so counts are directly comparable.</p>
+                  <p><strong className="text-foreground">🕸️ Net</strong> &mdash; 3D probability skyline: a rotatable WebGL mesh where peaks are uncertain tokens. Drag to rotate. Click any point to jump the cursor.</p>
+                </div>
+                <p className="text-muted-foreground">
+                  <button
+                    onClick={() => setShowLogprobsExplainer(true)}
+                    className="text-burgundy hover:underline font-medium"
+                  >
+                    Learn what logprobs actually are and how to interpret them &rarr;
+                  </button>
+                </p>
               </div>
 
               <div>
                 <h3 className="font-semibold mb-1">Analyse Modes</h3>
                 <div className="space-y-2 text-muted-foreground">
                   <p>
-                    <strong className="text-foreground">Stochastic Variation</strong> &mdash; Sends the same prompt multiple times to measure how outputs differ across runs. Reports word count variation, vocabulary diversity, and pairwise overlap.
+                    <strong className="text-foreground">Stochastic Variation</strong> &mdash; Sends the same prompt multiple times to the same model to measure how outputs differ across runs. Reports word count variation, vocabulary diversity, and pairwise word overlap.
                   </p>
                   <p>
-                    <strong className="text-foreground">Temperature Gradient</strong> &mdash; Runs the prompt across temperature settings (0.0&ndash;2.0) to show how sampling temperature affects determinism and creativity.
+                    <strong className="text-foreground">Temperature Gradient</strong> &mdash; Runs the prompt across a fixed sweep of temperatures (0.0&ndash;2.0) to show how sampling randomness affects output determinism and creativity.
                   </p>
                   <p>
-                    <strong className="text-foreground">Prompt Sensitivity</strong> &mdash; Auto-generates micro-variations of your prompt (adding &ldquo;please&rdquo;, rephrasing as a question, etc.) to show how wording affects output.
+                    <strong className="text-foreground">Prompt Sensitivity</strong> &mdash; Auto-generates micro-variations of your prompt (adding &ldquo;please&rdquo;, rephrasing as a question, adding &ldquo;step by step&rdquo;, etc.) and ranks them by divergence from the base output.
                   </p>
                   <p>
-                    <strong className="text-foreground">Token Probabilities</strong> &mdash; Visualises how confident the model was at each token position. A continuous heatmap shades tokens from pale yellow (moderate uncertainty) to deep red (very low probability); tokens above 70% are uncoloured. A navigation strip provides step buttons and three analytical chips: <em>Uncertain</em> (highest entropy positions), <em>Forks</em> (chosen token &lt;70%), and <em>≠&nbsp;Diverge</em> (where A and B chose different tokens) &mdash; click an active chip to deselect it. Click any token to pin its probability distribution; ⌘/Ctrl+click for a second. Requires Google Gemini (2.0), OpenAI, or OpenRouter (GPT-4o/GPT-4o Mini).{" "}
-                    <button
-                      onClick={() => setShowLogprobsExplainer(true)}
-                      className="text-burgundy hover:underline font-medium"
-                    >
-                      Learn more about logprobs &rarr;
-                    </button>
+                    <strong className="text-foreground">Token Probabilities</strong> &mdash; A dedicated single-response logprob analysis mode. Components: TokenHeatmap (click to pin, ⌘/Ctrl+click for two-token comparison), EntropyHistogram (click any bin to list tokens in it), SentenceEntropyView (sentences colour-coded by mean entropy), and a full Uncertainty Deep Dive with hotspots and top alternatives. Requires Google Gemini (2.0), OpenAI, or OpenRouter (GPT-4o/Mini).
                   </p>
                   <p>
-                    <strong className="text-foreground">Cross-Model Divergence</strong> &mdash; Quantitative comparison with Jaccard similarity, vocabulary overlap, sentence-level structural analysis, and top word frequency comparison across both outputs.
+                    <strong className="text-foreground">Cross-Model Divergence</strong> &mdash; Quantitative comparison with Jaccard similarity, vocabulary overlap, sentence-level structural analysis, and top word frequency bars side by side.
                   </p>
                 </div>
-              </div>
-
-              <div>
-                <h3 className="font-semibold mb-1">Deep Dive</h3>
-                <p className="text-muted-foreground">
-                  Every result has a collapsible <strong>Deep Dive</strong> panel. In analysis modes these contain
-                  per-run metrics tables, pairwise overlap matrices, entropy hotspot lists, vocabulary frequency
-                  comparisons, and unique bigram analysis. In Compare mode the Deep Dive shows structural breakdowns
-                  and top-word frequency bars side by side.
-                </p>
               </div>
 
               <div>
                 <h3 className="font-semibold mb-1">Tips</h3>
                 <ul className="text-muted-foreground space-y-1 list-disc pl-4">
                   <li>Hover any <strong>?</strong> badge on a metric for an explanation of what it measures.</li>
-                  <li>In Token Probabilities, click a token to pin its distribution. Use the <em>Forks</em> and <em>Uncertain</em> chips to jump to the most analytically interesting positions.</li>
-                  <li>In the entropy histogram, click any confidence band to see exactly which tokens fell there.</li>
+                  <li>Every result has a collapsible <strong>Deep Dive</strong> with per-run tables, entropy hotspots, vocabulary partitions, and CSV export.</li>
+                  <li>In the entropy histogram, click any confidence band to list exactly which tokens fell there.</li>
+                  <li>The <strong>No Markdown</strong> toggle injects a system instruction telling the model to return plain text &mdash; cleaner for diffs and probability analysis.</li>
+                  <li>Comparisons save automatically to browser storage; reload them via the <strong>History</strong> button.</li>
                   <li>Type <strong>rabbit</strong> on the keyboard for a surprise.</li>
-                  <li>Comparisons save automatically to browser storage; reload them via the History button.</li>
                 </ul>
               </div>
             </div>
