@@ -317,7 +317,7 @@ function NetCanvas({
   const gridColor2 = isDark ? "#0f172a" : "#f1f5f9";
 
   return (
-    <div className="relative flex-1 min-w-0 h-full rounded-sm border border-parchment/40 bg-card/40 overflow-hidden">
+    <div className="relative flex-1 min-w-0 h-full rounded-sm border border-parchment/40 bg-card/40 overflow-hidden" data-net-panel={label}>
       {/* Panel label */}
       <div className="absolute top-1 left-2 z-10 text-[10px] font-medium text-muted-foreground pointer-events-none">
         Panel {label}{" "}
@@ -348,7 +348,7 @@ function NetCanvas({
       <Canvas
         camera={{ position: [6, 6, 10], fov: 42 }}
         dpr={[1, 2]}
-        gl={{ antialias: true, alpha: true }}
+        gl={{ antialias: true, alpha: true, preserveDrawingBuffer: true }}
         style={{ width: "100%", height: "100%" }}
       >
         <color attach="background" args={[isDark ? "#0f172a" : "#f8fafc"]} />

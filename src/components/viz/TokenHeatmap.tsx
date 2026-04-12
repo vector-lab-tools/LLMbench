@@ -76,7 +76,7 @@ function TokenDetailPanel({
     const inAlts = activeToken.topAlternatives.some(a => a.token === siblingToken.token);
     notes.push({
       color: "text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30",
-      text: `↔ Divergence point. The other panel chose "${siblingToken.token.trim()}" here; this panel chose "${activeToken.token.trim()}". ${inAlts ? "Both tokens were in each other's top alternatives — sampling chose differently at t>0, causing the outputs to branch from this position." : "The two panels made different lexical choices here, sending their continuations in different directions."}`,
+      text: `↔ Divergence point. The other model chose "${siblingToken.token.trim()}" here; this model chose "${activeToken.token.trim()}". ${inAlts ? "Both tokens were in each other's top alternatives — sampling chose differently at t>0, causing the outputs to branch from this position." : "The two models made different lexical choices here, sending their continuations in different directions."}`,
     });
   }
 

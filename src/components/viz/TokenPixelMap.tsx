@@ -176,6 +176,7 @@ function PanelGrid({
           onMouseLeave={() => setHover(null)}
           role="img"
           aria-label={`Panel ${label} token probability map`}
+          data-pixel-panel={label}
         >
           {tokens!.map((tok, i) => {
             const col = i % cols;

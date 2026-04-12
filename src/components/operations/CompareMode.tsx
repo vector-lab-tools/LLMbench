@@ -1181,6 +1181,43 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     a.click();
   }, [logprobTokensA, logprobTokensB, getSlotLabel, comparisonName]);
 
+  // Export pixel map SVG as PNG for a given panel
+  const exportPixelMapPNG = useCallback((panel: "A" | "B") => {
+    const svg = document.querySelector<SVGSVGElement>(`[data-pixel-panel="${panel}"]`);
+    if (!svg) return;
+    const serialised = new XMLSerializer().serializeToString(svg);
+    const blob = new Blob([serialised], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const scale = 3; // 3× for high-res output
+      canvas.width = svg.clientWidth * scale;
+      canvas.height = svg.clientHeight * scale;
+      const ctx = canvas.getContext("2d")!;
+      ctx.scale(scale, scale);
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      const a = document.createElement("a");
+      a.download = `${comparisonName.replace(/[^a-z0-9]/gi, "-").toLowerCase()}-pixels-panel-${panel.toLowerCase()}.png`;
+      a.href = canvas.toDataURL("image/png");
+      a.click();
+    };
+    img.src = url;
+  }, [comparisonName]);
+
+  // Export the 3D net WebGL canvas as PNG for a given panel
+  const exportNetPNG = useCallback((panel: "A" | "B") => {
+    const container = document.querySelector<HTMLElement>(`[data-net-panel="${panel}"]`);
+    if (!container) return;
+    const canvas = container.querySelector<HTMLCanvasElement>("canvas");
+    if (!canvas) return;
+    const a = document.createElement("a");
+    a.download = `${comparisonName.replace(/[^a-z0-9]/gi, "-").toLowerCase()}-net-panel-${panel.toLowerCase()}.png`;
+    a.href = canvas.toDataURL("image/png");
+    a.click();
+  }, [comparisonName]);
+
   const handleSave = useCallback(() => {
     const comparison = buildComparison();
     if (!comparisonId) {
@@ -2167,6 +2204,8 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
               </button>
             </div>
             <div className="space-y-2">
+              {/* Heatmap exports */}
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide px-1">Heatmap</p>
               <button
                 onClick={() => { exportProbsPDF(); setShowProbsExport(false); }}
                 className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
@@ -2187,7 +2226,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
                   <FileCode className="w-5 h-5 text-burgundy shrink-0" />
                   <div>
                     <div className="text-body-sm font-medium text-foreground">PNG image</div>
-                    <div className="text-caption text-muted-foreground">High-resolution heatmap image for papers and presentations</div>
+                    <div className="text-caption text-muted-foreground">High-resolution heatmap for papers and presentations</div>
                   </div>
                 </div>
               </button>
@@ -2203,6 +2242,76 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
                   </div>
                 </div>
               </button>
+
+              {/* Pixel map exports */}
+              {showPixelMap && (logprobTokensA || logprobTokensB) && (
+                <>
+                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide px-1 pt-1">Pixel map</p>
+                  {logprobTokensA && (
+                    <button
+                      onClick={() => { exportPixelMapPNG("A"); setShowProbsExport(false); }}
+                      className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileCode className="w-5 h-5 text-burgundy shrink-0" />
+                        <div>
+                          <div className="text-body-sm font-medium text-foreground">Pixel map — Panel A</div>
+                          <div className="text-caption text-muted-foreground">PNG of the token grid for Panel A</div>
+                        </div>
+                      </div>
+                    </button>
+                  )}
+                  {logprobTokensB && (
+                    <button
+                      onClick={() => { exportPixelMapPNG("B"); setShowProbsExport(false); }}
+                      className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileCode className="w-5 h-5 text-burgundy shrink-0" />
+                        <div>
+                          <div className="text-body-sm font-medium text-foreground">Pixel map — Panel B</div>
+                          <div className="text-caption text-muted-foreground">PNG of the token grid for Panel B</div>
+                        </div>
+                      </div>
+                    </button>
+                  )}
+                </>
+              )}
+
+              {/* Net exports */}
+              {showSkyline && (logprobTokensA || logprobTokensB) && (
+                <>
+                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide px-1 pt-1">3D Net</p>
+                  {logprobTokensA && (
+                    <button
+                      onClick={() => { exportNetPNG("A"); setShowProbsExport(false); }}
+                      className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileCode className="w-5 h-5 text-burgundy shrink-0" />
+                        <div>
+                          <div className="text-body-sm font-medium text-foreground">3D net — Panel A</div>
+                          <div className="text-caption text-muted-foreground">PNG capture of the current 3D view for Panel A</div>
+                        </div>
+                      </div>
+                    </button>
+                  )}
+                  {logprobTokensB && (
+                    <button
+                      onClick={() => { exportNetPNG("B"); setShowProbsExport(false); }}
+                      className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileCode className="w-5 h-5 text-burgundy shrink-0" />
+                        <div>
+                          <div className="text-body-sm font-medium text-foreground">3D net — Panel B</div>
+                          <div className="text-caption text-muted-foreground">PNG capture of the current 3D view for Panel B</div>
+                        </div>
+                      </div>
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
