@@ -205,7 +205,7 @@ export default function Home() {
                 <h3 className="font-semibold mb-1">Getting Started</h3>
                 <p className="text-muted-foreground">
                   Click <strong>Settings</strong> to configure one or two LLM providers with API keys.
-                  You can use Google Gemini, OpenAI, Anthropic, Ollama, or any OpenAI-compatible provider.
+                  You can use Google Gemini, OpenAI, Anthropic, OpenRouter, Hugging Face, Ollama, or any OpenAI-compatible provider.
                   Each mode works with one or two models; use the <strong>A / B / Both</strong> selector
                   in analysis modes to choose. If you send an empty prompt, a curated example is chosen automatically &mdash;
                   or pick one from the <strong>Try:</strong> chips below the input.
@@ -216,7 +216,8 @@ export default function Home() {
                 <h3 className="font-semibold mb-1">Compare</h3>
                 <p className="text-muted-foreground mb-1.5">
                   Side-by-side comparison of two model outputs with inline annotations and export to JSON, text, or PDF.
-                  Three overlay views augment the text in place:
+                  A <strong>prompt history</strong> clock button in the input area gives quick access to your last 10 prompts.
+                  Four overlay views augment the text in place:
                 </p>
                 <div className="space-y-1 text-muted-foreground pl-3 border-l-2 border-parchment">
                   <p><strong className="text-foreground">Diff</strong> &mdash; Word-level highlighting of what each model said uniquely, with synchronised scrolling.</p>
@@ -238,7 +239,7 @@ export default function Home() {
                     <strong className="text-foreground">Prompt Sensitivity</strong> &mdash; Auto-generates micro-variations of your prompt (adding &ldquo;please&rdquo;, rephrasing as a question, etc.) to show how wording affects output.
                   </p>
                   <p>
-                    <strong className="text-foreground">Token Probabilities</strong> &mdash; Visualises how confident the model was at each token position. A continuous heatmap shades tokens from pale yellow (moderate uncertainty) to deep red (very low probability); tokens above 70% are uncoloured. A navigation strip provides step buttons and three analytical chips: <em>Uncertain</em> (highest entropy positions), <em>Forks</em> (chosen token &lt;70%), and <em>≠&nbsp;Diverge</em> (where A and B chose different tokens). Click any token to pin its probability distribution; ⌘/Ctrl+click for a second. Requires Google Gemini or OpenAI.{" "}
+                    <strong className="text-foreground">Token Probabilities</strong> &mdash; Visualises how confident the model was at each token position. A continuous heatmap shades tokens from pale yellow (moderate uncertainty) to deep red (very low probability); tokens above 70% are uncoloured. A navigation strip provides step buttons and three analytical chips: <em>Uncertain</em> (highest entropy positions), <em>Forks</em> (chosen token &lt;70%), and <em>≠&nbsp;Diverge</em> (where A and B chose different tokens) &mdash; click an active chip to deselect it. Click any token to pin its probability distribution; ⌘/Ctrl+click for a second. Requires Google Gemini (2.0), OpenAI, or OpenRouter (GPT-4o/GPT-4o Mini).{" "}
                     <button
                       onClick={() => setShowLogprobsExplainer(true)}
                       className="text-burgundy hover:underline font-medium"

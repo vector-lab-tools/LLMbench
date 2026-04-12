@@ -4,7 +4,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.6.0
+**Version:** 2.7.0
 **Date:** 12 April 2026
 **Licence:** MIT
 
@@ -74,7 +74,7 @@ The Probs view adds a navigation strip with analytical tools and three optional 
 - **🟨 Pixels band.** Toggles a **token pixel map** — a bird's-eye grid where each cell is one token, coloured by probability. Five selectable palettes (Heat, Viridis, Magma, Ice, Mono). Cells are clickable and jump the cursor.
 - **🕸️ Net band.** Toggles a **3D probability skyline** — a rotatable WebGL mesh surface (Three.js) where peaks are uncertain tokens. Each vertex is a token position, Y is displaced by entropy, rendered as a translucent surface with wireframe net overlay. Top-5 peaks carry floating labels; click any point to jump the cursor.
 
-Per-panel error states surface actual API messages (rate-limit text, authentication failures) instead of a generic "not supported" message. Logprobs require Google Gemini (2.0), OpenAI, or Hugging Face models (select open-weights models via Fireworks/Together backends). A **logprobs-compatible only** checkbox in Provider Settings greys out providers and models that do not expose token probabilities.
+Per-panel error states surface actual API messages (rate-limit text, authentication failures) instead of a generic "not supported" message. Logprobs require Google Gemini (2.0), OpenAI (direct or via OpenRouter), or Hugging Face (select models via Fireworks/Together backends). A **logprobs-compatible only** checkbox in Provider Settings greys out providers and models that do not expose token probabilities.
 
 ## Analyse Modes
 
@@ -102,7 +102,7 @@ Quantitative comparison with Jaccard similarity, vocabulary overlap analysis, st
 ## General Features
 
 - **Single or dual model.** All modes work with one or two models. Configure just Panel A for single-model analysis or both panels for comparison.
-- **Multi-provider support.** Anthropic (Claude), OpenAI (GPT), Google (Gemini), Hugging Face (open-weights models via Inference API), Ollama (local models), and any OpenAI-compatible endpoint (Together, Groq, OpenRouter, etc.). API keys are stored in the browser, never sent to a server.
+- **Multi-provider support.** Anthropic (Claude), OpenAI (GPT), Google (Gemini), OpenRouter (300+ models via single key), Hugging Face (open-weights models via Inference API), Ollama (local models), and any OpenAI-compatible endpoint. API keys are stored in the browser, never sent to a server.
 - **Streaming results.** Analysis modes stream results progressively as each run completes, with animated ghost cards for pending results. Metrics update live as data arrives.
 - **Deep Dive.** Every result has a collapsible Deep Dive panel with per-run metric tables, pairwise overlap matrices, entropy hotspot lists, confidence distribution bars, vocabulary frequency comparisons, and CSV export.
 - **Default prompt chips.** Every mode shows curated example prompts when the input is empty. Clicking runs immediately; sending an empty input auto-picks a random example.
@@ -215,6 +215,7 @@ The architecture follows the Manifold Atlas pattern: a thin `page.tsx` manages m
 
 - [ ] Cross-panel annotation linking (connecting annotations across Panel A and Panel B)
 - [ ] Embedding-based semantic similarity in divergence mode
+- [x] Prompt history browser (last 10 prompts, localStorage, Compare mode)
 - [ ] Prompt history browser across all modes
 - [ ] Supabase cloud persistence and sharing
 - [ ] Tutorial / cards system for guided analytical exercises
