@@ -123,11 +123,11 @@ const PALETTES: PaletteDef[] = [
 // Approximate number of columns per panel grid. The SVG scales fluidly,
 // but we aim for a roughly square-ish aspect so shape is readable.
 function chooseCols(n: number): number {
-  if (n <= 64) return 16;
-  if (n <= 144) return 24;
-  if (n <= 256) return 32;
-  if (n <= 400) return 40;
-  return Math.ceil(Math.sqrt(n * 1.6));
+  if (n <= 64) return 24;
+  if (n <= 144) return 36;
+  if (n <= 256) return 48;
+  if (n <= 400) return 56;
+  return Math.ceil(Math.sqrt(n * 2.2));
 }
 
 interface PanelGridProps {

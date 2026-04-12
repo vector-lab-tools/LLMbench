@@ -128,6 +128,7 @@ export function EntropyCurve({
         onClick={handleClick}
         role="img"
         aria-label="Entropy curve across token position"
+        data-entropy-curve="true"
       >
         {/* Y-axis grid + labels */}
         {yTicks.map((v) => (

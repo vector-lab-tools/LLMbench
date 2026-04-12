@@ -935,12 +935,21 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
   }, [logprobTokensA, logprobTokensB, lastSentPrompt, getSlotLabel, comparisonName, resultA, resultB]);
 
   const exportProbsPDF = useCallback(async () => {
-    // Build canvas (shared logic with image export)
+    const { default: jsPDF } = await import("jspdf");
+    const pdfW = 297; // A4 landscape mm
+    const pdfH = 210;
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: [pdfW, pdfH] });
+
+    const PAD = 10;
+    const textA = resultA && isPanelOutput(resultA) ? resultA.text : null;
+    const textB = resultB && isPanelOutput(resultB) ? resultB.text : null;
+
+    // ---- Page 1: Heatmap canvas ----
     const canvas = document.createElement("canvas");
     const W = 2400;
     canvas.width = W;
     const ctx = canvas.getContext("2d")!;
-    const PAD = 32;
+    const CPAD = 32;
     const LINE_H = 34;
     const TOKEN_H = 26;
     const FONT = "18px Georgia, serif";
@@ -959,141 +968,227 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
       }
       return lines;
     };
-    const panelW = logprobTokensB ? (W - PAD * 3) / 2 : W - PAD * 2;
+    const panelW = logprobTokensB ? (W - CPAD * 3) / 2 : W - CPAD * 2;
     const linesA = logprobTokensA ? layoutPanel(logprobTokensA, panelW) : [];
     const linesB = logprobTokensB ? layoutPanel(logprobTokensB, panelW) : [];
     const HEADER_H = 60;
-    // Compute deep dive height: legend row + entropy stats + diverge positions
-    const textA = resultA && isPanelOutput(resultA) ? resultA.text : null;
-    const textB = resultB && isPanelOutput(resultB) ? resultB.text : null;
-    const hasDive = !!(textA || textB);
-    const DIVE_H = hasDive ? 220 : 0;
-    const totalH = PAD + HEADER_H + Math.max(linesA.length, linesB.length) * LINE_H + PAD + 32 + DIVE_H;
-    canvas.height = Math.max(totalH, 200);
+    const heatmapH = CPAD + HEADER_H + Math.max(linesA.length, linesB.length) * LINE_H + CPAD + 40;
+    canvas.height = Math.max(heatmapH, 200);
 
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, W, canvas.height);
-
-    // Title + prompt
     ctx.font = HEADER_FONT;
     ctx.fillStyle = "#1e293b";
     ctx.textBaseline = "middle";
-    ctx.fillText("Token Probability Heatmap — LLMbench", PAD, PAD + 8);
+    ctx.fillText("Token Probability Heatmap — LLMbench", CPAD, CPAD + 8);
     ctx.font = META_FONT;
     ctx.fillStyle = "#64748b";
-    const promptPreview = lastSentPrompt.length > 100 ? lastSentPrompt.slice(0, 100) + "…" : lastSentPrompt;
-    ctx.fillText(`"${promptPreview}"  ·  ${new Date().toLocaleString()}`, PAD, PAD + 28);
+    ctx.fillText(`"${lastSentPrompt.slice(0, 120)}${lastSentPrompt.length > 120 ? "…" : ""}"  ·  ${new Date().toLocaleString()}`, CPAD, CPAD + 28);
 
-    const drawPanel = (tokens: TokenLogprob[], lines: { token: TokenLogprob; w: number; x: number }[][], ox: number, label: string) => {
-      ctx.font = HEADER_FONT;
-      ctx.fillStyle = "#64748b";
-      ctx.fillText(label, ox, PAD + HEADER_H - 14);
-      ctx.font = FONT;
-      ctx.textBaseline = "middle";
-      const startY = PAD + HEADER_H;
+    const drawHeatPanel = (tokens: TokenLogprob[], lines: { token: TokenLogprob; w: number; x: number }[][], ox: number, label: string) => {
+      ctx.font = HEADER_FONT; ctx.fillStyle = "#64748b";
+      ctx.fillText(label, ox, CPAD + HEADER_H - 14);
+      ctx.font = FONT; ctx.textBaseline = "middle";
+      const startY = CPAD + HEADER_H;
       for (const [li, line] of lines.entries()) {
         const y = startY + li * LINE_H;
         for (const { token: tok, w, x } of line) {
           const [bg, fg] = probsColorLight(tok.logprob);
-          ctx.fillStyle = bg;
-          ctx.fillRect(ox + x, y, w, TOKEN_H);
-          ctx.fillStyle = fg;
-          ctx.fillText(tok.token, ox + x + 3, y + TOKEN_H / 2);
+          ctx.fillStyle = bg; ctx.fillRect(ox + x, y, w, TOKEN_H);
+          ctx.fillStyle = fg; ctx.fillText(tok.token, ox + x + 3, y + TOKEN_H / 2);
         }
       }
     };
+    if (logprobTokensA) drawHeatPanel(logprobTokensA, linesA, CPAD, getSlotLabel("A"));
+    if (logprobTokensB) drawHeatPanel(logprobTokensB, linesB, CPAD + panelW + CPAD, getSlotLabel("B"));
 
-    if (logprobTokensA) drawPanel(logprobTokensA, linesA, PAD, getSlotLabel("A"));
-    if (logprobTokensB) drawPanel(logprobTokensB, linesB, PAD + panelW + PAD, getSlotLabel("B"));
-
-    // Legend — gradient bar matching the heatmap
-    const ly = canvas.height - PAD + 6;
-    ctx.font = META_FONT;
-    ctx.fillStyle = "#64748b";
-    ctx.fillText("Confidence:", PAD, ly);
-    const gradW = 200;
-    const gradH = 14;
-    const gx = PAD + 90;
+    // Gradient legend
+    const ly = canvas.height - CPAD + 4;
+    ctx.font = META_FONT; ctx.fillStyle = "#64748b"; ctx.fillText("Confidence:", CPAD, ly);
+    const gx = CPAD + 90; const gradW = 200;
     for (let px = 0; px < gradW; px++) {
       const t = px / gradW;
-      const hue = Math.round(52 - 47 * t);
-      const sat = Math.round(88 + 7 * t);
-      const lit = Math.round(92 - 50 * t);
-      const alpha = (0.18 + 0.82 * t).toFixed(2);
-      ctx.fillStyle = `hsla(${hue},${sat}%,${lit}%,${alpha})`;
-      ctx.fillRect(gx + px, ly - 7, 1, gradH);
+      ctx.fillStyle = `hsla(${Math.round(52 - 47 * t)},${Math.round(88 + 7 * t)}%,${Math.round(92 - 50 * t)}%,${(0.18 + 0.82 * t).toFixed(2)})`;
+      ctx.fillRect(gx + px, ly - 7, 1, 14);
     }
     ctx.fillStyle = "#64748b";
-    ctx.fillText("high", gx - 30, ly);
-    ctx.fillText("low", gx + gradW + 6, ly);
-    ctx.fillText("no colour = ≥70%", gx + gradW + 40, ly);
+    ctx.fillText("high", gx - 30, ly); ctx.fillText("low", gx + gradW + 6, ly); ctx.fillText("no colour = ≥70%", gx + gradW + 40, ly);
 
-    // Deep dive section
-    if (hasDive) {
-      let dy = ly + 28;
-      ctx.font = HEADER_FONT;
-      ctx.fillStyle = "#1e293b";
-      ctx.fillText("Deep Dive", PAD, dy);
-      dy += 22;
-      ctx.font = META_FONT;
-      ctx.fillStyle = "#334155";
+    const imgData = canvas.toDataURL("image/png");
+    const aspect = canvas.height / canvas.width;
+    doc.addImage(imgData, "PNG", 0, 0, pdfW, pdfW * aspect);
 
-      const renderStats = (tokens: TokenLogprob[], label: string, ox: number) => {
-        const entropies = tokens.map(t => computeTokenEntropy(t));
-        const mean = entropies.reduce((a, b) => a + b, 0) / entropies.length;
-        const forks = tokens.filter(t => Math.exp(t.logprob) < 0.70).length;
-        const maxE = Math.max(...entropies);
-        const maxIdx = entropies.indexOf(maxE);
-        ctx.fillStyle = "#64748b";
-        ctx.fillText(`${label}:`, ox, dy);
-        ctx.fillStyle = "#334155";
-        ctx.fillText(`${tokens.length} tokens · Mean entropy: ${mean.toFixed(2)} bits · Forks (<70%): ${forks} · Max entropy: ${maxE.toFixed(2)} at "${tokens[maxIdx]?.token}"`, ox + 60, dy);
+    // ---- Page 2: Full text ----
+    if (textA || textB) {
+      doc.addPage();
+      let y = PAD + 6;
+      doc.setFontSize(11); doc.setTextColor(30, 41, 59);
+      doc.text("Full Responses", PAD, y); y += 7;
+      doc.setFontSize(8); doc.setTextColor(100, 116, 139);
+      doc.text(`Prompt: "${lastSentPrompt.slice(0, 200)}${lastSentPrompt.length > 200 ? "…" : ""}"`, PAD, y); y += 8;
+
+      const colW = logprobTokensB ? (pdfW - PAD * 3) / 2 : pdfW - PAD * 2;
+      const LINE_PX = 4.5;
+
+      const wrapText = (text: string, maxW: number): string[] => {
+        const words = text.split(/\s+/);
+        const lines: string[] = [];
+        let line = "";
+        doc.setFontSize(7.5);
+        for (const word of words) {
+          const test = line ? `${line} ${word}` : word;
+          if (doc.getTextWidth(test) > maxW && line) { lines.push(line); line = word; }
+          else line = test;
+        }
+        if (line) lines.push(line);
+        return lines;
       };
 
-      if (logprobTokensA) { renderStats(logprobTokensA, getSlotLabel("A"), PAD); dy += 20; }
-      if (logprobTokensB) { renderStats(logprobTokensB, getSlotLabel("B"), PAD); dy += 20; }
+      const renderTextPanel = (text: string, label: string, ox: number) => {
+        doc.setFontSize(8.5); doc.setTextColor(100, 116, 139);
+        doc.text(label, ox, y);
+        doc.setFontSize(7.5); doc.setTextColor(51, 65, 85);
+        const wrapped = wrapText(text, colW - 2);
+        let py = y + 5;
+        for (const line of wrapped) {
+          if (py > pdfH - PAD) { doc.addPage(); py = PAD + 6; }
+          doc.text(line, ox, py); py += LINE_PX;
+        }
+        return py;
+      };
 
       if (textA && textB) {
-        const overlap = computeWordOverlap(textA, textB);
-        const mA = computeTextMetrics(textA);
-        const mB = computeTextMetrics(textB);
-        dy += 6;
-        ctx.fillStyle = "#64748b";
-        ctx.fillText(`Jaccard: ${(overlap.jaccardSimilarity * 100).toFixed(1)}% · Word overlap: ${overlap.overlapPercentage.toFixed(1)}% · Shared: ${overlap.shared.length} · Unique A: ${overlap.uniqueA.length} · Unique B: ${overlap.uniqueB.length}`, PAD, dy);
-        dy += 18;
-        ctx.fillText(`Panel A: ${mA.wordCount} words, ${mA.sentenceCount} sentences, ${mA.avgSentenceLength.toFixed(0)} avg/sent, ${(mA.vocabularyDiversity * 100).toFixed(0)}% vocab diversity`, PAD, dy);
-        dy += 18;
-        ctx.fillText(`Panel B: ${mB.wordCount} words, ${mB.sentenceCount} sentences, ${mB.avgSentenceLength.toFixed(0)} avg/sent, ${(mB.vocabularyDiversity * 100).toFixed(0)}% vocab diversity`, PAD, dy);
-      }
-
-      // Divergence positions (top 10)
-      if (logprobTokensA && logprobTokensB) {
-        dy += 24;
-        const minLen = Math.min(logprobTokensA.length, logprobTokensB.length);
-        const diverge: string[] = [];
-        for (let i = 0; i < minLen && diverge.length < 10; i++) {
-          if (logprobTokensA[i].token !== logprobTokensB[i].token) {
-            diverge.push(`${i + 1}: "${logprobTokensA[i].token}" vs "${logprobTokensB[i].token}"`);
-          }
+        doc.setFontSize(8.5); doc.setTextColor(100, 116, 139);
+        doc.text(getSlotLabel("A"), PAD, y);
+        doc.text(getSlotLabel("B"), PAD + colW + PAD, y);
+        y += 5;
+        doc.setFontSize(7.5); doc.setTextColor(51, 65, 85);
+        const wrappedA = wrapText(textA, colW - 2);
+        const wrappedB = wrapText(textB, colW - 2);
+        let pyA = y, pyB = y;
+        const maxLines = Math.max(wrappedA.length, wrappedB.length);
+        for (let i = 0; i < maxLines; i++) {
+          if (Math.max(pyA, pyB) > pdfH - PAD) { doc.addPage(); pyA = PAD; pyB = PAD; }
+          if (wrappedA[i]) { doc.text(wrappedA[i], PAD, pyA); pyA += LINE_PX; }
+          if (wrappedB[i]) { doc.text(wrappedB[i], PAD + colW + PAD, pyB); pyB += LINE_PX; }
         }
-        if (diverge.length > 0) {
-          ctx.fillStyle = "#64748b";
-          ctx.fillText(`Token divergences (first ${diverge.length}): ${diverge.join("  ·  ")}`, PAD, dy);
+      } else if (textA) {
+        renderTextPanel(textA, getSlotLabel("A"), PAD);
+      } else if (textB) {
+        renderTextPanel(textB, getSlotLabel("B"), PAD);
+      }
+    }
+
+    // ---- Page 3: Deep dive stats ----
+    doc.addPage();
+    let dy = PAD + 6;
+    doc.setFontSize(11); doc.setTextColor(30, 41, 59);
+    doc.text("Deep Dive", PAD, dy); dy += 8;
+    doc.setFontSize(8); doc.setTextColor(51, 65, 85);
+
+    const addLine = (text: string, indent = 0) => {
+      if (dy > pdfH - PAD) { doc.addPage(); dy = PAD + 6; }
+      doc.text(text, PAD + indent, dy); dy += 5;
+    };
+
+    // Entropy stats per panel
+    const renderEntropy = (tokens: TokenLogprob[], label: string) => {
+      const entropies = tokens.map(t => computeTokenEntropy(t));
+      const mean = entropies.reduce((a, b) => a + b, 0) / entropies.length;
+      const forks = tokens.filter(t => Math.exp(t.logprob) < 0.70).length;
+      const maxE = Math.max(...entropies);
+      const maxIdx = entropies.indexOf(maxE);
+      doc.setFontSize(8.5); doc.setTextColor(100, 116, 139); addLine(label);
+      doc.setFontSize(7.5); doc.setTextColor(51, 65, 85);
+      addLine(`Tokens: ${tokens.length}  ·  Mean entropy: ${mean.toFixed(3)} bits  ·  Forks (<70%): ${forks} (${((forks / tokens.length) * 100).toFixed(1)}%)`, 3);
+      addLine(`Max entropy: ${maxE.toFixed(3)} bits at position ${maxIdx} — "${tokens[maxIdx]?.token?.trim() || "(space)"}"`, 3);
+      // Top 5 uncertain tokens
+      const top5 = entropies.map((e, i) => ({ e, i, tok: tokens[i].token })).sort((a, b) => b.e - a.e).slice(0, 5);
+      addLine(`Top uncertain: ${top5.map(p => `"${p.tok.trim() || "·"}" (${p.e.toFixed(2)}b)`).join("  ·  ")}`, 3);
+      dy += 2;
+    };
+
+    if (logprobTokensA) renderEntropy(logprobTokensA, getSlotLabel("A"));
+    if (logprobTokensB) renderEntropy(logprobTokensB, getSlotLabel("B"));
+
+    // Overlap/structural metrics
+    if (textA && textB) {
+      dy += 3;
+      const overlap = computeWordOverlap(textA, textB);
+      const mA = computeTextMetrics(textA);
+      const mB = computeTextMetrics(textB);
+      doc.setFontSize(8.5); doc.setTextColor(100, 116, 139); addLine("Comparative metrics");
+      doc.setFontSize(7.5); doc.setTextColor(51, 65, 85);
+      addLine(`Jaccard similarity: ${(overlap.jaccardSimilarity * 100).toFixed(1)}%  ·  Word overlap: ${overlap.overlapPercentage.toFixed(1)}%  ·  Shared words: ${overlap.shared.length}`, 3);
+      addLine(`Unique to A: ${overlap.uniqueA.length} words  ·  Unique to B: ${overlap.uniqueB.length} words`, 3);
+      addLine(`${getSlotLabel("A")}: ${mA.wordCount} words, ${mA.sentenceCount} sentences, avg ${mA.avgSentenceLength.toFixed(0)} words/sent, ${(mA.vocabularyDiversity * 100).toFixed(0)}% vocab diversity`, 3);
+      addLine(`${getSlotLabel("B")}: ${mB.wordCount} words, ${mB.sentenceCount} sentences, avg ${mB.avgSentenceLength.toFixed(0)} words/sent, ${(mB.vocabularyDiversity * 100).toFixed(0)}% vocab diversity`, 3);
+    }
+
+    // Divergence positions
+    if (logprobTokensA && logprobTokensB) {
+      dy += 3;
+      const minLen = Math.min(logprobTokensA.length, logprobTokensB.length);
+      const divergeItems: string[] = [];
+      for (let i = 0; i < minLen && divergeItems.length < 20; i++) {
+        if (logprobTokensA[i].token !== logprobTokensB[i].token) {
+          divergeItems.push(`pos ${i + 1}: "${logprobTokensA[i].token.trim()}" vs "${logprobTokensB[i].token.trim()}"`);
+        }
+      }
+      if (divergeItems.length > 0) {
+        doc.setFontSize(8.5); doc.setTextColor(100, 116, 139); addLine(`Token divergences (${divergeItems.length} shown)`);
+        doc.setFontSize(7.5); doc.setTextColor(51, 65, 85);
+        for (const d of divergeItems) addLine(d, 3);
+      }
+    }
+
+    // Helper: serialise an SVG element to a PNG data URL via canvas
+    const svgToPngDataUrl = (svg: SVGSVGElement, w: number, h: number): Promise<string> =>
+      new Promise((resolve) => {
+        const serialised = new XMLSerializer().serializeToString(svg);
+        const blob = new Blob([serialised], { type: "image/svg+xml" });
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+          const c = document.createElement("canvas");
+          c.width = w; c.height = h;
+          c.getContext("2d")!.drawImage(img, 0, 0, w, h);
+          URL.revokeObjectURL(url);
+          resolve(c.toDataURL("image/png"));
+        };
+        img.src = url;
+      });
+
+    // ---- Page: Entropy curve (if visible) ----
+    if (showEntropyCurve) {
+      const curveSvg = document.querySelector<SVGSVGElement>("[data-entropy-curve]");
+      if (curveSvg) {
+        const pngUrl = await svgToPngDataUrl(curveSvg, curveSvg.clientWidth * 2, curveSvg.clientHeight * 2);
+        doc.addPage();
+        doc.setFontSize(11); doc.setTextColor(30, 41, 59);
+        doc.text("Entropy Curve", PAD, PAD + 6);
+        const imgH = (curveSvg.clientHeight / curveSvg.clientWidth) * (pdfW - PAD * 2);
+        doc.addImage(pngUrl, "PNG", PAD, PAD + 12, pdfW - PAD * 2, imgH);
+      }
+    }
+
+    // ---- Pages: Pixel map per panel (if visible) ----
+    if (showPixelMap) {
+      for (const panel of (["A", "B"] as const)) {
+        const pixSvg = document.querySelector<SVGSVGElement>(`[data-pixel-panel="${panel}"]`);
+        if (pixSvg && pixSvg.clientWidth > 0) {
+          const pngUrl = await svgToPngDataUrl(pixSvg, pixSvg.clientWidth * 3, pixSvg.clientHeight * 3);
+          doc.addPage();
+          doc.setFontSize(11); doc.setTextColor(30, 41, 59);
+          doc.text(`Token Pixel Map — Panel ${panel}`, PAD, PAD + 6);
+          const imgH = (pixSvg.clientHeight / pixSvg.clientWidth) * (pdfW - PAD * 2);
+          doc.addImage(pngUrl, "PNG", PAD, PAD + 12, pdfW - PAD * 2, imgH);
         }
       }
     }
 
-    // Embed canvas into PDF via jsPDF
-    const imgData = canvas.toDataURL("image/png");
-    const { default: jsPDF } = await import("jspdf");
-    // A4 landscape or auto-size to fit
-    const aspect = canvas.height / canvas.width;
-    const pdfW = 297; // mm A4 landscape width
-    const pdfH = Math.max(210, pdfW * aspect);
-    const doc = new jsPDF({ orientation: pdfW > pdfH ? "landscape" : "portrait", unit: "mm", format: [pdfW, pdfH] });
-    doc.addImage(imgData, "PNG", 0, 0, pdfW, pdfW * aspect);
     doc.save(`${comparisonName.replace(/[^a-z0-9]/gi, "-").toLowerCase()}-probs.pdf`);
-  }, [logprobTokensA, logprobTokensB, lastSentPrompt, getSlotLabel, comparisonName]);
+  }, [logprobTokensA, logprobTokensB, lastSentPrompt, getSlotLabel, comparisonName, resultA, resultB, probsColorLight, showEntropyCurve, showPixelMap]);
 
   const exportProbsImage = useCallback(() => {
     const canvas = document.createElement("canvas");
@@ -2241,7 +2336,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
                   <FileType className="w-5 h-5 text-burgundy shrink-0" />
                   <div>
                     <div className="text-body-sm font-medium text-foreground">PDF snapshot</div>
-                    <div className="text-caption text-muted-foreground">Heatmap with confidence gradient, prompt, and panel labels</div>
+                    <div className="text-caption text-muted-foreground">Multi-page: heatmap, full text, deep dive stats, entropy curve and pixel maps if open</div>
                   </div>
                 </div>
               </button>
