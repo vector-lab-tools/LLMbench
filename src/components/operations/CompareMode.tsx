@@ -574,16 +574,16 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
       : probsDivergePositions;
     if (positions.length === 0) return;
     if (probsChipMode === mode) {
-      // Cycle to next
-      const next = (probsChipCursor + 1) % positions.length;
-      setProbsChipCursor(next);
-      setProbsNavIndex(positions[next]);
+      // Click active chip → turn it off
+      setProbsChipMode(null);
+      setProbsChipCursor(0);
+      setProbsNavIndex(null);
     } else {
       setProbsChipMode(mode);
       setProbsChipCursor(0);
       setProbsNavIndex(positions[0]);
     }
-  }, [probsChipMode, probsChipCursor, probsUncertainPositions, probsForkPositions, probsDivergePositions]);
+  }, [probsChipMode, probsUncertainPositions, probsForkPositions, probsDivergePositions]);
 
   const handleProbsStep = useCallback((delta: number) => {
     const current = probsNavIndex ?? 0;
@@ -1645,9 +1645,9 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
                 ? "bg-burgundy/90 text-white"
                 : "btn-editorial-ghost"
             }`}
-            title={`${probsUncertainPositions.length} positions sorted by entropy — click to cycle`}
+            title={probsChipMode === "uncertain" ? "Click to deselect" : `${probsUncertainPositions.length} positions sorted by entropy`}
           >
-            Uncertain {probsChipMode === "uncertain" ? `(${probsChipCursor + 1}/${probsUncertainPositions.length})` : ""}
+            Uncertain {probsChipMode === "uncertain" ? `(${probsChipCursor + 1}/${probsUncertainPositions.length})` : `(${probsUncertainPositions.length})`}
           </button>
 
           {/* Chip: Forks */}
@@ -1659,7 +1659,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
                 ? "bg-burgundy/90 text-white"
                 : "btn-editorial-ghost"
             }`}
-            title={`${probsForkPositions.length} positions where chosen token < 70% probability — click to cycle`}
+            title={probsChipMode === "forks" ? "Click to deselect" : `${probsForkPositions.length} positions where chosen token < 70% probability`}
           >
             Forks {probsChipMode === "forks" ? `(${probsChipCursor + 1}/${probsForkPositions.length})` : `(${probsForkPositions.length})`}
           </button>
@@ -1674,7 +1674,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
                   ? "bg-burgundy/90 text-white"
                   : "btn-editorial-ghost"
               }`}
-              title={`${probsDivergePositions.length} positions where A and B chose different tokens — click to cycle`}
+              title={probsChipMode === "diverge" ? "Click to deselect" : `${probsDivergePositions.length} positions where A and B chose different tokens`}
             >
               ≠ Diverge {probsChipMode === "diverge" ? `(${probsChipCursor + 1}/${probsDivergePositions.length})` : `(${probsDivergePositions.length})`}
             </button>
