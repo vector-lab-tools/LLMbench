@@ -133,6 +133,7 @@ function chooseCols(n: number): number {
 interface PanelGridProps {
   label: "A" | "B";
   tokens: TokenLogprob[] | null;
+  cols: number;
   palette: PaletteDef;
   cursorIndex?: number | null;
   onCursorChange?: (i: number) => void;
@@ -141,13 +142,13 @@ interface PanelGridProps {
 function PanelGrid({
   label,
   tokens,
+  cols,
   palette,
   cursorIndex,
   onCursorChange,
 }: PanelGridProps) {
   const [hover, setHover] = useState<number | null>(null);
   const n = tokens?.length ?? 0;
-  const cols = chooseCols(Math.max(n, 1));
   const rows = Math.max(1, Math.ceil(n / cols));
   const cell = 14; // px in viewBox coords
   const gap = 1.5;
@@ -250,6 +251,12 @@ export function TokenPixelMap({
     [paletteId]
   );
 
+  // Use the same column count for both panels so cells are the same visual size
+  const sharedCols = useMemo(() => {
+    const maxN = Math.max(tokensA?.length ?? 0, tokensB?.length ?? 0, 1);
+    return chooseCols(maxN);
+  }, [tokensA, tokensB]);
+
   return (
     <div
       className={`w-full px-3 py-2 border-y border-parchment/40 ${
@@ -300,6 +307,7 @@ export function TokenPixelMap({
         <PanelGrid
           label="A"
           tokens={tokensA}
+          cols={sharedCols}
           palette={palette}
           cursorIndex={cursorIndex}
           onCursorChange={onCursorChange}
@@ -307,6 +315,7 @@ export function TokenPixelMap({
         <PanelGrid
           label="B"
           tokens={tokensB}
+          cols={sharedCols}
           palette={palette}
           cursorIndex={cursorIndex}
           onCursorChange={onCursorChange}
