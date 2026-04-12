@@ -463,7 +463,9 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     try { return JSON.parse(localStorage.getItem("llmbench-prompt-history") ?? "[]"); } catch { return []; }
   });
   const [showPromptHistory, setShowPromptHistory] = useState(false);
+  const [promptHistoryPos, setPromptHistoryPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const promptHistoryRef = useRef<HTMLDivElement>(null);
+  const promptHistoryBtnRef = useRef<HTMLButtonElement>(null);
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [showProbsExport, setShowProbsExport] = useState(false);
   const [probsNavIndex, setProbsNavIndex] = useState<number | null>(null);
@@ -507,7 +509,10 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
   useEffect(() => {
     if (!showPromptHistory) return;
     const handler = (e: MouseEvent) => {
-      if (promptHistoryRef.current && !promptHistoryRef.current.contains(e.target as Node)) {
+      if (
+        promptHistoryRef.current && !promptHistoryRef.current.contains(e.target as Node) &&
+        promptHistoryBtnRef.current && !promptHistoryBtnRef.current.contains(e.target as Node)
+      ) {
         setShowPromptHistory(false);
       }
     };
@@ -2022,34 +2027,23 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
             />
             {promptHistory.length > 0 && (
               <button
-                onClick={() => setShowPromptHistory((v) => !v)}
+                ref={promptHistoryBtnRef}
+                onClick={() => {
+                  if (showPromptHistory) {
+                    setShowPromptHistory(false);
+                  } else {
+                    const rect = promptHistoryBtnRef.current?.getBoundingClientRect();
+                    if (rect) {
+                      setPromptHistoryPos({ top: rect.top, left: rect.left, width: Math.max(320, rect.width) });
+                    }
+                    setShowPromptHistory(true);
+                  }
+                }}
                 className="absolute right-2 bottom-2 p-1 rounded text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/30 transition-colors"
                 title="Recent prompts"
               >
                 <Clock className="w-3.5 h-3.5" />
               </button>
-            )}
-            {showPromptHistory && (
-              <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-background border border-border rounded-md shadow-lg overflow-hidden">
-                <div className="flex items-center justify-between px-3 py-1.5 border-b border-border">
-                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Recent prompts</span>
-                  <button onClick={() => setShowPromptHistory(false)} className="text-muted-foreground/50 hover:text-muted-foreground">
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-                <div className="max-h-64 overflow-y-auto">
-                  {promptHistory.map((p, i) => (
-                    <button
-                      key={i}
-                      onClick={() => { setPrompt(p); setShowPromptHistory(false); }}
-                      className="w-full text-left px-3 py-2 text-[11px] text-foreground hover:bg-muted/40 transition-colors border-b border-border/40 last:border-0 truncate"
-                      title={p}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              </div>
             )}
           </div>
           {/* Temperature control */}
@@ -2186,6 +2180,39 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Prompt history dropdown — fixed position to escape overflow:hidden parents */}
+      {showPromptHistory && promptHistoryPos && (
+        <div
+          ref={promptHistoryRef}
+          className="fixed z-[200] bg-background border border-border rounded-md shadow-xl overflow-hidden"
+          style={{
+            bottom: window.innerHeight - promptHistoryPos.top + 8,
+            left: promptHistoryPos.left,
+            width: 360,
+            maxHeight: 300,
+          }}
+        >
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-border">
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Recent prompts</span>
+            <button onClick={() => setShowPromptHistory(false)} className="text-muted-foreground/50 hover:text-muted-foreground">
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+          <div className="overflow-y-auto" style={{ maxHeight: 252 }}>
+            {promptHistory.map((p, i) => (
+              <button
+                key={i}
+                onClick={() => { setPrompt(p); setShowPromptHistory(false); }}
+                className="w-full text-left px-3 py-2 text-[11px] text-foreground hover:bg-muted/40 transition-colors border-b border-border/40 last:border-0"
+                title={p}
+              >
+                <span className="block truncate">{p}</span>
+              </button>
+            ))}
           </div>
         </div>
       )}

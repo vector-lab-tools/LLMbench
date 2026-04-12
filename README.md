@@ -4,7 +4,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.7.0
+**Version:** 2.7.1
 **Date:** 12 April 2026
 **Licence:** MIT
 
@@ -66,13 +66,13 @@ Compare mode supports four mutually exclusive text overlays, toggled from the to
 The Probs view adds a navigation strip with analytical tools and three optional visualisation bands:
 
 - **Step navigation.** `←` / `→` buttons (and arrow keys) walk through every token position; both panels stay in sync. `↑` / `↓` jump a visual row in the heatmap; `Home` / `End` jump to the first / last token.
-- **Uncertain chip.** Cycles positions sorted by highest entropy.
-- **Forks chip.** Cycles positions where the chosen token had < 70% probability.
-- **≠ Diverge chip.** Cycles positions where Panel A and Panel B chose different tokens (requires both panels).
+- **Uncertain chip.** Jumps to positions sorted by highest entropy. Click again to deselect.
+- **Forks chip.** Jumps to positions where the chosen token had < 70% probability. Click again to deselect.
+- **≠ Diverge chip.** Jumps to positions where Panel A and Panel B chose different tokens (requires both panels). Click again to deselect.
 - **Click + ⌘/Ctrl-click.** Click any token to pin a probability distribution bar chart in a side panel; ⌘/Ctrl-click to pin a second token and compare two positions side by side.
 - **📈 Graph band.** Toggles an **entropy curve** — an SVG sparkline of per-token entropy across the sequence, with A and B overlaid, divergence markers, and click-to-jump cursor tracking.
-- **🟨 Pixels band.** Toggles a **token pixel map** — a bird's-eye grid where each cell is one token, coloured by probability. Five selectable palettes (Heat, Viridis, Magma, Ice, Mono). Cells are clickable and jump the cursor.
-- **🕸️ Net band.** Toggles a **3D probability skyline** — a rotatable WebGL mesh surface (Three.js) where peaks are uncertain tokens. Each vertex is a token position, Y is displaced by entropy, rendered as a translucent surface with wireframe net overlay. Top-5 peaks carry floating labels; click any point to jump the cursor.
+- **🟨 Pixels band.** Toggles a **token pixel map** — a bird's-eye grid where each cell is one token, coloured by probability. Five selectable palettes (Heat, Viridis, Magma, Ice, Mono). Cells are clickable and jump the cursor. Both panels use the same cell size for direct comparison. Exportable per-panel as high-resolution PNG.
+- **🕸️ Net band.** Toggles a **3D probability skyline** — a rotatable WebGL mesh surface (Three.js) where peaks are uncertain tokens. Each vertex is a token position, Y is displaced by entropy, rendered as a translucent surface with wireframe net overlay. Top-5 peaks carry floating labels; click any point to jump the cursor. Exportable per-panel as PNG at any rotation angle.
 
 Per-panel error states surface actual API messages (rate-limit text, authentication failures) instead of a generic "not supported" message. Logprobs require Google Gemini (2.0), OpenAI (direct or via OpenRouter), or Hugging Face (select models via Fireworks/Together backends). A **logprobs-compatible only** checkbox in Provider Settings greys out providers and models that do not expose token probabilities.
 
