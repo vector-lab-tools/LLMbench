@@ -348,7 +348,7 @@ function AnnotatedPanelDisplay({
           ) : (
             <p className="text-caption text-muted-foreground text-center">
               No token probability data for Panel {panel}.<br />
-              Logprobs require Gemini or OpenAI models.
+              Logprobs require Gemini, OpenAI, OpenRouter, or Hugging Face models.
             </p>
           )}
         </div>
@@ -782,6 +782,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
         }),
       });
       const data = await res.json();
+      console.log("[LLMbench] logprobs response:", JSON.stringify(data, null, 2));
       if (data.A?.tokens?.length) {
         setLogprobTokensA(data.A.tokens);
       } else if (data.A?.error) {
@@ -1519,7 +1520,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
         {/* Probs view button */}
         {(() => {
           const probsActive = viewMode === "probs";
-          const logprobCapable = (p: string) => p === "google" || p === "openai";
+          const logprobCapable = (p: string) => p === "google" || p === "openai" || p === "openrouter" || p === "openai-compatible" || p === "huggingface";
           const aCapable = isSlotConfigured("A") && logprobCapable(slots.A.provider);
           const bCapable = isSlotConfigured("B") && logprobCapable(slots.B.provider);
           const anyCapable = aCapable || bCapable;
