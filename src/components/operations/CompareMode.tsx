@@ -1761,7 +1761,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
       {/* Dual panels */}
       <div className="flex flex-col md:flex-row flex-1">
         {(() => {
-          const isLogprobCapable = (p: string) => p === "google" || p === "openai";
+          const isLogprobCapable = (p: string) => p === "google" || p === "openai" || p === "openrouter" || p === "openai-compatible" || p === "huggingface";
           const aCapable = isSlotConfigured("A") && isLogprobCapable(slots.A.provider);
           const bCapable = isSlotConfigured("B") && isLogprobCapable(slots.B.provider);
           return (
