@@ -93,6 +93,7 @@ const PROVIDER_META: Record<AIProvider, Omit<ProviderConfig, "models">> = {
     description: "Any API compatible with OpenAI format (Together, Groq, etc.)",
     requiresApiKey: true,
     baseUrlConfigurable: true,
+    defaultBaseUrl: "https://openrouter.ai/api/v1",
     supportsLogprobs: true,
   },
   huggingface: {
@@ -101,7 +102,7 @@ const PROVIDER_META: Record<AIProvider, Omit<ProviderConfig, "models">> = {
     description: "Open-weights models via Hugging Face Inference API",
     requiresApiKey: true,
     baseUrlConfigurable: false,
-    defaultBaseUrl: "https://api-inference.huggingface.co/v1",
+    defaultBaseUrl: "https://router.huggingface.co/v1",
     supportsLogprobs: true,
   },
 };

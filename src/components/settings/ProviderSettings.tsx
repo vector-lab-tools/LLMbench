@@ -56,11 +56,19 @@ function SlotEditor({
   const providers = getAllProviders();
   const showCustomModel = slot.model === "custom";
 
-  // Filtered model list when logprobsFilter is active
+  // Filtered model list when logprobsFilter is active.
+  // If any model in this provider is tagged "(logprobs)", use tag-based filtering
+  // (Google, HuggingFace — only some models work). Otherwise, if the whole provider
+  // supports logprobs (OpenAI, openai-compatible), show all its models unchanged.
+  const hasTaggedModels = providerConfig.models.some(
+    (m) => m.id !== "custom" && modelSupportsLogprobs(m.name)
+  );
   const visibleModels = logprobsFilter
-    ? providerConfig.models.filter(
-        (m) => m.id === "custom" || modelSupportsLogprobs(m.name)
-      )
+    ? providerConfig.models.filter((m) => {
+        if (m.id === "custom") return true;
+        if (hasTaggedModels) return modelSupportsLogprobs(m.name);
+        return providerConfig.supportsLogprobs;
+      })
     : providerConfig.models;
 
   return (

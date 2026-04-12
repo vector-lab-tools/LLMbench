@@ -97,7 +97,7 @@ function createAIClient(config: AIRequestConfig) {
     case "huggingface": {
       const hf = createOpenAI({
         apiKey,
-        baseURL: "https://api-inference.huggingface.co/v1",
+        baseURL: "https://router.huggingface.co/v1",
       });
       return (modelId: string) => hf.chat(modelId);
     }
