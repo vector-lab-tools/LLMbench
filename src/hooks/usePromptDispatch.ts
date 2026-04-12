@@ -86,41 +86,24 @@ export function usePromptDispatch() {
         const data = await response.json();
         const now = data.generatedAt || new Date().toISOString();
 
-        const resultA: PanelResult = data.A.error
-          ? {
-              error: data.A.error,
-              provenance: { ...data.A.provenance, responseTimeMs: 0, generatedAt: now },
-            }
-          : {
-              text: data.A.text,
-              provenance: {
-                ...data.A.provenance,
-                responseTimeMs: data.A.responseTimeMs,
-                generatedAt: now,
-              },
-            };
-
-        const resultB: PanelResult = data.B.error
-          ? {
-              error: data.B.error,
-              provenance: { ...data.B.provenance, responseTimeMs: 0, generatedAt: now },
-            }
-          : {
-              text: data.B.text,
-              provenance: {
-                ...data.B.provenance,
-                responseTimeMs: data.B.responseTimeMs,
-                generatedAt: now,
-              },
-            };
+        // Build each panel result independently so one panel's failure
+        // cannot prevent the other panel from displaying.
+        const buildResult = (panel: { error?: string; text?: string; provenance?: Record<string, unknown>; responseTimeMs?: number } | undefined): PanelResult | null => {
+          if (!panel) return null;
+          const provenance = { ...(panel.provenance ?? {}), generatedAt: now };
+          if (panel.error) {
+            return { error: panel.error, provenance: { ...provenance, responseTimeMs: 0 } } as PanelResult;
+          }
+          return { text: panel.text ?? "", provenance: { ...provenance, responseTimeMs: panel.responseTimeMs ?? 0 } } as PanelResult;
+        };
 
         setState({
           isLoading: false,
           loadingA: false,
           loadingB: false,
           prompt,
-          resultA,
-          resultB,
+          resultA: buildResult(data.A),
+          resultB: buildResult(data.B),
           error: null,
         });
       } catch (err) {

@@ -202,9 +202,9 @@ async function runSlotLogprobs(slot: SlotPayload, prompt: string, topK: number, 
     case "openai-compatible":
       return runOpenAILogprobs(slot, prompt, topK, noMarkdown);
     case "huggingface":
-      // HF Inference API is OpenAI-compatible; inject the fixed base URL
+      // HF Inference Router is OpenAI-compatible; inject the fixed base URL
       return runOpenAILogprobs(
-        { ...slot, baseUrl: "https://api-inference.huggingface.co/v1" },
+        { ...slot, baseUrl: "https://router.huggingface.co/v1" },
         prompt,
         topK,
         noMarkdown

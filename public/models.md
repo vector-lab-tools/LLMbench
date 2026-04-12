@@ -45,7 +45,7 @@ The first model in each list is the default.
 
 - `meta-llama/Llama-3.3-70B-Instruct` - Llama 3.3 70B Instruct (logprobs)
 - `meta-llama/Llama-3.1-8B-Instruct` - Llama 3.1 8B Instruct (logprobs)
-- `Qwen/Qwen2.5-72B-Instruct` - Qwen2.5 72B Instruct (logprobs)
+- `Qwen/Qwen2.5-72B-Instruct` - Qwen2.5 72B Instruct
 - `Qwen/Qwen2.5-7B-Instruct` - Qwen2.5 7B Instruct (logprobs)
 - `Qwen/Qwen2.5-Coder-32B-Instruct` - Qwen2.5 Coder 32B (logprobs)
 - `Qwen/Qwen3-32B` - Qwen3 32B
