@@ -121,8 +121,10 @@ async function runOpenAILogprobs(slot: SlotPayload, prompt: string, topK: number
     const client = createOpenAI({ apiKey: slot.apiKey, baseURL: slot.baseUrl });
 
     const result = await generateText({
+      // Use .chat() to force Chat Completions API — avoids "Invalid Responses API request"
+      // errors from providers that don't support OpenAI's newer Responses API
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      model: client(model) as any,
+      model: client.chat(model) as any,
       system: buildSystemPrompt(slot.systemPrompt || undefined, noMarkdown),
       messages: [{ role: "user", content: prompt }],
       temperature: slot.temperature,

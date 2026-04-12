@@ -45,7 +45,6 @@ const DEFAULT_MODELS: Record<AIProvider, ModelConfig[]> = {
     { id: "Qwen/Qwen3.5-27B", name: "Qwen3.5 27B", contextWindow: 262144, maxOutputTokens: 4096 },
     { id: "Qwen/Qwen2.5-7B-Instruct", name: "Qwen2.5 7B Instruct (logprobs)", contextWindow: 32768, maxOutputTokens: 4096 },
     { id: "Qwen/Qwen2.5-Coder-32B-Instruct", name: "Qwen2.5 Coder 32B (logprobs)", contextWindow: 131072, maxOutputTokens: 4096 },
-    { id: "mistralai/Mixtral-8x7B-Instruct-v0.1", name: "Mixtral 8x7B Instruct (logprobs)", contextWindow: 32768, maxOutputTokens: 4096 },
     { id: "google/gemma-4-31B-it", name: "Gemma 4 31B", contextWindow: 262144, maxOutputTokens: 4096 },
     { id: "deepseek-ai/DeepSeek-R1", name: "DeepSeek R1", contextWindow: 163840, maxOutputTokens: 8192 },
     { id: "deepseek-ai/DeepSeek-V3", name: "DeepSeek V3", contextWindow: 131072, maxOutputTokens: 8192 },
