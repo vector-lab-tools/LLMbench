@@ -18,6 +18,7 @@ const CUSTOM_PLACEHOLDERS: Record<AIProvider, string> = {
   google: "e.g. gemini-2.0-flash, gemini-1.5-pro-latest",
   ollama: "e.g. llama3.2:latest, codellama, phi3",
   "openai-compatible": "Enter model identifier",
+  openrouter: "e.g. qwen/qwen-2.5-72b-instruct, anthropic/claude-3-5-sonnet",
   huggingface: "e.g. meta-llama/Llama-3.3-70B-Instruct",
 };
 

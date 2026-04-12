@@ -37,11 +37,14 @@ const DEFAULT_MODELS: Record<AIProvider, ModelConfig[]> = {
     { id: "llama3.1", name: "Llama 3.1", contextWindow: 128000, maxOutputTokens: 4096 },
     { id: "mistral", name: "Mistral", contextWindow: 32000, maxOutputTokens: 4096 },
   ],
-  "openai-compatible": [
+  "openai-compatible": [],
+  openrouter: [
     { id: "qwen/qwen-2.5-72b-instruct", name: "Qwen 2.5 72B Instruct (logprobs)", contextWindow: 131072, maxOutputTokens: 8192 },
     { id: "meta-llama/llama-3.3-70b-instruct", name: "Llama 3.3 70B Instruct (logprobs)", contextWindow: 131072, maxOutputTokens: 8192 },
     { id: "google/gemini-2.0-flash-001", name: "Gemini 2.0 Flash (logprobs)", contextWindow: 1048576, maxOutputTokens: 8192 },
     { id: "mistralai/mistral-large", name: "Mistral Large (logprobs)", contextWindow: 128000, maxOutputTokens: 8192 },
+    { id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4", contextWindow: 200000, maxOutputTokens: 8192 },
+    { id: "openai/gpt-4o", name: "GPT-4o (logprobs)", contextWindow: 128000, maxOutputTokens: 4096 },
   ],
   huggingface: [
     { id: "meta-llama/Llama-3.3-70B-Instruct", name: "Llama 3.3 70B Instruct", contextWindow: 131072, maxOutputTokens: 4096 },
@@ -94,9 +97,18 @@ const PROVIDER_META: Record<AIProvider, Omit<ProviderConfig, "models">> = {
   "openai-compatible": {
     id: "openai-compatible",
     name: "OpenAI-Compatible API",
-    description: "Any API compatible with OpenAI format (Together, Groq, etc.)",
+    description: "Any API compatible with OpenAI format (Together, Groq, vLLM, etc.)",
     requiresApiKey: true,
     baseUrlConfigurable: true,
+    defaultBaseUrl: "https://openrouter.ai/api/v1",
+    supportsLogprobs: true,
+  },
+  openrouter: {
+    id: "openrouter",
+    name: "OpenRouter",
+    description: "Access 300+ models via a single OpenRouter API key",
+    requiresApiKey: true,
+    baseUrlConfigurable: false,
     defaultBaseUrl: "https://openrouter.ai/api/v1",
     supportsLogprobs: true,
   },

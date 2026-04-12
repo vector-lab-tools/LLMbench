@@ -203,6 +203,11 @@ async function runSlotLogprobs(slot: SlotPayload, prompt: string, topK: number, 
     case "openai":
     case "openai-compatible":
       return runOpenAILogprobs(slot, prompt, topK, noMarkdown);
+    case "openrouter":
+      return runOpenAILogprobs(
+        { ...slot, baseUrl: "https://openrouter.ai/api/v1" },
+        prompt, topK, noMarkdown
+      );
     case "huggingface":
       // HF Inference Router is OpenAI-compatible; inject the fixed base URL
       return runOpenAILogprobs(
@@ -213,7 +218,7 @@ async function runSlotLogprobs(slot: SlotPayload, prompt: string, topK: number, 
       );
     default:
       return {
-        error: `Token probabilities are not supported for ${slot.provider}. Use Google Gemini (2.0), OpenAI, or Hugging Face.`,
+        error: `Token probabilities are not supported for ${slot.provider}. Use Google Gemini (2.0), OpenAI, OpenRouter, or Hugging Face.`,
         provenance: buildProvenance(slot, 0),
       };
   }

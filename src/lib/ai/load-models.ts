@@ -19,6 +19,7 @@ export interface LoadedModels {
   google: ModelDefinition[];
   ollama: ModelDefinition[];
   "openai-compatible": ModelDefinition[];
+  openrouter: ModelDefinition[];
   huggingface: ModelDefinition[];
 }
 
@@ -33,6 +34,7 @@ const SECTION_TO_PROVIDER: Record<string, AIProvider> = {
   ollama: "ollama",
   "openai-compatible": "openai-compatible",
   "openai-compatible api": "openai-compatible",
+  "openrouter": "openrouter",
   "hugging face": "huggingface",
   "huggingface": "huggingface",
 };
@@ -49,6 +51,7 @@ export function parseModelsMarkdown(content: string): LoadedModels {
     google: [],
     ollama: [],
     "openai-compatible": [],
+    openrouter: [],
     huggingface: [],
   };
 

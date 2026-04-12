@@ -94,6 +94,14 @@ function createAIClient(config: AIRequestConfig) {
       return (modelId: string) => compat.chat(modelId);
     }
 
+    case "openrouter": {
+      const or = createOpenAI({
+        apiKey,
+        baseURL: "https://openrouter.ai/api/v1",
+      });
+      return (modelId: string) => or.chat(modelId);
+    }
+
     case "huggingface": {
       const hf = createOpenAI({
         apiKey,

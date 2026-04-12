@@ -7,6 +7,7 @@ export type AIProvider =
   | "google"
   | "ollama"
   | "openai-compatible"
+  | "openrouter"
   | "huggingface";
 
 export interface ModelConfig {
