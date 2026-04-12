@@ -1212,6 +1212,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     setShowEntropyCurve(false);
     setShowPixelMap(false);
     setShowSkyline(false);
+    setPromptCollapsed(false);
   }, [reset, annA, annB]);
 
   const safeFilename = useCallback(
@@ -1922,14 +1923,18 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
                 setPromptBouncing(true);
               }
             }}
-            className={`px-3 py-1 flex items-center gap-1 text-[10px] transition-colors shrink-0 ${
+            className={`px-3 py-1.5 flex items-center gap-1.5 text-[11px] font-medium rounded transition-colors shrink-0 ${
               promptCollapsed
-                ? "text-burgundy hover:bg-burgundy/10"
-                : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/20"
+                ? "text-burgundy bg-burgundy/10 hover:bg-burgundy/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
             }`}
             title={promptCollapsed ? "Show prompt" : "Hide prompt"}
           >
-            {promptCollapsed ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3 h-3" />}
+            {promptCollapsed ? (
+              <><ChevronUp className="w-3.5 h-3.5" /><span>Prompt</span></>
+            ) : (
+              <><ChevronDown className="w-3.5 h-3.5" /><span>Hide</span></>
+            )}
           </button>
         </div>
         <div
