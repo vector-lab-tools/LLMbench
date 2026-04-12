@@ -782,7 +782,6 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
         }),
       });
       const data = await res.json();
-      console.log("[LLMbench] logprobs response:", JSON.stringify(data, null, 2));
       if (data.A?.tokens?.length) {
         setLogprobTokensA(data.A.tokens);
       } else if (data.A?.error) {
