@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Loader2, AlertCircle, BarChart3, Download, RotateCcw } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { AnalysisPromptArea } from "@/components/shared/AnalysisPromptArea";
@@ -38,12 +38,17 @@ type ViewMode = "token" | "sentence";
 
 interface LogprobsModeProps {
   isDark: boolean;
+  pendingPrompt?: string;
 }
 
-export default function LogprobsMode({ isDark }: LogprobsModeProps) {
+export default function LogprobsMode({ isDark, pendingPrompt }: LogprobsModeProps) {
   const { slots, getSlotLabel, isSlotConfigured, noMarkdown } = useProviderSettings();
   const [panelSelection, setPanelSelection] = useState<PanelSelection>("A");
   const [prompt, setPrompt] = useState("");
+
+  useEffect(() => {
+    if (pendingPrompt) setPrompt(pendingPrompt);
+  }, [pendingPrompt]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultA, setResultA] = useState<LogprobsResult | null>(null);

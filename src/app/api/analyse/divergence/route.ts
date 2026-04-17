@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateAIConfig, generateAIResponse } from "@/lib/ai/client";
 import { getModelDisplayName } from "@/lib/ai/config";
-import { computeTextMetrics, computeWordOverlap } from "@/lib/metrics/text-metrics";
+import { computeTextMetrics, computeWordOverlap, computeCosineSimilarity } from "@/lib/metrics/text-metrics";
 import { buildSystemPrompt } from "@/lib/ai/system-prompts";
 import type { AIProvider } from "@/types/ai-settings";
 
@@ -92,8 +92,10 @@ export async function POST(request: NextRequest) {
   const textB = resultB && "text" in resultB ? (resultB as { text: string; metrics: ReturnType<typeof computeTextMetrics>; provenance: { responseTimeMs: number } }) : null;
   if (textA && textB) {
     const wordOverlap = computeWordOverlap(textA.text, textB.text);
+    const cosineSimilarity = computeCosineSimilarity(textA.text, textB.text);
     metrics = {
       wordOverlap,
+      cosineSimilarity,
       metricsA: textA.metrics,
       metricsB: textB.metrics,
       responseTimeDiffMs: Math.abs(textA.provenance.responseTimeMs - textB.provenance.responseTimeMs),

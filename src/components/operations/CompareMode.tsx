@@ -47,6 +47,8 @@ import {
   type PanelResult,
 } from "@/hooks/usePromptDispatch";
 import { useAnnotations } from "@/hooks/useAnnotations";
+import { useCrossPanelLinks } from "@/hooks/useCrossPanelLinks";
+import { CrossPanelLinks } from "@/components/annotations/CrossPanelLinks";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { ProsePanel } from "@/components/workspace/ProsePanel";
 import {
@@ -405,11 +407,17 @@ function AnnotatedPanelDisplay({
 interface CompareModeProps {
   isDark: boolean;
   onToggleDark: () => void;
+  pendingPrompt?: string;
 }
 
-export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) {
+export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: CompareModeProps) {
   const [prompt, setPrompt] = useState("");
   const { getSlotLabel, setShowSettings, slots, noMarkdown, isSlotConfigured } = useProviderSettings();
+
+  // Pre-fill prompt from tutorial card launch
+  useEffect(() => {
+    if (pendingPrompt) setPrompt(pendingPrompt);
+  }, [pendingPrompt]);
   const {
     isLoading,
     loadingA,
@@ -425,6 +433,9 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
   // Lifted annotation state (parent owns so we can save/load/export)
   const annA = useAnnotations("panel-A");
   const annB = useAnnotations("panel-B");
+
+  // Cross-panel annotation links
+  const cpLinks = useCrossPanelLinks();
 
   // Persistence
   const { comparisons, saveComparison, deleteComparison } = useLocalStorage();
@@ -756,10 +767,11 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
       outputB: panelResultToOutput(resultB),
       annotationsA: annA.annotations,
       annotationsB: annB.annotations,
+      crossPanelLinks: cpLinks.links,
       createdAt: comparisonCreatedAt ?? now,
       updatedAt: now,
     };
-  }, [comparisonId, comparisonName, comparisonCreatedAt, prompt, resultA, resultB, annA.annotations, annB.annotations]);
+  }, [comparisonId, comparisonName, comparisonCreatedAt, prompt, resultA, resultB, annA.annotations, annB.annotations, cpLinks.links]);
 
   // ---- actions ----
 
@@ -1343,10 +1355,11 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
       );
       annA.setAllAnnotations(comparison.annotationsA);
       annB.setAllAnnotations(comparison.annotationsB);
+      cpLinks.setAllLinks(comparison.crossPanelLinks ?? []);
       setShowHistory(false);
       setSaveStatus("idle");
     },
-    [loadState, annA, annB]
+    [loadState, annA, annB, cpLinks]
   );
 
   const handleNew = useCallback(() => {
@@ -1357,6 +1370,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     reset();
     annA.setAllAnnotations([]);
     annB.setAllAnnotations([]);
+    cpLinks.setAllLinks([]);
     setSaveStatus("idle");
     // Reset probs-mode state so New doesn't leave the UI stuck showing
     // stale token heatmaps, nav cursors, or overlays from the previous run.
@@ -1374,7 +1388,7 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
     setShowPixelMap(false);
     setShowSkyline(false);
     setPromptCollapsed(false);
-  }, [reset, annA, annB]);
+  }, [reset, annA, annB, cpLinks]);
 
   const safeFilename = useCallback(
     (ext: string) =>
@@ -2055,6 +2069,18 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
 
       {/* End scrollable body */}
       </div>
+
+      {/* Cross-Panel Annotation Links */}
+      <CrossPanelLinks
+        links={cpLinks.links}
+        annotationsA={annA.annotations}
+        annotationsB={annB.annotations}
+        onAdd={cpLinks.addLink}
+        onUpdate={cpLinks.updateLink}
+        onDelete={cpLinks.deleteLink}
+        labelA={getSlotLabel("A")}
+        labelB={getSlotLabel("B")}
+      />
 
       {/* Prompt area */}
       <div className="border-t border-border bg-card shrink-0">

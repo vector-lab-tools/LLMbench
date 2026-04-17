@@ -1,8 +1,30 @@
 "use client";
 
-import { useState, useCallback, type ReactNode } from "react";
-import { Send, Loader2, AlertCircle, ChevronUp, ChevronDown, RotateCcw } from "lucide-react";
+import { useState, useCallback, useRef, useEffect, type ReactNode } from "react";
+import { Send, Loader2, AlertCircle, ChevronUp, ChevronDown, RotateCcw, Clock } from "lucide-react";
 import { ModelSelector, type PanelSelection } from "./ModelSelector";
+
+const HISTORY_KEY = "llmbench-prompt-history";
+const HISTORY_MAX = 10;
+
+function usePromptHistory() {
+  const [history, setHistory] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]"); } catch { return []; }
+  });
+
+  const push = useCallback((prompt: string) => {
+    const trimmed = prompt.trim();
+    if (!trimmed) return;
+    setHistory(prev => {
+      const deduped = [trimmed, ...prev.filter(p => p !== trimmed)].slice(0, HISTORY_MAX);
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(deduped)); } catch { /* quota */ }
+      return deduped;
+    });
+  }, []);
+
+  return { history, push };
+}
 
 interface AnalysisPromptAreaProps {
   prompt: string;
@@ -40,6 +62,26 @@ export function AnalysisPromptArea({
 }: AnalysisPromptAreaProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [bouncing, setBouncing] = useState(false);
+  const { history, push } = usePromptHistory();
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyPos, setHistoryPos] = useState<{ bottom: number; left: number; width: number } | null>(null);
+  const historyBtnRef = useRef<HTMLButtonElement>(null);
+  const historyDropRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!showHistory) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        historyDropRef.current && !historyDropRef.current.contains(e.target as Node) &&
+        historyBtnRef.current && !historyBtnRef.current.contains(e.target as Node)
+      ) {
+        setShowHistory(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showHistory]);
 
   const collapse = useCallback(() => {
     setCollapsed(true);
@@ -55,12 +97,14 @@ export function AnalysisPromptArea({
   }, [collapsed, collapse]);
 
   const handleSubmit = useCallback(() => {
+    if (prompt.trim()) push(prompt.trim());
     onSubmit();
     // Slide away after sending so results get full height
     collapse();
-  }, [onSubmit, collapse]);
+  }, [onSubmit, collapse, prompt, push]);
 
   return (
+    <>
     <div className="border-t border-border bg-card">
       {/* Toggle strip — burgundy + bounce when collapsed to hint "tap to restore" */}
       <button
@@ -115,20 +159,46 @@ export function AnalysisPromptArea({
 
             {/* Input row: textarea + send */}
             <div className="flex gap-2 items-end">
-              <textarea
-                value={prompt}
-                onChange={(e) => onPromptChange(e.target.value)}
-                placeholder={placeholder}
-                className="input-editorial flex-1 resize-none min-h-[40px] max-h-[160px] text-body-sm"
-                rows={1}
-                disabled={isLoading}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmit();
-                  }
-                }}
-              />
+              <div className="relative flex-1">
+                <textarea
+                  value={prompt}
+                  onChange={(e) => onPromptChange(e.target.value)}
+                  placeholder={placeholder}
+                  className="input-editorial w-full resize-none min-h-[40px] max-h-[160px] text-body-sm"
+                  rows={1}
+                  disabled={isLoading}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSubmit();
+                    }
+                  }}
+                />
+                {history.length > 0 && (
+                  <button
+                    ref={historyBtnRef}
+                    onClick={() => {
+                      if (showHistory) {
+                        setShowHistory(false);
+                      } else {
+                        const rect = historyBtnRef.current?.getBoundingClientRect();
+                        if (rect) {
+                          setHistoryPos({
+                            bottom: window.innerHeight - rect.top + 6,
+                            left: rect.left,
+                            width: Math.max(320, rect.width + 60),
+                          });
+                        }
+                        setShowHistory(true);
+                      }
+                    }}
+                    className="absolute right-2 bottom-2 p-1 rounded text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/30 transition-colors"
+                    title="Recent prompts"
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
               <button
                 onClick={handleSubmit}
                 disabled={!prompt.trim() || isLoading || disabled}
@@ -156,5 +226,39 @@ export function AnalysisPromptArea({
         </div>
       </div>
     </div>
+
+    {/* Prompt history dropdown — fixed position to escape overflow:hidden parents */}
+    {showHistory && historyPos && (
+      <div
+        ref={historyDropRef}
+        className="fixed z-50 bg-card border border-border shadow-lg rounded-sm overflow-hidden"
+        style={{
+          bottom: historyPos.bottom,
+          left: historyPos.left,
+          width: historyPos.width,
+          maxHeight: 280,
+        }}
+      >
+        <div className="px-3 py-1.5 border-b border-border flex items-center gap-1.5">
+          <Clock className="w-3 h-3 text-muted-foreground" />
+          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Recent prompts</span>
+        </div>
+        <div className="overflow-y-auto" style={{ maxHeight: 240 }}>
+          {history.map((p, i) => (
+            <button
+              key={i}
+              className="w-full text-left px-3 py-2 text-caption hover:bg-cream/60 transition-colors border-b border-parchment/30 last:border-0"
+              onClick={() => {
+                onPromptChange(p);
+                setShowHistory(false);
+              }}
+            >
+              <span className="line-clamp-2 text-foreground">{p}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    )}
+  </>
   );
 }

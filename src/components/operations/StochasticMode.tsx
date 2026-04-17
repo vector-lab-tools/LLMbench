@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { AlertCircle, Dices, RotateCcw } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { AnalysisPromptArea } from "@/components/shared/AnalysisPromptArea";
@@ -23,12 +23,17 @@ type StreamEvent = { type: string; panel?: string; index?: number; result?: any;
 
 interface StochasticModeProps {
   isDark: boolean;
+  pendingPrompt?: string;
 }
 
-export default function StochasticMode({ isDark }: StochasticModeProps) {
+export default function StochasticMode({ isDark, pendingPrompt }: StochasticModeProps) {
   const { slots, getSlotLabel, isSlotConfigured, noMarkdown } = useProviderSettings();
   const [panelSelection, setPanelSelection] = useState<PanelSelection>("A");
   const [prompt, setPrompt] = useState("");
+
+  useEffect(() => {
+    if (pendingPrompt) setPrompt(pendingPrompt);
+  }, [pendingPrompt]);
   const [runCount, setRunCount] = useState(5);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -14,3 +14,15 @@ export type {
   SavedComparison,
   ComparisonOutput,
 } from "./comparison";
+
+export type {
+  CrossPanelLink,
+  LinkRelationType,
+} from "./links";
+
+export {
+  LINK_RELATION_TYPES,
+  LINK_RELATION_LABELS,
+  LINK_RELATION_DESCRIPTIONS,
+  LINK_RELATION_COLORS,
+} from "./links";

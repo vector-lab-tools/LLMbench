@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { Loader2, AlertCircle, GitFork, RotateCcw } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { AnalysisPromptArea } from "@/components/shared/AnalysisPromptArea";
@@ -38,6 +38,7 @@ interface DivergenceMetrics {
     jaccardSimilarity: number;
     overlapPercentage: number;
   };
+  cosineSimilarity?: number;
   metricsA: RunOutput["metrics"];
   metricsB: RunOutput["metrics"];
   responseTimeDiffMs: number;
@@ -84,12 +85,17 @@ function extractBigrams(text: string): Set<string> {
 
 interface DivergenceModeProps {
   isDark: boolean;
+  pendingPrompt?: string;
 }
 
-export default function DivergenceMode({ isDark: _isDark }: DivergenceModeProps) {
+export default function DivergenceMode({ isDark: _isDark, pendingPrompt }: DivergenceModeProps) {
   const { slots, getSlotLabel, isSlotConfigured, noMarkdown } = useProviderSettings();
   const [panelSelection, setPanelSelection] = useState<PanelSelection>("both");
   const [prompt, setPrompt] = useState("");
+
+  useEffect(() => {
+    if (pendingPrompt) setPrompt(pendingPrompt);
+  }, [pendingPrompt]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultA, setResultA] = useState<RunResult | null>(null);
@@ -175,7 +181,7 @@ export default function DivergenceMode({ isDark: _isDark }: DivergenceModeProps)
     <>
       {/* Mode description */}
       <div className="px-6 py-2 bg-cream/40 border-b border-parchment/30 text-caption text-muted-foreground">
-        <strong className="text-foreground">Cross-Model Divergence:</strong> Sends the same prompt to two models and computes quantitative divergence metrics including Jaccard similarity, vocabulary overlap, structural comparison (sentence count, average sentence length), and response time differences.
+        <strong className="text-foreground">Cross-Model Divergence:</strong> Sends the same prompt to two models and computes quantitative divergence metrics including cosine similarity (frequency-weighted), Jaccard similarity (set-level), vocabulary overlap, structural comparison (sentence count, average sentence length), and response time differences.
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
         {isLoading ? (
@@ -191,9 +197,16 @@ export default function DivergenceMode({ isDark: _isDark }: DivergenceModeProps)
             {metrics && (
               <div className="bg-card border border-parchment/50 rounded-sm p-5">
                 <h3 className="text-body-sm font-semibold text-foreground mb-3">Divergence Metrics</h3>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                  <MetricBox label="Jaccard Similarity" value={`${(metrics.wordOverlap.jaccardSimilarity * 100).toFixed(1)}%`} />
-                  <MetricBox label="Word Overlap" value={`${metrics.wordOverlap.overlapPercentage.toFixed(1)}%`} />
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                  <MetricBox
+                    label="Cosine Similarity"
+                    value={metrics.cosineSimilarity !== undefined ? `${(metrics.cosineSimilarity * 100).toFixed(1)}%` : "—"}
+                  />
+                  <MetricBox
+                    label="Jaccard Similarity"
+                    value={`${(metrics.wordOverlap.jaccardSimilarity * 100).toFixed(1)}%`}
+                  />
+                  <MetricBox label="Word Overlap (Dice)" value={`${metrics.wordOverlap.overlapPercentage.toFixed(1)}%`} />
                   <MetricBox label="Shared Words" value={metrics.wordOverlap.shared.length} />
                   <MetricBox label="Unique to A" value={metrics.wordOverlap.uniqueA.length} />
                   <MetricBox label="Unique to B" value={metrics.wordOverlap.uniqueB.length} />

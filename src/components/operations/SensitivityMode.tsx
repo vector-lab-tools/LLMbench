@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { AlertCircle, Fingerprint, Plus, RotateCcw, X } from "lucide-react";
 import { DefaultPromptChips } from "@/components/shared/DefaultPromptChips";
 import { MODE_DEFAULTS, getRandomDefault } from "@/lib/prompts/defaults";
@@ -32,12 +32,17 @@ type StreamEvent = { type: string; panel?: string; index?: number; isBase?: bool
 
 interface SensitivityModeProps {
   isDark: boolean;
+  pendingPrompt?: string;
 }
 
-export default function SensitivityMode({ isDark }: SensitivityModeProps) {
+export default function SensitivityMode({ isDark, pendingPrompt }: SensitivityModeProps) {
   const { slots, getSlotLabel, isSlotConfigured, noMarkdown } = useProviderSettings();
   const [panelSelection, setPanelSelection] = useState<PanelSelection>("A");
   const [prompt, setPrompt] = useState("");
+
+  useEffect(() => {
+    if (pendingPrompt) setPrompt(pendingPrompt);
+  }, [pendingPrompt]);
   const [customVariations, setCustomVariations] = useState<string[]>([]);
   const [newVariation, setNewVariation] = useState("");
   const [isLoading, setIsLoading] = useState(false);

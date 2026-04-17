@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { SplitSquareHorizontal, Settings, HelpCircle, Info, X } from "lucide-react";
+import { SplitSquareHorizontal, Settings, HelpCircle, Info, X, GraduationCap } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { TabNav, type TabId } from "@/components/layout/TabNav";
 import ProviderSettings from "@/components/settings/ProviderSettings";
@@ -14,6 +14,7 @@ import DivergenceMode from "@/components/operations/DivergenceMode";
 import { APP_VERSION } from "@/lib/version";
 import { Clippy } from "@/components/easter-eggs/Clippy";
 import { KillerRabbit } from "@/components/viz/KillerRabbit";
+import { TutorialCards } from "@/components/layout/TutorialCards";
 
 const MODE_LABELS: Record<TabId, string> = {
   compare: "Dual Panel",
@@ -30,6 +31,8 @@ export default function Home() {
   const [showHelp, setShowHelp] = useState(false);
   const [showLogprobsExplainer, setShowLogprobsExplainer] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [pendingPrompt, setPendingPrompt] = useState<string | undefined>();
   const { setShowSettings, noMarkdown, setNoMarkdown } = useProviderSettings();
 
   // Easter egg state
@@ -116,6 +119,14 @@ export default function Home() {
         </div>
 
         <button
+          onClick={() => setShowTutorial(true)}
+          className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5"
+          title="Guided analytical exercises"
+        >
+          <GraduationCap className="w-3.5 h-3.5" />
+          <span>Exercises</span>
+        </button>
+        <button
           onClick={() => setShowHelp(true)}
           className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5"
           title="How to use LLMbench"
@@ -146,12 +157,12 @@ export default function Home() {
 
       {/* Mode content */}
       <div className="flex-1 flex flex-col min-h-0">
-        {activeTab === "compare" && <CompareMode isDark={isDark} onToggleDark={toggleDark} />}
-        {activeTab === "stochastic" && <StochasticMode isDark={isDark} />}
-        {activeTab === "temperature" && <TemperatureMode isDark={isDark} />}
-        {activeTab === "sensitivity" && <SensitivityMode isDark={isDark} />}
-        {activeTab === "logprobs" && <LogprobsMode isDark={isDark} />}
-        {activeTab === "divergence" && <DivergenceMode isDark={isDark} />}
+        {activeTab === "compare" && <CompareMode isDark={isDark} onToggleDark={toggleDark} pendingPrompt={pendingPrompt} />}
+        {activeTab === "stochastic" && <StochasticMode isDark={isDark} pendingPrompt={pendingPrompt} />}
+        {activeTab === "temperature" && <TemperatureMode isDark={isDark} pendingPrompt={pendingPrompt} />}
+        {activeTab === "sensitivity" && <SensitivityMode isDark={isDark} pendingPrompt={pendingPrompt} />}
+        {activeTab === "logprobs" && <LogprobsMode isDark={isDark} pendingPrompt={pendingPrompt} />}
+        {activeTab === "divergence" && <DivergenceMode isDark={isDark} pendingPrompt={pendingPrompt} />}
       </div>
 
       {/* Status bar */}
@@ -162,6 +173,17 @@ export default function Home() {
 
       {/* Settings modal */}
       <ProviderSettings isDark={isDark} onToggleDark={toggleDark} />
+
+      {/* Tutorial / Exercises modal */}
+      {showTutorial && (
+        <TutorialCards
+          onClose={() => setShowTutorial(false)}
+          onLaunch={(mode, prompt) => {
+            setPendingPrompt(prompt);
+            setActiveTab(mode as TabId);
+          }}
+        />
+      )}
 
       {/* Easter eggs */}
       <Clippy />
@@ -518,12 +540,12 @@ export default function Home() {
 
               <div className="pt-2 border-t border-parchment/50">
                 <a
-                  href="https://github.com/dmberry/LLMbench"
+                  href="https://github.com/vector-lab-tools/LLMbench"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-caption text-burgundy hover:underline"
                 >
-                  github.com/dmberry/LLMbench
+                  github.com/vector-lab-tools/LLMbench
                 </a>
               </div>
             </div>

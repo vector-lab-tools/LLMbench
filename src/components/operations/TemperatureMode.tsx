@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { AlertCircle, Thermometer, RotateCcw } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { AnalysisPromptArea } from "@/components/shared/AnalysisPromptArea";
@@ -27,12 +27,17 @@ type StreamEvent = { type: string; panel?: string; index?: number; temperature?:
 
 interface TemperatureModeProps {
   isDark: boolean;
+  pendingPrompt?: string;
 }
 
-export default function TemperatureMode({ isDark }: TemperatureModeProps) {
+export default function TemperatureMode({ isDark, pendingPrompt }: TemperatureModeProps) {
   const { slots, getSlotLabel, isSlotConfigured, noMarkdown } = useProviderSettings();
   const [panelSelection, setPanelSelection] = useState<PanelSelection>("A");
   const [prompt, setPrompt] = useState("");
+
+  useEffect(() => {
+    if (pendingPrompt) setPrompt(pendingPrompt);
+  }, [pendingPrompt]);
   const [temperatures, setTemperatures] = useState(DEFAULT_TEMPS);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
