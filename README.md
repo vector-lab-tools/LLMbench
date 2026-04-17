@@ -8,9 +8,13 @@
 **Date:** 12 April 2026
 **Licence:** MIT
 
+
+
 LLMbench is a web-based research tool that enables scholars and researchers to subject AI-generated text to the kind of sustained hermeneutic scrutiny that has long been applied to literary, philosophical, and computational texts. It sends prompts to one or two LLMs, displays their responses in annotatable panels, and provides six analytical modes for empirically investigating model behaviour: dual-panel comparison, stochastic variation, prompt sensitivity, temperature gradients, token probabilities, and cross-model divergence.
 
 The tool is designed for humanistic inquiry into LLM behaviour, not engineering evaluation. Where existing comparison tools (Google PAIR's LLM Comparator, Chatbot Arena, LMSYS) measure win rates, safety metrics, and benchmark performance, LLMbench treats outputs as texts to be read, annotated, and interpreted.
+
+> LLMbench is part of the [Vector Lab](https://github.com/dmberry) family of research instruments, alongside [Manifold Atlas](https://github.com/dmberry/manifold-atlas), [Vectorscope](https://github.com/dmberry/vectorscope), and [Theoryscope](https://github.com/dmberry/theoryscope). The four tools share an editorial design system, an open-weight-friendly methodology, and a commitment to making the geometry of meaning legible for critical analysis. They diverge in their object: Manifold Atlas compares output geometries between models, Vectorscope inspects the internals of a single open-weight model, Theoryscope maps the geometry of a corpus of theoretical texts, and LLMbench reads the surface of model outputs as prose.
 
 ## Scholarly Context
 
@@ -22,7 +26,17 @@ LLMbench emerges from the convergence of three research programmes.
 
 **Comparative and variorum analysis.** The variorum principle, articulated in *10 PRINT* (Montfort et al. 2013), treats different variants of the same text as analytically productive rather than as defects to be resolved. LLMbench operationalises this principle for LLM outputs: two models responding to the same prompt produce textual variants whose differences reveal assumptions, rhetorical strategies, knowledge boundaries, and ideological dispositions that would remain invisible in a single output.
 
-## Modes at a Glance
+## Chat Models and Token Probabilities: A Primer
+
+LLMbench uses two kinds of signal from a language model, and it helps to understand the difference.
+
+A **chat model** (GPT-4o, Claude, Gemini, Llama) takes text in and produces text out. You give it a prompt, it generates a response. The output is language. Every LLMbench mode uses chat models as its basic instrument, sending a prompt to one or two providers in parallel and displaying the responses side by side.
+
+A **token probability** is a number attached to a single word or subword in a response. When a chat model generates the next token in its output, it produces a probability distribution over every possible next token, then samples from that distribution. The **logprob** is the logarithm of the chosen token's probability, and it tells you how confident the model was at that step. Low confidence is not a defect, it is a place where the model was balancing alternatives. Token probability data is only available from some providers (Google Gemini 2.0, OpenAI, Hugging Face via Fireworks or Together) and only for specific models.
+
+This matters for LLMbench because the tool offers two complementary reading surfaces. The text of a response is a hermeneutic object, readable as prose. The token probabilities are a geometric object, revealing where the model hesitated, branched, or converged. The Probs view in Compare mode and the standalone Token Probabilities mode are the two places these probabilities become visible: as heatmaps, entropy curves, pixel maps, and 3D skylines. A token-probability reading never replaces the close reading of the prose; it supplements it, showing where the surface calm hides underlying uncertainty.
+
+## Operations at a Glance
 
 LLMbench is organised as a two-tier tab navigation: one **Compare** mode for close reading, and five **Analyse** modes for empirical probes into model behaviour.
 
@@ -201,15 +215,17 @@ The architecture follows the Manifold Atlas pattern: a thin `page.tsx` manages m
 
 ## Tech Stack
 
-- **Next.js 16** with React 19 and App Router
-- **CodeMirror 6** for prose display and annotation
-- **Tailwind CSS v3** with an editorial colour palette (ivory, cream, parchment, burgundy, gold)
-- **Vercel AI SDK** with Anthropic, OpenAI, Google, and Hugging Face providers
-- **@google/generative-ai** for token-probability (logprobs) support
-- **Three.js** via `@react-three/fiber` and `@react-three/drei` for the 3D probability skyline
-- **jsPDF** for PDF export
-- **diff** for word-level text comparison
-- **localStorage** for persistence (Supabase preparation layer exists for future cloud sync)
+| Layer | Technology |
+|-------|-----------|
+| Framework | Next.js 16 (App Router), React 19 |
+| Language | TypeScript 5 (strict) |
+| Styling | Tailwind CSS 3, CCS-WB editorial design system |
+| Prose editor | CodeMirror 6 |
+| AI providers | Vercel AI SDK with Anthropic, OpenAI, Google, Hugging Face |
+| Logprobs support | @google/generative-ai (Gemini 2.0) |
+| Visualisation | Three.js via @react-three/fiber and @react-three/drei (3D skyline), custom SVG |
+| Export | jsPDF (PDF), diff (word-level) |
+| Persistence | localStorage; Supabase preparation layer for future cloud sync |
 
 ## Roadmap
 
