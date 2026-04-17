@@ -467,7 +467,6 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
   const promptHistoryRef = useRef<HTMLDivElement>(null);
   const promptHistoryBtnRef = useRef<HTMLButtonElement>(null);
   const [showPromptModal, setShowPromptModal] = useState(false);
-  const [showProbsExport, setShowProbsExport] = useState(false);
   const [probsNavIndex, setProbsNavIndex] = useState<number | null>(null);
   const [probsSecondIndex, setProbsSecondIndex] = useState<number | null>(null);
   const [showEntropyCurve, setShowEntropyCurve] = useState(false);
@@ -812,12 +811,14 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
       const data = await res.json();
       if (data.A?.tokens?.length) {
         setLogprobTokensA(data.A.tokens);
+        setProbsNavIndex(0);
       } else if (data.A?.error) {
         setLogprobTokensA(null);
         setLogprobErrorA(data.A.error);
       }
       if (data.B?.tokens?.length) {
         setLogprobTokensB(data.B.tokens);
+        setProbsNavIndex(prev => prev ?? 0);
       } else if (data.B?.error) {
         setLogprobTokensB(null);
         setLogprobErrorB(data.B.error);
@@ -1455,21 +1456,17 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
 
         <div className="h-4 w-px bg-parchment mx-1" />
 
-        {/* Export button — context-aware: opens probs export in probs mode, comparison export otherwise */}
+        {/* Export button — unified modal for comparison + probs */}
         {(() => {
-          const inProbsMode = viewMode === "probs" && (logprobTokensA || logprobTokensB);
           return (
             <button
-              onClick={() => {
-                if (inProbsMode) setShowProbsExport(true);
-                else setShowExportModal(true);
-              }}
+              onClick={() => setShowExportModal(true)}
               disabled={!hasContent}
               className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
-              title={inProbsMode ? "Export token probability data" : "Export comparison"}
+              title="Export comparison"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>{inProbsMode ? "Export Probs" : "Export"}</span>
+              <span>Export</span>
             </button>
           );
         })()}
@@ -2312,185 +2309,172 @@ export default function CompareMode({ isDark, onToggleDark }: CompareModeProps) 
         </div>
       )}
 
-      {/* Probs export modal */}
-      {showProbsExport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowProbsExport(false)}>
-          <div className="bg-popover rounded-sm shadow-lg p-5 w-full max-w-sm border border-parchment mx-4" onClick={e => e.stopPropagation()}>
+      {/* Unified Export modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowExportModal(false)}>
+          <div className="bg-popover rounded-sm shadow-lg p-5 w-full max-w-sm border border-parchment mx-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-display-md font-bold text-foreground flex items-center gap-2">
                 <Download className="w-4 h-4 text-burgundy" />
-                Export Probabilities
+                Export
               </h2>
-              <button onClick={() => setShowProbsExport(false)} className="p-1 text-muted-foreground hover:text-foreground">
+              <button onClick={() => setShowExportModal(false)} className="p-1 text-muted-foreground hover:text-foreground">
                 <X className="w-4 h-4" />
               </button>
             </div>
+
             <div className="space-y-2">
-              {/* Heatmap exports */}
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide px-1">Heatmap</p>
-              <button
-                onClick={() => { exportProbsPDF(); setShowProbsExport(false); }}
-                className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <FileType className="w-5 h-5 text-burgundy shrink-0" />
-                  <div>
-                    <div className="text-body-sm font-medium text-foreground">PDF snapshot</div>
-                    <div className="text-caption text-muted-foreground">Multi-page: heatmap, full text, deep dive stats, entropy curve and pixel maps if open</div>
-                  </div>
-                </div>
-              </button>
-              <button
-                onClick={() => { exportProbsImage(); setShowProbsExport(false); }}
-                className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <FileCode className="w-5 h-5 text-burgundy shrink-0" />
-                  <div>
-                    <div className="text-body-sm font-medium text-foreground">PNG image</div>
-                    <div className="text-caption text-muted-foreground">High-resolution heatmap for papers and presentations</div>
-                  </div>
-                </div>
-              </button>
-              <button
-                onClick={() => { exportProbsJSON(); setShowProbsExport(false); }}
-                className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <FileJson className="w-5 h-5 text-burgundy shrink-0" />
-                  <div>
-                    <div className="text-body-sm font-medium text-foreground">JSON data</div>
-                    <div className="text-caption text-muted-foreground">Per-token probabilities, entropy stats, deep dive metrics, and divergence positions</div>
-                  </div>
-                </div>
-              </button>
-
-              {/* Pixel map exports */}
-              {showPixelMap && (logprobTokensA || logprobTokensB) && (
-                <>
-                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide px-1 pt-1">Pixel map</p>
-                  {logprobTokensA && (
-                    <button
-                      onClick={() => { exportPixelMapPNG("A"); setShowProbsExport(false); }}
-                      className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <FileCode className="w-5 h-5 text-burgundy shrink-0" />
-                        <div>
-                          <div className="text-body-sm font-medium text-foreground">Pixel map — Panel A</div>
-                          <div className="text-caption text-muted-foreground">PNG of the token grid for Panel A</div>
-                        </div>
-                      </div>
-                    </button>
-                  )}
-                  {logprobTokensB && (
-                    <button
-                      onClick={() => { exportPixelMapPNG("B"); setShowProbsExport(false); }}
-                      className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <FileCode className="w-5 h-5 text-burgundy shrink-0" />
-                        <div>
-                          <div className="text-body-sm font-medium text-foreground">Pixel map — Panel B</div>
-                          <div className="text-caption text-muted-foreground">PNG of the token grid for Panel B</div>
-                        </div>
-                      </div>
-                    </button>
-                  )}
-                </>
-              )}
-
-              {/* Net exports */}
-              {showSkyline && (logprobTokensA || logprobTokensB) && (
-                <>
-                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide px-1 pt-1">3D Net</p>
-                  {logprobTokensA && (
-                    <button
-                      onClick={() => { exportNetPNG("A"); setShowProbsExport(false); }}
-                      className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <FileCode className="w-5 h-5 text-burgundy shrink-0" />
-                        <div>
-                          <div className="text-body-sm font-medium text-foreground">3D net — Panel A</div>
-                          <div className="text-caption text-muted-foreground">PNG capture of the current 3D view for Panel A</div>
-                        </div>
-                      </div>
-                    </button>
-                  )}
-                  {logprobTokensB && (
-                    <button
-                      onClick={() => { exportNetPNG("B"); setShowProbsExport(false); }}
-                      className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <FileCode className="w-5 h-5 text-burgundy shrink-0" />
-                        <div>
-                          <div className="text-body-sm font-medium text-foreground">3D net — Panel B</div>
-                          <div className="text-caption text-muted-foreground">PNG capture of the current 3D view for Panel B</div>
-                        </div>
-                      </div>
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Export modal */}
-      {showExportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowExportModal(false)}>
-          <div className="bg-popover rounded-sm shadow-lg p-6 w-full max-w-md border border-parchment" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-display text-display-md font-bold text-foreground">
-                Export Comparison
-              </h2>
-              <button
-                onClick={() => setShowExportModal(false)}
-                className="p-1 text-muted-foreground hover:text-foreground"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="space-y-3">
+              {/* Comparison exports — always shown when there is content */}
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide px-1">Comparison</p>
               <button
                 onClick={handleExportJSON}
-                className="w-full flex items-center gap-3 p-3 rounded border border-parchment/50 bg-card hover:bg-cream text-left"
+                className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
               >
-                <FileJson className="w-6 h-6 text-blue-500 shrink-0" />
-                <div>
-                  <div className="text-body-sm font-medium text-foreground">JSON</div>
-                  <div className="text-caption text-muted-foreground">
-                    Structured data with full metadata and annotations
+                <div className="flex items-center gap-3">
+                  <FileJson className="w-5 h-5 text-blue-500 shrink-0" />
+                  <div>
+                    <div className="text-body-sm font-medium text-foreground">JSON</div>
+                    <div className="text-caption text-muted-foreground">Structured data with full metadata and annotations</div>
                   </div>
                 </div>
               </button>
               <button
                 onClick={handleExportText}
-                className="w-full flex items-center gap-3 p-3 rounded border border-parchment/50 bg-card hover:bg-cream text-left"
+                className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
               >
-                <FileText className="w-6 h-6 text-green-500 shrink-0" />
-                <div>
-                  <div className="text-body-sm font-medium text-foreground">Plain Text</div>
-                  <div className="text-caption text-muted-foreground">
-                    Formatted text log with annotations
+                <div className="flex items-center gap-3">
+                  <FileText className="w-5 h-5 text-green-600 shrink-0" />
+                  <div>
+                    <div className="text-body-sm font-medium text-foreground">Plain Text</div>
+                    <div className="text-caption text-muted-foreground">Formatted text log with annotations</div>
                   </div>
                 </div>
               </button>
               <button
                 onClick={handleExportPDF}
-                className="w-full flex items-center gap-3 p-3 rounded border border-parchment/50 bg-card hover:bg-cream text-left"
+                className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
               >
-                <FileType className="w-6 h-6 text-red-500 shrink-0" />
-                <div>
-                  <div className="text-body-sm font-medium text-foreground">PDF</div>
-                  <div className="text-caption text-muted-foreground">
-                    Printable document with coloured annotation badges
+                <div className="flex items-center gap-3">
+                  <FileType className="w-5 h-5 text-red-500 shrink-0" />
+                  <div>
+                    <div className="text-body-sm font-medium text-foreground">PDF</div>
+                    <div className="text-caption text-muted-foreground">Printable document with coloured annotation badges</div>
                   </div>
                 </div>
               </button>
+
+              {/* Probabilities exports — shown only when logprob data is loaded */}
+              {(logprobTokensA || logprobTokensB) && (
+                <>
+                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide px-1 pt-2">Probabilities</p>
+                  <button
+                    onClick={() => { exportProbsPDF(); setShowExportModal(false); }}
+                    className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <FileType className="w-5 h-5 text-burgundy shrink-0" />
+                      <div>
+                        <div className="text-body-sm font-medium text-foreground">PDF snapshot</div>
+                        <div className="text-caption text-muted-foreground">Multi-page: heatmap, full text, deep dive stats, entropy curve and pixel maps if open</div>
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => { exportProbsImage(); setShowExportModal(false); }}
+                    className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <FileCode className="w-5 h-5 text-burgundy shrink-0" />
+                      <div>
+                        <div className="text-body-sm font-medium text-foreground">PNG image</div>
+                        <div className="text-caption text-muted-foreground">High-resolution heatmap for papers and presentations</div>
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => { exportProbsJSON(); setShowExportModal(false); }}
+                    className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <FileJson className="w-5 h-5 text-burgundy shrink-0" />
+                      <div>
+                        <div className="text-body-sm font-medium text-foreground">JSON data</div>
+                        <div className="text-caption text-muted-foreground">Per-token probabilities, entropy stats, deep dive metrics, and divergence positions</div>
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Pixel map per-panel */}
+                  {showPixelMap && (
+                    <>
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide px-1 pt-1">Pixel map</p>
+                      {logprobTokensA && (
+                        <button
+                          onClick={() => { exportPixelMapPNG("A"); setShowExportModal(false); }}
+                          className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <FileCode className="w-5 h-5 text-burgundy shrink-0" />
+                            <div>
+                              <div className="text-body-sm font-medium text-foreground">Pixel map — Panel A</div>
+                              <div className="text-caption text-muted-foreground">PNG of the token grid for Panel A</div>
+                            </div>
+                          </div>
+                        </button>
+                      )}
+                      {logprobTokensB && (
+                        <button
+                          onClick={() => { exportPixelMapPNG("B"); setShowExportModal(false); }}
+                          className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <FileCode className="w-5 h-5 text-burgundy shrink-0" />
+                            <div>
+                              <div className="text-body-sm font-medium text-foreground">Pixel map — Panel B</div>
+                              <div className="text-caption text-muted-foreground">PNG of the token grid for Panel B</div>
+                            </div>
+                          </div>
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  {/* 3D Net per-panel */}
+                  {showSkyline && (
+                    <>
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide px-1 pt-1">3D Net</p>
+                      {logprobTokensA && (
+                        <button
+                          onClick={() => { exportNetPNG("A"); setShowExportModal(false); }}
+                          className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <FileCode className="w-5 h-5 text-burgundy shrink-0" />
+                            <div>
+                              <div className="text-body-sm font-medium text-foreground">3D net — Panel A</div>
+                              <div className="text-caption text-muted-foreground">PNG capture of the current 3D view for Panel A</div>
+                            </div>
+                          </div>
+                        </button>
+                      )}
+                      {logprobTokensB && (
+                        <button
+                          onClick={() => { exportNetPNG("B"); setShowExportModal(false); }}
+                          className="w-full text-left px-4 py-3 rounded-sm border border-parchment/60 hover:bg-cream/40 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <FileCode className="w-5 h-5 text-burgundy shrink-0" />
+                            <div>
+                              <div className="text-body-sm font-medium text-foreground">3D net — Panel B</div>
+                              <div className="text-caption text-muted-foreground">PNG capture of the current 3D view for Panel B</div>
+                            </div>
+                          </div>
+                        </button>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
