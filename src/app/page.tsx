@@ -343,6 +343,27 @@ export default function Home() {
                   <li>Type <strong>rabbit</strong> on the keyboard for a surprise.</li>
                 </ul>
               </div>
+
+              <div className="pt-3 border-t border-parchment/50 flex items-center gap-2">
+                <a
+                  href="https://vector-lab-tools.github.io"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-caption text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Image src="/vector-lab-mark.svg" alt="" width={14} height={14} className="w-3.5 h-3.5 shrink-0" />
+                  Part of the Vector Lab
+                </a>
+                <span className="text-muted-foreground/40 text-caption">·</span>
+                <a
+                  href="https://github.com/vector-lab-tools/LLMbench"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-caption text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  github.com/vector-lab-tools/LLMbench
+                </a>
+              </div>
             </div>
           </div>
         </div>
