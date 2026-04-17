@@ -20,9 +20,12 @@ const sourceSerif = Source_Serif_4({
 });
 
 export const metadata: Metadata = {
-  title: "LLMbench - Comparative Close Reading of AI Outputs",
+  title: "LLMbench — Vector Lab",
   description:
-    "A tool for humanistic close reading and annotation of LLM outputs side by side.",
+    "Comparative close reading of Large Language Model outputs. A Vector Lab research instrument for humanistic analysis of AI-generated prose.",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({

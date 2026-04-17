@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <title>Vector Lab mark</title>
+  <rect x="2" y="2" width="60" height="60" stroke="#b8941e" stroke-opacity="0.3" stroke-width="0.75"/>
+  <g stroke="#b8941e" stroke-width="1.2" fill="none" stroke-linecap="round">
+    <path d="M 10 20 C 22 14, 42 14, 54 20"/>
+    <path d="M 9 32 C 22 26, 42 26, 55 32"/>
+    <path d="M 10 44 C 22 38, 42 38, 54 44"/>
+    <path d="M 20 10 C 14 22, 14 42, 20 54"/>
+    <path d="M 32 9 C 26 22, 26 42, 32 55"/>
+    <path d="M 44 10 C 38 22, 38 42, 44 54"/>
+  </g>
+  <circle cx="32" cy="32" r="1.75" fill="#b8941e"/>
+</svg>

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { SplitSquareHorizontal, Settings, HelpCircle, Info, X, GraduationCap } from "lucide-react";
+import { Settings, HelpCircle, Info, X, GraduationCap } from "lucide-react";
+import Image from "next/image";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { TabNav, type TabId } from "@/components/layout/TabNav";
 import ProviderSettings from "@/components/settings/ProviderSettings";
@@ -88,8 +89,23 @@ export default function Home() {
     <div className="flex flex-col h-screen bg-background">
       {/* Header */}
       <header className="px-4 py-2 border-b border-border bg-cream/30 flex items-center gap-3">
+        {/* Vector Lab mark */}
+        <a
+          href="https://vector-lab-tools.github.io"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Vector Lab — research instruments for critical vector theory"
+          className="flex items-center gap-1.5 opacity-70 hover:opacity-100 transition-opacity shrink-0"
+        >
+          <Image src="/vector-lab-mark.svg" alt="Vector Lab" width={20} height={20} className="w-5 h-5" />
+          <span className="text-[10px] font-medium tracking-widest uppercase text-muted-foreground hidden sm:inline">
+            Vector Lab
+          </span>
+        </a>
+        <div className="h-4 w-px bg-parchment" />
+        {/* LLMbench identity */}
         <div className="flex items-center gap-2">
-          <SplitSquareHorizontal className="w-4 h-4 text-burgundy" />
+          <Image src="/llmbench-icon.svg" alt="" width={18} height={18} className="w-[18px] h-[18px]" />
           <h1 className="font-display text-body-sm font-bold text-foreground">
             LLMbench
           </h1>
@@ -166,8 +182,18 @@ export default function Home() {
       </div>
 
       {/* Status bar */}
-      <footer className="px-6 py-1.5 border-t border-border bg-card text-caption text-muted-foreground flex justify-between">
+      <footer className="px-6 py-1.5 border-t border-border bg-card text-caption text-muted-foreground flex items-center justify-between">
         <span>LLMbench v{APP_VERSION}</span>
+        <a
+          href="https://vector-lab-tools.github.io"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 opacity-50 hover:opacity-100 transition-opacity"
+          title="Vector Lab — research instruments for critical vector theory"
+        >
+          <Image src="/vector-lab-mark.svg" alt="Vector Lab" width={14} height={14} className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Vector Lab</span>
+        </a>
         <span>{MODE_LABELS[activeTab]}</span>
       </footer>
 
@@ -532,21 +558,27 @@ export default function Home() {
                 </div>
               </div>
 
-              <p className="text-muted-foreground text-caption">
-                Built as part of a research programme into computational culture, critical code studies,
-                and the political economy of artificial intelligence. Part of the Critical Code Studies
-                Workbench family of tools.
-              </p>
-
-              <div className="pt-2 border-t border-parchment/50">
-                <a
-                  href="https://github.com/vector-lab-tools/LLMbench"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-caption text-burgundy hover:underline"
-                >
-                  github.com/vector-lab-tools/LLMbench
-                </a>
+              <div className="pt-2 border-t border-parchment/50 flex items-center gap-3">
+                <Image src="/llmbench-icon.svg" alt="" width={32} height={32} className="w-8 h-8 shrink-0" />
+                <div>
+                  <a
+                    href="https://vector-lab-tools.github.io"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-caption text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Image src="/vector-lab-mark.svg" alt="" width={14} height={14} className="w-3.5 h-3.5" />
+                    Part of the Vector Lab
+                  </a>
+                  <a
+                    href="https://github.com/vector-lab-tools/LLMbench"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-caption text-burgundy hover:underline"
+                  >
+                    github.com/vector-lab-tools/LLMbench
+                  </a>
+                </div>
               </div>
             </div>
           </div>

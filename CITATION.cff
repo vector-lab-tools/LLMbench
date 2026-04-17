@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use LLMbench in your research, please cite it as below."
+type: software
+title: "LLMbench: A Comparative Close Reading Workbench for Large Language Models"
+abstract: >
+  LLMbench is a web-based research instrument for the comparative close reading
+  of Large Language Model outputs, enabling researchers to subject AI-generated
+  text to hermeneutic scrutiny. Part of the Vector Lab family of research
+  instruments for critical vector theory.
+authors:
+  - family-names: Berry
+    given-names: David M.
+    orcid: "https://orcid.org/0000-0002-2147-1366"
+    affiliation: "University of Sussex"
+repository-code: "https://github.com/vector-lab-tools/LLMbench"
+url: "https://vector-lab-tools.github.io"
+license: MIT
+version: "2.8.0"
+date-released: "2026-04-17"
+keywords:
+  - large language models
+  - close reading
+  - digital humanities
+  - critical code studies
+  - computational criticism
+  - AI analysis
+  - vector lab
