@@ -151,6 +151,7 @@ export default function StochasticMode({ isDark }: StochasticModeProps) {
                 subtitle={isOutput(run) ? `${(run as { metrics: { wordCount: number } }).metrics.wordCount} words` : undefined}
                 badge={isOutput(run) ? `${((run as { metrics: { vocabularyDiversity: number } }).metrics.vocabularyDiversity * 100).toFixed(0)}% lexical diversity` : "Error"}
                 badgeColor={isOutput(run) ? undefined : "bg-red-100 text-red-600"}
+                badgeTooltip={isOutput(run) ? "Lexical diversity: the percentage of words in this response that are non-repeated. High values indicate varied vocabulary; lower values suggest repetition. This measures richness within a single run, not similarity between runs." : undefined}
                 footer={
                   isOutput(run) ? (
                     <DeepDive label="Full Text" summary={`${(run as { text: string }).text.length} chars`}>

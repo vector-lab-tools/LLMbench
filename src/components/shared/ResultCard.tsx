@@ -8,6 +8,7 @@ interface ResultCardProps {
   subtitle?: string;
   badge?: string;
   badgeColor?: string;
+  badgeTooltip?: string;
   panel?: "A" | "B";
   children: ReactNode;
   footer?: ReactNode;
@@ -18,7 +19,8 @@ const PANEL_TINT = {
   B: "border-l-amber-400/50",
 } as const;
 
-export function ResultCard({ title, subtitle, badge, badgeColor, panel, children, footer }: ResultCardProps) {
+export function ResultCard({ title, subtitle, badge, badgeColor, badgeTooltip, panel, children, footer }: ResultCardProps) {
+  const [showBadgeTip, setShowBadgeTip] = useState(false);
   return (
     <div className={cn(
       "bg-card border border-parchment/50 rounded-sm overflow-hidden",
@@ -30,12 +32,32 @@ export function ResultCard({ title, subtitle, badge, badgeColor, panel, children
           <span className="text-caption text-muted-foreground">{subtitle}</span>
         )}
         {badge && (
-          <span className={cn(
-            "ml-auto text-caption font-medium px-2 py-0.5 rounded-sm",
-            badgeColor || "bg-cream text-muted-foreground"
-          )}>
-            {badge}
-          </span>
+          <div className="ml-auto flex items-center gap-1 relative">
+            <span className={cn(
+              "text-caption font-medium px-2 py-0.5 rounded-sm",
+              badgeColor || "bg-cream text-muted-foreground"
+            )}>
+              {badge}
+            </span>
+            {badgeTooltip && (
+              <>
+                <button
+                  onClick={() => setShowBadgeTip((v) => !v)}
+                  className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-muted-foreground/15 text-muted-foreground/60 hover:bg-burgundy/20 hover:text-burgundy text-[9px] font-bold leading-none cursor-pointer transition-colors"
+                >
+                  ?
+                </button>
+                {showBadgeTip && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowBadgeTip(false)} />
+                    <div className="absolute z-50 right-0 top-full mt-1 w-64 bg-popover border border-parchment rounded-sm shadow-lg p-2.5 text-caption text-left text-foreground leading-relaxed">
+                      {badgeTooltip}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
         )}
       </div>
       <div className="px-5 py-4">

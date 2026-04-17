@@ -144,6 +144,7 @@ export default function TemperatureMode({ isDark }: TemperatureModeProps) {
                 subtitle={run.text ? `${run.metrics!.wordCount} words` : undefined}
                 badge={run.text ? `${(run.metrics!.vocabularyDiversity * 100).toFixed(0)}% lexical diversity` : "Error"}
                 badgeColor={run.text ? undefined : "bg-red-100 text-red-600"}
+                badgeTooltip={run.text ? "Lexical diversity: the percentage of words in this response that are non-repeated. High values indicate varied vocabulary; lower values suggest repetition. This measures richness within a single run, not similarity between runs." : undefined}
                 footer={
                   run.text ? (
                     <DeepDive label="Full Text" summary={`${run.text.length} chars`}>
