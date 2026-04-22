@@ -3,7 +3,7 @@
 > [Overview and map](https://vector-lab-tools.github.io) ·
 > [Org profile](https://github.com/vector-lab-tools)
 >
-> **Tier:** comparative instrument. **Object:** generated prose across models.
+> **Tier:** comparative model tool. **Object:** generated prose across models.
 >
 > **Sibling instruments:**
 > [Vectorscope](https://github.com/vector-lab-tools/vectorscope) ·
