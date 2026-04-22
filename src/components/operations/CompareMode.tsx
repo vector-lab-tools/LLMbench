@@ -1607,21 +1607,6 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
           <span>Links{cpLinks.links.length > 0 ? ` (${cpLinks.links.length})` : ""}</span>
         </button>
 
-        {/* Export button — unified modal for comparison + probs */}
-        {(() => {
-          return (
-            <button
-              onClick={() => setShowExportModal(true)}
-              disabled={!hasContent}
-              className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5 disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Export comparison"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export</span>
-            </button>
-          );
-        })()}
-
         <div className="h-4 w-px bg-parchment mx-1" />
 
         {/* Display settings popover */}
@@ -1856,16 +1841,32 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
           );
         })()}
 
+        {/* Right-hand cluster: Export + History as icon buttons */}
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => setShowExportModal(true)}
+            disabled={!hasContent}
+            className="btn-editorial-ghost p-1.5 flex items-center justify-center rounded-sm disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Export comparison (PDF / JSON / Markdown)"
+            aria-label="Export comparison"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+
         {/* History — inline in toolbar */}
         <div className="relative" ref={historyRef}>
           <button
             onClick={() => setShowHistory(!showHistory)}
-            className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5"
-            title="Saved comparisons"
+            className="btn-editorial-ghost p-1.5 flex items-center justify-center rounded-sm relative"
+            title={`Saved comparisons (${comparisons.length})`}
+            aria-label={`Saved comparisons (${comparisons.length})`}
           >
-            <FolderOpen className="w-3.5 h-3.5" />
-            <span>History ({comparisons.length})</span>
-            <ChevronDown className="w-3 h-3" />
+            <FolderOpen className="w-4 h-4" />
+            {comparisons.length > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 text-[9px] leading-none px-1 py-0.5 rounded-full bg-burgundy text-white font-medium min-w-[14px] text-center">
+                {comparisons.length}
+              </span>
+            )}
           </button>
           {showHistory && (
             <div className="absolute top-full right-0 mt-1 bg-card border border-border rounded-md shadow-lg z-50 min-w-[300px] max-h-[400px] overflow-y-auto">
@@ -1910,8 +1911,7 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
             </div>
           )}
         </div>
-
-        <div className="flex-1" />
+        </div>
       </div>
 
       {/* Scrollable body: panels + deep dive extend downward */}
