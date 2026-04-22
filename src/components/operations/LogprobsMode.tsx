@@ -58,7 +58,7 @@ export default function LogprobsMode({ isDark, pendingPrompt }: LogprobsModeProp
   const slotAConfigured = isSlotConfigured("A");
 
   // Check if providers support logprobs
-  const aSupported = ["google", "openai", "openai-compatible"].includes(slots.A.provider);
+  const aSupported = ["google", "openai", "openai-compatible", "openrouter"].includes(slots.A.provider);
 
   const handleRun = useCallback(async (overridePrompt?: string) => {
     const effectivePrompt = overridePrompt ?? (prompt.trim() || (() => {
