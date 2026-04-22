@@ -1210,14 +1210,71 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
 
       // Header
       doc.setFontSize(11); doc.setTextColor(30, 41, 59);
-      doc.text(`Annotated Tokens — ${label}`, PAD, ay); ay += 7;
+      doc.text(`Annotated Tokens — ${label}`, PAD, ay); ay += 6;
       doc.setFontSize(6.5); doc.setTextColor(100, 116, 139);
       doc.text(
-        `Format: token(probability, entropy, "alt1":prob, "alt2":prob, …up to top 5)  ·  "${lastSentPrompt.slice(0, 160)}${lastSentPrompt.length > 160 ? "…" : ""}"`,
+        `Prompt: "${lastSentPrompt.slice(0, 200)}${lastSentPrompt.length > 200 ? "…" : ""}"`,
         PAD, ay
-      ); ay += 7;
+      ); ay += 6;
 
+      // ---- Reading key / legend ----
       const maxLineW = pdfW - PAD * 2;
+      const keyBodySz = 7;
+      const keyLineH = 3.4;
+      const keyPad = 3;
+      const keyStartY = ay;
+
+      // First pass: compute lines to size the box
+      doc.setFontSize(keyBodySz);
+      const keyParas: { label: string; body: string }[] = [
+        { label: "Format",
+          body: ': each token (dark slate) is followed by its annotation (gold): (probability, entropy, top 5 alternatives with their probabilities).' },
+        { label: "Probability",
+          body: ": the model's confidence in choosing this specific token. 90% is near-certain; 30% means the model was taking one path among several competitors." },
+        { label: "Entropy (bits)",
+          body: ": the breadth of the model's uncertainty across ALL candidates, not just the chosen one. 0.0–0.5b = one dominant option (low surprise); 0.5–2.0b = a handful of plausible contenders; >2.0b = many roughly-equal paths (high surprise). A token can have high probability AND moderate entropy when the winner is only just ahead of a tight cluster." },
+        { label: "Example",
+          body: ': "the"(92%,0.25b,"The":4%,"a":2%) — high confidence, low entropy, no competitor. "however"(34%,2.1b,"But":28%,"Yet":19%,"Though":12%) — chose "however" but was torn across several argumentative connectives, producing high entropy.' },
+      ];
+
+      const wrappedParas = keyParas.map(p => {
+        const full = p.label + p.body;
+        return doc.splitTextToSize(full, maxLineW - keyPad * 2);
+      });
+      const totalLines = wrappedParas.reduce((s, w) => s + w.length, 0);
+      const keyHeight = keyPad * 2 + 5 /* title row */ + totalLines * keyLineH + keyParas.length * 0.6;
+
+      doc.setDrawColor(200, 190, 160);
+      doc.setFillColor(252, 249, 240);
+      doc.roundedRect(PAD, keyStartY, maxLineW, keyHeight, 1, 1, "FD");
+
+      let ky = keyStartY + keyPad + 2.8;
+      doc.setFontSize(8.5); doc.setTextColor(30, 41, 59);
+      doc.text("Reading this page", PAD + keyPad, ky); ky += 4.5;
+
+      doc.setFontSize(keyBodySz);
+      keyParas.forEach((p, pi) => {
+        const lines = wrappedParas[pi];
+        // Draw label in gold, then measure its width on the first line to place remaining text in slate
+        const labelLen = p.label.length;
+        lines.forEach((ln: string, li: number) => {
+          if (li === 0 && ln.startsWith(p.label)) {
+            doc.setTextColor(155, 119, 40);
+            doc.text(p.label, PAD + keyPad, ky);
+            const labelW = doc.getTextWidth(p.label);
+            doc.setTextColor(51, 65, 85);
+            doc.text(ln.slice(labelLen), PAD + keyPad + labelW, ky);
+          } else {
+            doc.setTextColor(51, 65, 85);
+            doc.text(ln, PAD + keyPad, ky);
+          }
+          ky += keyLineH;
+        });
+        ky += 0.6;
+      });
+
+      ay = keyStartY + keyHeight + 4;
+
       const lineH = 5.2;
       const FSZT = 7.5; // token font size
       doc.setFontSize(FSZT);
