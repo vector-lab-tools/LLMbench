@@ -8,6 +8,7 @@ import { DefaultPromptChips } from "@/components/shared/DefaultPromptChips";
 import { MODE_DEFAULTS, getRandomDefault } from "@/lib/prompts/defaults";
 import type { PanelSelection } from "@/components/shared/ModelSelector";
 import { MetricBox } from "@/components/shared/ResultCard";
+import { AnalysisSummaryBanner } from "@/components/shared/AnalysisSummaryBanner";
 import { DeepDive } from "@/components/shared/DeepDive";
 import { computeTextMetrics } from "@/lib/metrics/text-metrics";
 
@@ -177,6 +178,24 @@ export default function DivergenceMode({ isDark: _isDark, pendingPrompt }: Diver
     return { wordsA, wordsB, uniqueBigramsA, uniqueBigramsB, sentencesA, sentencesB };
   }, [resultA, resultB]);
 
+  const summaryStats = useMemo(() => {
+    if (!metrics || !resultA || !isOutput(resultA)) return null;
+    const sim = metrics.cosineSimilarity ?? metrics.wordOverlap.jaccardSimilarity;
+    const level = sim > 0.65 ? "low" : sim > 0.35 ? "moderate" : "high";
+    const verdict =
+      level === "low" ? "Strong convergence" : level === "moderate" ? "Moderate divergence" : "Strong divergence";
+    const simStr =
+      metrics.cosineSimilarity !== undefined
+        ? `cosine ${(metrics.cosineSimilarity * 100).toFixed(0)}%, Jaccard ${(metrics.wordOverlap.jaccardSimilarity * 100).toFixed(0)}%`
+        : `Jaccard ${(metrics.wordOverlap.jaccardSimilarity * 100).toFixed(0)}%`;
+    const wordDiffStr =
+      resultB && isOutput(resultB)
+        ? `; A wrote ${metrics.metricsA.wordCount} words, B wrote ${metrics.metricsB.wordCount}`
+        : "";
+    const summary = `${verdict}: ${simStr}${wordDiffStr}.`;
+    return { level: level as "low" | "moderate" | "high", label: verdict, summary };
+  }, [metrics, resultA, resultB]);
+
   return (
     <>
       {/* Mode description */}
@@ -193,6 +212,13 @@ export default function DivergenceMode({ isDark: _isDark, pendingPrompt }: Diver
           </div>
         ) : resultA ? (
           <div className="p-6 space-y-6">
+            {summaryStats && (
+              <AnalysisSummaryBanner
+                level={summaryStats.level}
+                label={summaryStats.label}
+                summary={summaryStats.summary}
+              />
+            )}
             {/* Divergence metrics dashboard */}
             {metrics && (
               <div className="bg-card border border-parchment/50 rounded-sm p-5">

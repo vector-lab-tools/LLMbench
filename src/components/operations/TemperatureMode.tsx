@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { AlertCircle, Thermometer, RotateCcw } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { AnalysisPromptArea } from "@/components/shared/AnalysisPromptArea";
@@ -8,6 +8,7 @@ import { DefaultPromptChips } from "@/components/shared/DefaultPromptChips";
 import { MODE_DEFAULTS, getRandomDefault } from "@/lib/prompts/defaults";
 import type { PanelSelection } from "@/components/shared/ModelSelector";
 import { ResultCard, MetricBox } from "@/components/shared/ResultCard";
+import { AnalysisSummaryBanner } from "@/components/shared/AnalysisSummaryBanner";
 import { DeepDive } from "@/components/shared/DeepDive";
 import { GhostCard } from "@/components/shared/GhostCard";
 import { fetchStreaming } from "@/lib/streaming";
@@ -104,6 +105,26 @@ export default function TemperatureMode({ isDark, pendingPrompt }: TemperatureMo
 
   const hasResults = runsA.some(r => r !== null) || runsB.some(r => r !== null);
   const showResults = hasResults || isLoading;
+
+  const summaryStats = useMemo(() => {
+    if (!isDone) return null;
+    const outputs = runsA.filter((r): r is NonNullable<typeof r> & { text: string; metrics: NonNullable<NonNullable<typeof r>["metrics"]> } =>
+      r !== null && !!r.text && r.metrics != null
+    );
+    if (outputs.length < 2) return null;
+    const wordCounts = outputs.map(r => r.metrics.wordCount);
+    const diversities = outputs.map(r => r.metrics.vocabularyDiversity);
+    const minWords = Math.min(...wordCounts);
+    const maxWords = Math.max(...wordCounts);
+    const spread = maxWords - minWords;
+    const level = spread > 150 ? "high" : spread > 60 ? "moderate" : "low";
+    const label =
+      level === "high" ? "High sensitivity" : level === "moderate" ? "Moderate sensitivity" : "Low sensitivity";
+    const minDiv = Math.min(...diversities);
+    const maxDiv = Math.max(...diversities);
+    const summary = `${label}: word count ranges ${minWords}–${maxWords} across ${outputs.length} temperatures; vocabulary diversity ${(minDiv * 100).toFixed(0)}–${(maxDiv * 100).toFixed(0)}%.`;
+    return { level: level as "low" | "moderate" | "high", label, summary };
+  }, [isDone, runsA]);
 
   const renderPanel = (panel: "A" | "B", runs: (TempRun | null)[], label: string) => {
     const filledRuns = runs.filter((r): r is TempRun => r !== null);
@@ -242,6 +263,13 @@ export default function TemperatureMode({ isDark, pendingPrompt }: TemperatureMo
       <div className="flex-1 min-h-0 overflow-y-auto">
         {showResults ? (
           <div className="p-6 space-y-6">
+            {summaryStats && (
+              <AnalysisSummaryBanner
+                level={summaryStats.level}
+                label={summaryStats.label}
+                summary={summaryStats.summary}
+              />
+            )}
             {renderPanel(
               panelSelection === "B" ? "B" : "A",
               runsA,

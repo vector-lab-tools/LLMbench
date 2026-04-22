@@ -8,6 +8,7 @@ import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { AnalysisPromptArea } from "@/components/shared/AnalysisPromptArea";
 import type { PanelSelection } from "@/components/shared/ModelSelector";
 import { ResultCard, MetricBox } from "@/components/shared/ResultCard";
+import { AnalysisSummaryBanner } from "@/components/shared/AnalysisSummaryBanner";
 import { DeepDive } from "@/components/shared/DeepDive";
 import { GhostCard } from "@/components/shared/GhostCard";
 import { fetchStreaming } from "@/lib/streaming";
@@ -134,6 +135,22 @@ export default function SensitivityMode({ isDark, pendingPrompt }: SensitivityMo
 
   const hasResults = baseA !== null || baseB !== null || variationsA.some(v => v !== null) || variationsB.some(v => v !== null);
   const showResults = hasResults || isLoading;
+
+  const summaryStats = useMemo(() => {
+    if (!isDone || !baseA?.text) return null;
+    const filled = variationsA.filter((v): v is VariationResult => v !== null);
+    const successful = filled.filter(v => !!v.result.text);
+    if (successful.length === 0) return null;
+    const overlaps = successful.map(v =>
+      computeWordOverlap(baseA.text!, v.result.text!).overlapPercentage
+    );
+    const avgOverlap = overlaps.reduce((s, o) => s + o, 0) / overlaps.length;
+    const level = avgOverlap > 70 ? "low" : avgOverlap > 45 ? "moderate" : "high";
+    const label =
+      level === "low" ? "Low prompt sensitivity" : level === "moderate" ? "Moderate sensitivity" : "High prompt sensitivity";
+    const summary = `${label}: prompt variations share ${avgOverlap.toFixed(0)}% of vocabulary with the base output on average (${successful.length} of ${filled.length} variations successful).`;
+    return { level: level as "low" | "moderate" | "high", label, summary };
+  }, [isDone, baseA, variationsA]);
 
   const renderPanel = (panel: "A" | "B", base: RunResult | null, variations: (VariationResult | null)[], label: string) => {
     const filledVariations = variations.filter((v): v is VariationResult => v !== null);
@@ -339,6 +356,13 @@ export default function SensitivityMode({ isDark, pendingPrompt }: SensitivityMo
       <div className="flex-1 min-h-0 overflow-y-auto">
         {showResults ? (
           <div className="p-6 space-y-6">
+            {summaryStats && (
+              <AnalysisSummaryBanner
+                level={summaryStats.level}
+                label={summaryStats.label}
+                summary={summaryStats.summary}
+              />
+            )}
             {renderPanel(
               panelSelection === "B" ? "B" : "A",
               panelSelection === "B" ? baseB : baseA,

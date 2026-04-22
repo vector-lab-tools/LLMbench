@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { AlertCircle, Dices, RotateCcw } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { AnalysisPromptArea } from "@/components/shared/AnalysisPromptArea";
@@ -8,6 +8,7 @@ import { DefaultPromptChips } from "@/components/shared/DefaultPromptChips";
 import { MODE_DEFAULTS, getRandomDefault } from "@/lib/prompts/defaults";
 import type { PanelSelection } from "@/components/shared/ModelSelector";
 import { ResultCard, MetricBox } from "@/components/shared/ResultCard";
+import { AnalysisSummaryBanner } from "@/components/shared/AnalysisSummaryBanner";
 import { DeepDive } from "@/components/shared/DeepDive";
 import { GhostCard } from "@/components/shared/GhostCard";
 import { computeWordOverlap } from "@/lib/metrics/text-metrics";
@@ -96,6 +97,27 @@ export default function StochasticMode({ isDark, pendingPrompt }: StochasticMode
 
   const hasResults = runsA.some(r => r !== null) || runsB.some(r => r !== null);
   const showResults = hasResults || isLoading;
+
+  const summaryStats = useMemo(() => {
+    if (!isDone) return null;
+    const outputs = runsA.filter((r): r is RunResult & { text: string } => r !== null && isOutput(r));
+    if (outputs.length < 2) return null;
+    const avgDiversity =
+      outputs.reduce((s, r) => s + r.metrics.vocabularyDiversity, 0) / outputs.length;
+    let sum = 0, count = 0;
+    for (let i = 0; i < outputs.length; i++) {
+      for (let j = i + 1; j < outputs.length; j++) {
+        sum += computeWordOverlap(outputs[i].text, outputs[j].text).overlapPercentage;
+        count++;
+      }
+    }
+    const avgOverlap = sum / count;
+    const level = avgOverlap > 70 ? "low" : avgOverlap > 40 ? "moderate" : "high";
+    const label =
+      level === "low" ? "Low variation" : level === "moderate" ? "Moderate variation" : "High variation";
+    const summary = `${label} across ${outputs.length} runs: outputs share ${avgOverlap.toFixed(0)}% of vocabulary on average (vocabulary diversity ${(avgDiversity * 100).toFixed(0)}%).`;
+    return { level: level as "low" | "moderate" | "high", label, summary };
+  }, [isDone, runsA]);
 
   const renderPanel = (panel: "A" | "B", runs: (RunResult | null)[], label: string) => {
     const filledRuns = runs.filter((r): r is RunResult => r !== null);
@@ -285,6 +307,13 @@ export default function StochasticMode({ isDark, pendingPrompt }: StochasticMode
       <div className="flex-1 min-h-0 overflow-y-auto">
         {showResults ? (
           <div className="p-6 space-y-6">
+            {summaryStats && (
+              <AnalysisSummaryBanner
+                level={summaryStats.level}
+                label={summaryStats.label}
+                summary={summaryStats.summary}
+              />
+            )}
             {renderPanel(
               panelSelection === "B" ? "B" : "A",
               runsA,
