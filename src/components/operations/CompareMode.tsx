@@ -1200,6 +1200,70 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
       }
     }
 
+    // ---- Last page(s): Annotated token text ----
+    const renderAnnotatedTokenPage = (tokens: TokenLogprob[], label: string) => {
+      doc.addPage();
+      let ax = PAD;
+      let ay = PAD + 8;
+
+      // Header
+      doc.setFontSize(11); doc.setTextColor(30, 41, 59);
+      doc.text(`Annotated Tokens — ${label}`, PAD, ay); ay += 7;
+      doc.setFontSize(6.5); doc.setTextColor(100, 116, 139);
+      doc.text(
+        `Format: token(probability, entropy, "alt1","alt2")  ·  "${lastSentPrompt.slice(0, 180)}${lastSentPrompt.length > 180 ? "…" : ""}"`,
+        PAD, ay
+      ); ay += 7;
+
+      const maxLineW = pdfW - PAD * 2;
+      const lineH = 5.2;
+      const FSZT = 7.5; // token font size
+      doc.setFontSize(FSZT);
+
+      for (const tok of tokens) {
+        // Newline token → line break
+        if (tok.token === "\n" || tok.token === "\r\n") {
+          ax = PAD; ay += lineH;
+          if (ay > pdfH - PAD) { doc.addPage(); ay = PAD + 8; }
+          continue;
+        }
+
+        const tokenDisplay = tok.token.replace(/\n/g, "");
+        const prob = `${(Math.exp(tok.logprob) * 100).toFixed(0)}%`;
+        const ent = `${computeTokenEntropy(tok).toFixed(2)}b`;
+        const alts = tok.topAlternatives.slice(0, 2)
+          .map(a => `"${a.token.replace(/\n/g, "↵").trim() || "·"}"`)
+          .join(",");
+        const annot = `(${prob},${ent},${alts.length ? alts : "—"})`;
+
+        doc.setFontSize(FSZT);
+        const tokenW = doc.getTextWidth(tokenDisplay || " ");
+        const annotW = doc.getTextWidth(annot);
+        const gapW = doc.getTextWidth(" ");
+
+        // Wrap when the pair won't fit
+        if (ax > PAD && ax + tokenW + annotW + gapW > maxLineW) {
+          ax = PAD; ay += lineH;
+          if (ay > pdfH - PAD) { doc.addPage(); ay = PAD + 8; }
+        }
+
+        // Token in dark slate
+        if (tokenDisplay) {
+          doc.setTextColor(51, 65, 85);
+          doc.text(tokenDisplay, ax, ay);
+          ax += tokenW;
+        }
+
+        // Annotation in muted gold
+        doc.setTextColor(155, 119, 40);
+        doc.text(annot, ax, ay);
+        ax += annotW + gapW;
+      }
+    };
+
+    if (logprobTokensA) renderAnnotatedTokenPage(logprobTokensA, getSlotLabel("A"));
+    if (logprobTokensB) renderAnnotatedTokenPage(logprobTokensB, getSlotLabel("B"));
+
     doc.save(`${comparisonName.replace(/[^a-z0-9]/gi, "-").toLowerCase()}-probs.pdf`);
   }, [logprobTokensA, logprobTokensB, lastSentPrompt, getSlotLabel, comparisonName, resultA, resultB, probsColorLight, showEntropyCurve, showPixelMap]);
 
