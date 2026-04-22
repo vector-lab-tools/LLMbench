@@ -13,7 +13,8 @@ import { DeepDive } from "@/components/shared/DeepDive";
 import { GhostCard } from "@/components/shared/GhostCard";
 import { computeWordOverlap } from "@/lib/metrics/text-metrics";
 import { fetchStreaming } from "@/lib/streaming";
-import type { RunResult } from "@/types/analysis";
+import type { RunResult, RunOutput } from "@/types/analysis";
+import { isRunOutput } from "@/types/analysis";
 
 function isOutput(r: RunResult): r is RunResult & { text: string } {
   return "text" in r;
@@ -100,7 +101,7 @@ export default function StochasticMode({ isDark, pendingPrompt }: StochasticMode
 
   const summaryStats = useMemo(() => {
     if (!isDone) return null;
-    const outputs = runsA.filter((r): r is RunResult & { text: string } => r !== null && isOutput(r));
+    const outputs = runsA.filter((r): r is RunOutput => r !== null && isRunOutput(r));
     if (outputs.length < 2) return null;
     const avgDiversity =
       outputs.reduce((s, r) => s + r.metrics.vocabularyDiversity, 0) / outputs.length;
