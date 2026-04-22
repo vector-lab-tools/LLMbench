@@ -64,7 +64,7 @@ function LinkForm({ annotationsA, annotationsB, initial, labelA, labelB, onSubmi
   const [relation, setRelation] = useState<LinkRelationType>(initial?.relation ?? "contrast");
   const [content, setContent] = useState(initial?.content ?? "");
 
-  const canSubmit = annAId && annBId && content.trim();
+  const canSubmit = annAId && annBId;
 
   return (
     <div className="border border-parchment/60 rounded-sm p-4 bg-cream/20 space-y-3">
@@ -149,12 +149,12 @@ function LinkForm({ annotationsA, annotationsB, initial, labelA, labelB, onSubmi
       {/* Content */}
       <div>
         <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide block mb-1">
-          Your interpretive note
+          Your interpretive note <span className="text-muted-foreground/60 normal-case">(optional)</span>
         </label>
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          placeholder="Describe the relationship between these two annotated moments…"
+          placeholder="Describe the relationship between these two annotated moments (optional)…"
           className="input-editorial w-full resize-none text-caption"
           rows={3}
         />
@@ -267,9 +267,11 @@ function LinkCard({ link, annA, annB, labelA, labelB, annotationsA, annotationsB
       </div>
 
       {/* Interpretive note */}
-      <div className="px-4 py-3 border-t border-parchment/20 text-body-sm text-foreground font-serif leading-relaxed">
-        {link.content}
-      </div>
+      {link.content.trim() && (
+        <div className="px-4 py-3 border-t border-parchment/20 text-body-sm text-foreground font-serif leading-relaxed">
+          {link.content}
+        </div>
+      )}
     </div>
   );
 }

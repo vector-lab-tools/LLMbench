@@ -37,6 +37,7 @@ import {
   FileCode,
   ChevronLeft,
   ChevronRight,
+  Link2,
 } from "lucide-react";
 import { StructView } from "@/components/viz/StructView";
 import { ToneView } from "@/components/viz/ToneView";
@@ -458,6 +459,7 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
   const [showExportModal, setShowExportModal] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showDisplaySettings, setShowDisplaySettings] = useState(false);
+  const [showCrossPanelLinks, setShowCrossPanelLinks] = useState(false);
   const [viewMode, setViewMode] = useState<"diff" | "struct" | "tone" | "probs" | null>(null);
   const [promptCollapsed, setPromptCollapsed] = useState(false);
   const [promptBouncing, setPromptBouncing] = useState(false);
@@ -1211,7 +1213,7 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
       doc.text(`Annotated Tokens — ${label}`, PAD, ay); ay += 7;
       doc.setFontSize(6.5); doc.setTextColor(100, 116, 139);
       doc.text(
-        `Format: token(probability, entropy, "alt1","alt2")  ·  "${lastSentPrompt.slice(0, 180)}${lastSentPrompt.length > 180 ? "…" : ""}"`,
+        `Format: token(probability, entropy, "alt1":prob, "alt2":prob, …up to top 5)  ·  "${lastSentPrompt.slice(0, 160)}${lastSentPrompt.length > 160 ? "…" : ""}"`,
         PAD, ay
       ); ay += 7;
 
@@ -1231,8 +1233,12 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
         const tokenDisplay = tok.token.replace(/\n/g, "");
         const prob = `${(Math.exp(tok.logprob) * 100).toFixed(0)}%`;
         const ent = `${computeTokenEntropy(tok).toFixed(2)}b`;
-        const alts = tok.topAlternatives.slice(0, 2)
-          .map(a => `"${a.token.replace(/\n/g, "↵").trim() || "·"}"`)
+        const alts = tok.topAlternatives.slice(0, 5)
+          .map(a => {
+            const altLabel = a.token.replace(/\n/g, "↵").trim() || "·";
+            const altProb = (Math.exp(a.logprob) * 100).toFixed(0);
+            return `"${altLabel}":${altProb}%`;
+          })
           .join(",");
         const annot = `(${prob},${ent},${alts.length ? alts : "—"})`;
 
@@ -1533,6 +1539,16 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
         </button>
 
         <div className="h-4 w-px bg-parchment mx-1" />
+
+        {/* Cross-panel links toggle */}
+        <button
+          onClick={() => setShowCrossPanelLinks((v) => !v)}
+          className={`btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5 ${showCrossPanelLinks ? "bg-burgundy/10 text-burgundy" : ""}`}
+          title={showCrossPanelLinks ? "Hide cross-panel links" : "Show cross-panel links"}
+        >
+          <Link2 className="w-3.5 h-3.5" />
+          <span>Links{cpLinks.links.length > 0 ? ` (${cpLinks.links.length})` : ""}</span>
+        </button>
 
         {/* Export button — unified modal for comparison + probs */}
         {(() => {
@@ -2134,17 +2150,19 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
       {/* End scrollable body */}
       </div>
 
-      {/* Cross-Panel Annotation Links */}
-      <CrossPanelLinks
-        links={cpLinks.links}
-        annotationsA={annA.annotations}
-        annotationsB={annB.annotations}
-        onAdd={cpLinks.addLink}
-        onUpdate={cpLinks.updateLink}
-        onDelete={cpLinks.deleteLink}
-        labelA={getSlotLabel("A")}
-        labelB={getSlotLabel("B")}
-      />
+      {/* Cross-Panel Annotation Links (hidden by default, toggled from toolbar) */}
+      {showCrossPanelLinks && (
+        <CrossPanelLinks
+          links={cpLinks.links}
+          annotationsA={annA.annotations}
+          annotationsB={annB.annotations}
+          onAdd={cpLinks.addLink}
+          onUpdate={cpLinks.updateLink}
+          onDelete={cpLinks.deleteLink}
+          labelA={getSlotLabel("A")}
+          labelB={getSlotLabel("B")}
+        />
+      )}
 
       {/* Prompt area */}
       <div className="border-t border-border bg-card shrink-0">
