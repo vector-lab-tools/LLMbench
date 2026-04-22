@@ -15,8 +15,8 @@ authors:
 repository-code: "https://github.com/vector-lab-tools/LLMbench"
 url: "https://vector-lab-tools.github.io"
 license: MIT
-version: "2.9.0"
-date-released: "2026-04-22"
+version: "2.9.1"
+date-released: "2026-04-23"
 keywords:
   - large language models
   - close reading

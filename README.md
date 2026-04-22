@@ -17,8 +17,8 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.9.0
-**Date:** 22 April 2026
+**Version:** 2.9.1
+**Date:** 23 April 2026
 **Licence:** MIT
 
 
@@ -251,8 +251,10 @@ The architecture follows the Manifold Atlas pattern: a thin `page.tsx` manages m
 - [x] Tutorial / cards system for guided analytical exercises (10 exercises across all modes)
 - [x] Summary statistics banners in all Analyse modes
 - [x] Cosine similarity (frequency-weighted) in Cross-Model Divergence
-- [x] Annotated token text page in probs PDF export
+- [x] Annotated token text page in probs PDF export (with reading key: format, probability, entropy with quantitative thresholds, worked example)
+- [x] Top-5 alternatives with probabilities on each annotated token
 - [x] Vector Lab family branding and navigation
+- [x] Canonical Vector Lab toolbar layout: clustered views, right-hand icon dock for Export and History
 - [ ] Embedding-based semantic similarity in divergence mode
 - [ ] Supabase cloud persistence and sharing
 
