@@ -17,8 +17,8 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.7.1
-**Date:** 12 April 2026
+**Version:** 2.9.0
+**Date:** 22 April 2026
 **Licence:** MIT
 
 
@@ -76,7 +76,7 @@ The primary close-reading workspace. Two panels, two models, one prompt.
 - **Prompt reveal.** After sending, a collapsed strip shows the prompt; clicking it opens the full user prompt and system instruction.
 - **History and save.** Comparisons persist to browser localStorage; load, rename, and delete past sessions from the history dropdown.
 - **Reset.** Clears results and returns the panel to its initial state without losing the current prompt.
-- **Export.** Comparisons export as structured JSON, formatted plain text, or side-by-side landscape PDF with coloured annotation badges. In probs view the Export button switches to a dedicated probs modal with PDF snapshot, PNG image, and JSON (per-token probabilities, entropy stats, divergence positions, and text metrics).
+- **Export.** Comparisons export as structured JSON, formatted plain text, or side-by-side landscape PDF with coloured annotation badges. In probs view the Export button switches to a dedicated probs modal with PDF snapshot (heatmap, full text, deep-dive stats, entropy curve, pixel maps, and a final annotated-token page showing each token with its probability, entropy, and top two alternatives in two-colour typography), PNG image, and JSON (per-token probabilities, entropy stats, divergence positions, and text metrics).
 
 ### Four overlay views
 
@@ -124,7 +124,7 @@ A dedicated mode for deep single-response logprob analysis. Where Compare mode's
 Requires Google Gemini (2.0), OpenAI, or Hugging Face with a logprobs-supporting model (logprobs support).
 
 ### Cross-Model Divergence
-Quantitative comparison with Jaccard similarity, vocabulary overlap analysis, structural metrics (word count, sentence count, average sentence length, vocabulary diversity), and response-time comparison. Deep Dives include vocabulary partitions (unique to A / shared / unique to B), top-10 word frequency bar charts side by side, unique bigram candidates, and a per-panel sentence breakdown.
+Quantitative comparison with cosine similarity (frequency-weighted), Jaccard similarity (set-level), vocabulary overlap analysis, structural metrics (word count, sentence count, average sentence length, vocabulary diversity), and response-time comparison. Deep Dives include vocabulary partitions (unique to A / shared / unique to B), top-10 word frequency bar charts side by side, unique bigram candidates, and a per-panel sentence breakdown.
 
 ## General Features
 
@@ -134,6 +134,10 @@ Quantitative comparison with Jaccard similarity, vocabulary overlap analysis, st
 - **Deep Dive.** Every result has a collapsible Deep Dive panel with per-run metric tables, pairwise overlap matrices, entropy hotspot lists, confidence distribution bars, vocabulary frequency comparisons, and CSV export.
 - **Default prompt chips.** Every mode shows curated example prompts when the input is empty. Clicking runs immediately; sending an empty input auto-picks a random example.
 - **Display controls.** Configurable prose font, font size, annotation brightness, line highlighting intensity, and dark mode.
+- **Summary statistics.** Each Analyse mode displays a one-line verdict banner when a run completes — automatically classifying variation level (low / moderate / high) from the run metrics with colour coding.
+- **Guided exercises.** A tutorial cards system (GraduationCap button in the header) offers 10 structured analytical exercises across all modes, each with a method note, guided questions, and a one-click launch.
+- **Cross-panel annotation linking.** Annotations in Panel A can be linked to annotations in Panel B with typed relation categories (contrast, parallel, divergence, convergence, echo, absence, note), persisted with the comparison.
+- **Prompt history.** A clock icon in every mode's prompt bar gives access to the last 10 prompts, shared across all modes via localStorage.
 - **No Markdown mode.** A toolbar toggle injects a system instruction telling the model to return plain text rather than Markdown — useful for cleaner diffs and probability analysis.
 - **Help modal.** A built-in help dialog explains each mode, the overlay views, and the token probabilities system, with a dedicated sub-window on how logprobs, entropy, and the heatmap work.
 - **Dynamic model configuration.** Available models are defined in a [`models.md`](public/models.md) file. Add new models by editing the Markdown file and refreshing — no rebuild required.
@@ -161,7 +165,7 @@ Quantitative comparison with Jaccard similarity, vocabulary overlap analysis, st
 ### Installation
 
 ```bash
-git clone https://github.com/dmberry/LLMbench.git
+git clone https://github.com/vector-lab-tools/LLMbench.git
 cd LLMbench
 npm install
 ```
@@ -242,12 +246,15 @@ The architecture follows the Manifold Atlas pattern: a thin `page.tsx` manages m
 
 ## Roadmap
 
-- [ ] Cross-panel annotation linking (connecting annotations across Panel A and Panel B)
+- [x] Cross-panel annotation linking (contrast, parallel, divergence, convergence, echo, absence, note)
+- [x] Prompt history browser across all modes (last 10 prompts, localStorage)
+- [x] Tutorial / cards system for guided analytical exercises (10 exercises across all modes)
+- [x] Summary statistics banners in all Analyse modes
+- [x] Cosine similarity (frequency-weighted) in Cross-Model Divergence
+- [x] Annotated token text page in probs PDF export
+- [x] Vector Lab family branding and navigation
 - [ ] Embedding-based semantic similarity in divergence mode
-- [x] Prompt history browser (last 10 prompts, localStorage, Compare mode)
-- [ ] Prompt history browser across all modes
 - [ ] Supabase cloud persistence and sharing
-- [ ] Tutorial / cards system for guided analytical exercises
 
 ## Related Work
 
