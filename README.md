@@ -72,7 +72,7 @@ Grammar Probe is the generation-side companion to Manifold Atlas's *Grammar of V
 Five phases, each a distinct research question:
 
 - **A. Prevalence** *(available in v2.10.0)*. Batch-run a prompt suite across temperatures and models; regex-count pattern hits; aggregate by register, model, and temperature. Answers: how often does the pattern appear, and is it register-sensitive?
-- **B. Continuation logprobs** *(planned)*. For each pattern scaffold, inspect the top-20 next-token distribution. Answers: is the pattern baked into the next-token distribution, or does it emerge downstream?
+- **B. Continuation logprobs** *(available in v2.10.1)*. For each pattern scaffold, fetch the top-K next-token distribution (max_tokens=1 with logprobs). Tokens the construction typically relies on (*not*, *just*, *merely*, etc.) are highlighted, and per-card Shannon entropy is reported. Answers: is the pattern baked into the next-token distribution, or does it emerge downstream? Requires Gemini 2.0, OpenAI, OpenRouter, or Hugging Face.
 - **C. Forced continuation** *(planned)*. Cap scaffolds at `but a ` and harvest the top-20 Ys. Cross-link to Manifold Atlas: when the highest-probability Y is also the nearest-neighbour of X, the construction has been caught in the act.
 - **D. Perturbation** *(planned)*. Neutral vs anti-pattern vs pro-pattern framings. Does the pattern persist under explicit negative instruction (structural) or flex (stylistic)?
 - **E. Temperature sweep** *(planned)*. Prevalence at T ∈ {0, 0.3, 0.7, 1.0, 1.5}. A pattern present at T=0 sits at the greedy centre of the distribution; not a sampling accident.
@@ -271,7 +271,8 @@ The architecture follows the Manifold Atlas pattern: a thin `page.tsx` manages m
 - [x] Vector Lab family branding and navigation
 - [x] Canonical Vector Lab toolbar layout: clustered views, right-hand icon dock for Export and History
 - [x] Investigate tier with Grammar Probe (Phase A: prevalence heatmap across pattern × prompt × temperature × model)
-- [ ] Grammar Probe Phase B (continuation logprobs) and Phase C (forced-continuation with Manifold Atlas hand-off)
+- [x] Grammar Probe Phase B: continuation logprobs — top-K next-token distribution per scaffold with suppress-token highlighting and entropy
+- [ ] Grammar Probe Phase C (forced-continuation with Manifold Atlas hand-off)
 - [ ] Grammar Probe Phases D (perturbation) and E (temperature sweep)
 - [ ] Logit-bias "suppress tokens" experiment for Grammar Probe
 - [ ] Embedding-based semantic similarity in divergence mode

@@ -301,7 +301,7 @@ export default function Home() {
                 <p className="text-muted-foreground mb-1.5"><strong className="text-foreground">Visualisation bands</strong> (toggle from the right of the nav strip):</p>
                 <div className="space-y-1 text-muted-foreground pl-3 border-l-2 border-parchment mb-2">
                   <p><strong className="text-foreground">📈 Graph</strong> &mdash; Entropy curve: an SVG sparkline of per-token entropy across the whole sequence, with A and B overlaid. Click any point to jump to that token.</p>
-                  <p><strong className="text-foreground">🟨 Pixels</strong> &mdash; Token pixel map: a bird's-eye grid where each cell is one token, coloured by probability. Five palettes (Heat, Viridis, Magma, Ice, Mono). Click any cell to jump the cursor. Both panels use the same cell size so counts are directly comparable.</p>
+                  <p><strong className="text-foreground">🟨 Pixels</strong> &mdash; Token pixel map: a bird&rsquo;s-eye grid where each cell is one token, coloured by probability. Five palettes (Heat, Viridis, Magma, Ice, Mono). Click any cell to jump the cursor. Both panels use the same cell size so counts are directly comparable.</p>
                   <p><strong className="text-foreground">🕸️ Net</strong> &mdash; 3D probability skyline: a rotatable WebGL mesh where peaks are uncertain tokens. Drag to rotate. Click any point to jump the cursor.</p>
                 </div>
                 <p className="text-muted-foreground">
@@ -333,6 +333,24 @@ export default function Home() {
                     <strong className="text-foreground">Cross-Model Divergence</strong> &mdash; Quantitative comparison with Jaccard similarity, vocabulary overlap, sentence-level structural analysis, and top word frequency bars side by side.
                   </p>
                 </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-1">Investigate: Grammar Probe</h3>
+                <p className="text-muted-foreground mb-2">
+                  A pattern-specific investigation of rhetorical constructions the model reaches for &mdash; <em>Not X but Y</em>, hedging triplets, tricolon, modal stacking. Four phases (A ships, B ships, C&ndash;E planned):
+                </p>
+                <div className="space-y-1.5 text-muted-foreground pl-3 border-l-2 border-parchment mb-2">
+                  <p>
+                    <strong className="text-foreground">A. Prevalence.</strong> Batch-runs a 20-prompt suite across two temperatures and up to two models, regex-counts hits, and renders a prompt &times; model &times; temperature heatmap with per-register, per-model, per-temperature breakdowns and a low / moderate / high verdict banner.
+                  </p>
+                  <p>
+                    <strong className="text-foreground">B. Continuation logprobs.</strong> Picks the pattern&rsquo;s canonical scaffolds (e.g. &ldquo;Democracy is not just a system of government, but a &rdquo;) and fetches the top-K next-token distribution at position 0. Tokens the construction typically leans on (<em>not</em>, <em>just</em>, <em>merely</em>&hellip;) are highlighted in burgundy; Shannon entropy (bits) appears per card. Requires Gemini 2.0, OpenAI, OpenRouter, or Hugging Face.
+                  </p>
+                </div>
+                <p className="text-muted-foreground">
+                  Ships with a four-preset pattern library (Not X but Y, Hyland hedges, tricolon, modal stacking) and a 20-prompt suite across six registers (speech, op-ed, explainer, technical, poetic, dialogue). Add patterns by editing <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">src/lib/grammar/patterns.ts</code>.
+                </p>
               </div>
 
               <div>

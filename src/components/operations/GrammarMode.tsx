@@ -15,9 +15,9 @@
  * different patterns without re-running the model.
  */
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import {
-  AlertCircle, Microscope, Play, RotateCcw, Settings2, FileText,
+  AlertCircle, Microscope, Play, RotateCcw, Settings2, FileText, BarChart3,
 } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { ModelSelector, type PanelSelection } from "@/components/shared/ModelSelector";
@@ -63,13 +63,26 @@ interface GrammarModeProps {
 
 const PHASES: { id: Phase; label: string; short: string; available: boolean; description: string }[] = [
   { id: "prevalence",   label: "A. Prevalence",           short: "A",     available: true,  description: "Regex-count pattern hits across the suite × temperatures × models." },
-  { id: "continuation", label: "B. Continuation logprobs", short: "B",   available: false, description: "For each pattern scaffold, inspect the top-20 next-token distribution." },
+  { id: "continuation", label: "B. Continuation logprobs", short: "B",   available: true,  description: "For each pattern scaffold, inspect the top-K next-token distribution." },
   { id: "forced",       label: "C. Forced continuation",  short: "C",    available: false, description: "Cap scaffolds at 'but a ' and harvest top-20 Ys. Cross-link to Manifold Atlas." },
   { id: "perturbation", label: "D. Perturbation",         short: "D",    available: false, description: "Neutral vs anti-pattern vs pro-pattern framings. Measure compliance." },
   { id: "temperature",  label: "E. Temperature sweep",    short: "E",    available: false, description: "Prevalence vs T ∈ {0, 0.3, 0.7, 1.0, 1.5}. Is the pattern at the greedy centre?" },
 ];
 
 const PREVALENCE_TEMPS = [0, 0.7];
+const CONTINUATION_TOP_K = 15;
+const CONTINUATION_PROVIDERS = new Set(["google", "openai", "openai-compatible", "openrouter", "huggingface"]);
+
+interface ContinuationTokenProb { token: string; logprob: number }
+interface ContinuationResult {
+  panel: "A" | "B";
+  scaffoldId: string;
+  scaffold: string;
+  chosen: ContinuationTokenProb | null;
+  distribution: ContinuationTokenProb[];
+  error?: string;
+  provenance?: { modelDisplayName: string; responseTimeMs: number };
+}
 
 // `pendingPrompt` is accepted for nav compatibility with the rest of the app
 // (tutorial cards can deep-link into any mode with a pre-filled prompt).
@@ -92,10 +105,25 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
   const [showSuiteEditor, setShowSuiteEditor] = useState(false);
   const [isDone, setIsDone] = useState(false);
 
+  // ---- Phase B state ----
+  const [selectedScaffoldIdx, setSelectedScaffoldIdx] = useState<Set<number>>(new Set());
+  const [continuationResults, setContinuationResults] = useState<ContinuationResult[]>([]);
+  const [isContinuationLoading, setIsContinuationLoading] = useState(false);
+  const [continuationProgress, setContinuationProgress] = useState<{ done: number; total: number } | null>(null);
+  const [continuationError, setContinuationError] = useState<string | null>(null);
+
   const pattern = useMemo(
     () => DEFAULT_PATTERNS.find(p => p.id === patternId) || DEFAULT_PATTERNS[0],
     [patternId]
   );
+
+  // When the pattern changes, default to selecting all scaffolds and clear stale results.
+  useEffect(() => {
+    setSelectedScaffoldIdx(new Set(pattern.scaffolds.map((_, i) => i)));
+    setContinuationResults([]);
+    setContinuationProgress(null);
+    setContinuationError(null);
+  }, [pattern]);
 
   const selectedPrompts = useMemo(
     () => suite.filter(p => selectedPromptIds.has(p.id)),
@@ -173,6 +201,95 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     setProgress(null);
     setError(null);
     setIsDone(false);
+  }, []);
+
+  // ---- Phase B: continuation logprobs ----
+  const toggleScaffold = (idx: number) => {
+    setSelectedScaffoldIdx(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  };
+
+  const selectedScaffolds = useMemo(
+    () => pattern.scaffolds
+      .map((text, idx) => ({ id: `s${idx}`, text, idx }))
+      .filter(s => selectedScaffoldIdx.has(s.idx)),
+    [pattern, selectedScaffoldIdx]
+  );
+
+  const handleRunContinuation = useCallback(async () => {
+    if (isContinuationLoading || selectedScaffolds.length === 0) return;
+    const usingBoth = panelSelection === "both" && slotBConfigured;
+    if (!slotAConfigured && !usingBoth) {
+      setContinuationError("Configure at least one model in Settings before running.");
+      return;
+    }
+    // Capability gate: both active slots must support logprobs.
+    const slotsInUse: typeof slots.A[] = [];
+    if (panelSelection === "A" || panelSelection === "both") slotsInUse.push(slots.A);
+    if (panelSelection === "B" || (panelSelection === "both" && slotBConfigured)) slotsInUse.push(slots.B);
+    const unsupported = slotsInUse.find(s => !CONTINUATION_PROVIDERS.has(s.provider));
+    if (unsupported) {
+      setContinuationError(`Provider '${unsupported.provider}' does not expose continuation logprobs. Use Gemini (2.0), OpenAI, OpenRouter, or Hugging Face.`);
+      return;
+    }
+
+    setIsContinuationLoading(true);
+    setContinuationError(null);
+    setContinuationResults([]);
+    const total = selectedScaffolds.length * (usingBoth ? 2 : 1);
+    setContinuationProgress({ done: 0, total });
+
+    try {
+      const slotA = panelSelection === "B" ? slots.B : slots.A;
+      const slotB = usingBoth ? slots.B : null;
+
+      await fetchStreaming<StreamEvent>(
+        "/api/investigate/grammar-continuation",
+        {
+          scaffolds: selectedScaffolds.map(s => ({ id: s.id, text: s.text })),
+          topK: CONTINUATION_TOP_K,
+          slotA,
+          slotB,
+          noMarkdown,
+        },
+        (event) => {
+          if (event.type === "meta") {
+            setContinuationProgress({ done: 0, total: event.total });
+          } else if (event.type === "scaffold") {
+            setContinuationResults(prev => [
+              ...prev,
+              {
+                panel: event.panel,
+                scaffoldId: event.scaffoldId,
+                scaffold: event.scaffold,
+                chosen: event.result?.chosen ?? null,
+                distribution: event.result?.distribution ?? [],
+                error: event.result?.error,
+                provenance: event.result?.provenance,
+              },
+            ]);
+            setContinuationProgress(p => p ? { ...p, done: p.done + 1 } : p);
+          }
+        },
+      );
+    } catch (err) {
+      setContinuationError(err instanceof Error ? err.message : "Continuation run failed");
+    } finally {
+      setIsContinuationLoading(false);
+    }
+  }, [
+    isContinuationLoading, selectedScaffolds, panelSelection,
+    slotAConfigured, slotBConfigured, slots, noMarkdown,
+  ]);
+
+  const handleContinuationReset = useCallback(() => {
+    setContinuationResults([]);
+    setContinuationProgress(null);
+    setContinuationError(null);
   }, []);
 
   // ---- Derived prevalence stats (per pattern, per run) ----
@@ -325,10 +442,149 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="max-w-6xl mx-auto px-4 py-4">
 
-          {activePhase !== "prevalence" && (
+          {activePhase !== "prevalence" && activePhase !== "continuation" && (
             <div className="border border-parchment/60 rounded-sm p-4 bg-cream/20 text-body-sm text-muted-foreground">
               <strong className="text-foreground">Coming soon.</strong> {PHASES.find(p => p.id === activePhase)?.description}
             </div>
+          )}
+
+          {activePhase === "continuation" && (
+            <>
+              {/* Pattern selector (shared) */}
+              <div className="mb-3">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-1.5">
+                  Pattern
+                </div>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {DEFAULT_PATTERNS.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => setPatternId(p.id)}
+                      className={`px-2.5 py-1 text-caption rounded-sm border transition-colors ${
+                        patternId === p.id
+                          ? "border-burgundy bg-burgundy/10 text-burgundy"
+                          : "border-parchment bg-card text-muted-foreground hover:text-foreground hover:bg-cream/50"
+                      }`}
+                      title={p.description}
+                    >
+                      {p.shortLabel}
+                    </button>
+                  ))}
+                </div>
+                <div className="text-caption text-muted-foreground leading-relaxed">
+                  <strong className="text-foreground">{pattern.label}.</strong> {pattern.description}
+                </div>
+              </div>
+
+              {/* Capability note */}
+              <div className="mb-3 text-caption text-muted-foreground border-l-2 border-parchment/60 pl-2">
+                Requires a provider that exposes next-token logprobs: Gemini 2.0, OpenAI, OpenRouter, or Hugging Face.
+                Gemini 2.5 is <em>not</em> supported. Each scaffold consumes one token of output.
+              </div>
+
+              {/* Scaffold list */}
+              <div className="mb-3 border border-parchment/60 rounded-sm bg-card">
+                <div className="px-3 py-2 border-b border-parchment/60 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold flex items-center justify-between">
+                  <span>Scaffolds</span>
+                  <span className="text-muted-foreground/60 normal-case tracking-normal">
+                    {selectedScaffolds.length} / {pattern.scaffolds.length} selected
+                  </span>
+                </div>
+                <div className="divide-y divide-parchment/30">
+                  {pattern.scaffolds.map((text, idx) => (
+                    <label key={idx} className="flex items-start gap-2 px-3 py-1.5 text-caption hover:bg-cream/30 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedScaffoldIdx.has(idx)}
+                        onChange={() => toggleScaffold(idx)}
+                        className="mt-0.5 accent-burgundy"
+                      />
+                      <span className="font-mono text-[11px] text-foreground">{text}<span className="text-muted-foreground/50">▋</span></span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Controls */}
+              <div className="mb-3 flex items-center gap-3 flex-wrap">
+                <div className="text-caption text-muted-foreground">
+                  Top-K: <span className="font-mono">{CONTINUATION_TOP_K}</span>
+                  {" · "}
+                  {selectedScaffolds.length * panelsShown.length} probes expected
+                </div>
+                <div className="flex-1" />
+                <button
+                  onClick={handleContinuationReset}
+                  disabled={isContinuationLoading || continuationResults.length === 0}
+                  className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5 disabled:opacity-30"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Reset
+                </button>
+                <button
+                  onClick={handleRunContinuation}
+                  disabled={isContinuationLoading || selectedScaffolds.length === 0 || (!slotAConfigured && !slotBConfigured)}
+                  className="px-3 py-1 text-caption font-medium rounded-sm bg-burgundy text-white hover:bg-burgundy/90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
+                  <Play className="w-3.5 h-3.5" />
+                  {isContinuationLoading ? "Probing…" : "Run continuation"}
+                </button>
+              </div>
+
+              {/* Progress */}
+              {isContinuationLoading && continuationProgress && (
+                <div className="mb-3">
+                  <div className="flex items-center justify-between text-caption text-muted-foreground mb-1">
+                    <span>Probing… {continuationProgress.done} / {continuationProgress.total}</span>
+                    <span>{continuationProgress.total > 0 ? Math.round(100 * continuationProgress.done / continuationProgress.total) : 0}%</span>
+                  </div>
+                  <div className="h-1.5 bg-parchment/40 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-burgundy transition-all"
+                      style={{ width: `${continuationProgress.total > 0 ? Math.round(100 * continuationProgress.done / continuationProgress.total) : 0}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {continuationError && (
+                <div className="mb-3 border border-red-400 bg-red-50 dark:bg-red-900/30 rounded-sm p-2 text-caption flex items-start gap-2 text-red-800 dark:text-red-200">
+                  <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  <span>{continuationError}</span>
+                </div>
+              )}
+
+              {/* Results */}
+              {continuationResults.length > 0 && (
+                <div className="space-y-3">
+                  {selectedScaffolds.map(s => {
+                    const forScaffold = continuationResults.filter(r => r.scaffoldId === s.id);
+                    if (forScaffold.length === 0) return null;
+                    return (
+                      <div key={s.id} className="border border-parchment/60 rounded-sm bg-card overflow-hidden">
+                        <div className="px-3 py-2 border-b border-parchment/60 text-caption flex items-center gap-2">
+                          <BarChart3 className="w-3.5 h-3.5 text-burgundy shrink-0" />
+                          <span className="font-mono text-[11px] text-foreground truncate">{s.text}<span className="text-muted-foreground/50">▋</span></span>
+                        </div>
+                        <div className={`grid ${forScaffold.length > 1 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"} divide-x divide-parchment/30`}>
+                          {forScaffold.map((r, i) => (
+                            <ContinuationCard key={i} result={r} suppressTokens={pattern.suppressTokens} panelLabel={getSlotLabel(r.panel)} />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Initial-state helper */}
+              {continuationResults.length === 0 && !isContinuationLoading && (
+                <div className="text-caption text-muted-foreground border border-dashed border-parchment/60 rounded-sm p-4 text-center">
+                  Select scaffolds and press <strong>Run continuation</strong> to fetch the top-{CONTINUATION_TOP_K} next-token distribution
+                  at the opening of the construction. Tokens that the pattern typically relies on are highlighted in <span className="text-burgundy font-semibold">burgundy</span>.
+                </div>
+              )}
+            </>
           )}
 
           {activePhase === "prevalence" && (
@@ -606,6 +862,84 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ContinuationCard({
+  result,
+  suppressTokens,
+  panelLabel,
+}: {
+  result: ContinuationResult;
+  suppressTokens: string[];
+  panelLabel: string;
+}) {
+  const suppressSet = new Set(suppressTokens.map(t => t.toLowerCase().trim()));
+  const dist = result.distribution;
+  // Entropy (bits) over returned top-K; a soft proxy, truncated.
+  const probs = dist.map(d => Math.exp(d.logprob));
+  const probSum = probs.reduce((s, p) => s + p, 0) || 1;
+  const normProbs = probs.map(p => p / probSum);
+  const entropyBits = -normProbs.reduce((s, p) => p > 0 ? s + p * Math.log2(p) : s, 0);
+  const maxProb = Math.max(...probs, 0.0001);
+
+  return (
+    <div className="p-3">
+      <div className="flex items-center justify-between mb-2 text-caption">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
+          {result.panel} · {panelLabel}
+        </span>
+        <span className="text-muted-foreground font-mono text-[10px]">
+          H ≈ {entropyBits.toFixed(2)} bits
+          {result.provenance && (
+            <> · {result.provenance.responseTimeMs}ms</>
+          )}
+        </span>
+      </div>
+
+      {result.error ? (
+        <div className="text-caption text-red-700 dark:text-red-300 flex items-start gap-2">
+          <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          <span>{result.error}</span>
+        </div>
+      ) : dist.length === 0 ? (
+        <div className="text-caption text-muted-foreground italic">No distribution returned.</div>
+      ) : (
+        <div className="space-y-0.5">
+          {dist.map((d, i) => {
+            const p = Math.exp(d.logprob);
+            const widthPct = Math.max(1.5, (p / maxProb) * 100);
+            const isSuppress = suppressSet.has(d.token.toLowerCase().trim());
+            const isChosen = result.chosen && d.token === result.chosen.token && i === 0;
+            const display = d.token.replace(/\n/g, "⏎").replace(/\t/g, "⇥");
+            return (
+              <div key={i} className="flex items-center gap-2 text-[11px]">
+                <span
+                  className={`font-mono truncate w-28 shrink-0 ${
+                    isSuppress ? "text-burgundy font-semibold" : isChosen ? "text-foreground font-semibold" : "text-foreground"
+                  }`}
+                  title={JSON.stringify(d.token)}
+                >
+                  {display.length > 0 ? `"${display}"` : <span className="opacity-50">(empty)</span>}
+                </span>
+                <div className="flex-1 h-3 bg-parchment/40 rounded-sm overflow-hidden relative">
+                  <div
+                    className={`h-full ${isSuppress ? "bg-burgundy/80" : "bg-burgundy/40"} transition-all`}
+                    style={{ width: `${widthPct}%` }}
+                  />
+                </div>
+                <span className="font-mono tabular-nums text-muted-foreground w-14 text-right shrink-0">
+                  {(p * 100).toFixed(1)}%
+                </span>
+                <span className="font-mono tabular-nums text-muted-foreground/60 w-16 text-right shrink-0 hidden sm:inline">
+                  {d.logprob.toFixed(2)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
