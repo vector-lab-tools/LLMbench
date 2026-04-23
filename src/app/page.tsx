@@ -12,6 +12,7 @@ import TemperatureMode from "@/components/operations/TemperatureMode";
 import SensitivityMode from "@/components/operations/SensitivityMode";
 import LogprobsMode from "@/components/operations/LogprobsMode";
 import DivergenceMode from "@/components/operations/DivergenceMode";
+import GrammarMode from "@/components/operations/GrammarMode";
 import { APP_VERSION } from "@/lib/version";
 import { Clippy } from "@/components/easter-eggs/Clippy";
 import { KillerRabbit } from "@/components/viz/KillerRabbit";
@@ -24,6 +25,7 @@ const MODE_LABELS: Record<TabId, string> = {
   temperature: "Temperature Gradient",
   logprobs: "Token Probabilities",
   divergence: "Cross-Model Divergence",
+  grammar: "Grammar Probe",
 };
 
 export default function Home() {
@@ -179,6 +181,7 @@ export default function Home() {
         {activeTab === "sensitivity" && <SensitivityMode isDark={isDark} pendingPrompt={pendingPrompt} />}
         {activeTab === "logprobs" && <LogprobsMode isDark={isDark} pendingPrompt={pendingPrompt} />}
         {activeTab === "divergence" && <DivergenceMode isDark={isDark} pendingPrompt={pendingPrompt} />}
+        {activeTab === "grammar" && <GrammarMode isDark={isDark} pendingPrompt={pendingPrompt} />}
       </div>
 
       {/* Status bar */}

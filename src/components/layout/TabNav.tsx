@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { SplitSquareHorizontal, FlaskConical } from "lucide-react";
+import { SplitSquareHorizontal, FlaskConical, Microscope } from "lucide-react";
 import type { TabId, GroupId, TabGroup } from "@/types/modes";
 
 export type { TabId, GroupId };
@@ -27,6 +27,15 @@ const GROUPS: TabGroup[] = [
       { id: "sensitivity", label: "Prompt Sensitivity", description: "Micro-variations of a prompt" },
       { id: "logprobs", label: "Token Probabilities", description: "Per-token probability distributions" },
       { id: "divergence", label: "Cross-Model Divergence", description: "Quantitative model comparison" },
+    ],
+  },
+  {
+    id: "investigate",
+    label: "Investigate",
+    description: "Pattern-specific investigations of rhetorical grammar",
+    icon: Microscope,
+    tabs: [
+      { id: "grammar", label: "Grammar", description: "Probe generation behaviour for rhetorical patterns (Not X but Y, hedging, parallelism…)" },
     ],
   },
 ];

@@ -17,7 +17,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.9.1
+**Version:** 2.10.0
 **Date:** 23 April 2026
 **Licence:** MIT
 
@@ -51,18 +51,33 @@ This matters for LLMbench because the tool offers two complementary reading surf
 
 ## Operations at a Glance
 
-LLMbench is organised as a two-tier tab navigation: one **Compare** mode for close reading, and five **Analyse** modes for empirical probes into model behaviour.
+LLMbench is organised as a three-tier tab navigation: one **Compare** mode for close reading, five **Analyse** modes for empirical probes into model behaviour, and an **Investigate** tier for pattern-specific rhetorical probes.
 
-| Mode | Purpose | Core question |
-|---|---|---|
-| **Dual Panel** | Side-by-side close reading with overlays and annotations | How do two models read the same prompt? |
-| **Stochastic Variation** | Repeated runs of the same prompt | How much does the same model disagree with itself? |
-| **Temperature Gradient** | Sweep across sampling temperatures | How does randomness shape output? |
-| **Prompt Sensitivity** | Auto-generated prompt variants | How much does phrasing matter? |
-| **Token Probabilities** | Deep single-response logprob analysis | Where was the model uncertain? |
-| **Cross-Model Divergence** | Quantitative comparison of two outputs | What do the numbers say about difference? |
+| Tier | Mode | Purpose | Core question |
+|---|---|---|---|
+| Compare | **Dual Panel** | Side-by-side close reading with overlays and annotations | How do two models read the same prompt? |
+| Analyse | **Stochastic Variation** | Repeated runs of the same prompt | How much does the same model disagree with itself? |
+| Analyse | **Temperature Gradient** | Sweep across sampling temperatures | How does randomness shape output? |
+| Analyse | **Prompt Sensitivity** | Auto-generated prompt variants | How much does phrasing matter? |
+| Analyse | **Token Probabilities** | Deep single-response logprob analysis | Where was the model uncertain? |
+| Analyse | **Cross-Model Divergence** | Quantitative comparison of two outputs | What do the numbers say about difference? |
+| Investigate | **Grammar Probe** | Pattern-specific investigation of rhetorical constructions (Not X but Y, hedging, tricolon, modal stacking) | Does the model produce this construction, and why? |
 
 All modes work with a single model (Panel A only) or two models (A + B), with streaming results and a collapsible Deep Dive for each.
+
+### Grammar Probe (Investigate tier)
+
+Grammar Probe is the generation-side companion to Manifold Atlas's *Grammar of Vectors* operation and (in future) Vectorscope's activation-steering tools. Where Atlas asks *what geometric relationship does the pattern reveal?* and Vectorscope asks *what internal representations are responsible?*, Grammar Probe asks *what generation behaviour produces the pattern?*
+
+Five phases, each a distinct research question:
+
+- **A. Prevalence** *(available in v2.10.0)*. Batch-run a prompt suite across temperatures and models; regex-count pattern hits; aggregate by register, model, and temperature. Answers: how often does the pattern appear, and is it register-sensitive?
+- **B. Continuation logprobs** *(planned)*. For each pattern scaffold, inspect the top-20 next-token distribution. Answers: is the pattern baked into the next-token distribution, or does it emerge downstream?
+- **C. Forced continuation** *(planned)*. Cap scaffolds at `but a ` and harvest the top-20 Ys. Cross-link to Manifold Atlas: when the highest-probability Y is also the nearest-neighbour of X, the construction has been caught in the act.
+- **D. Perturbation** *(planned)*. Neutral vs anti-pattern vs pro-pattern framings. Does the pattern persist under explicit negative instruction (structural) or flex (stylistic)?
+- **E. Temperature sweep** *(planned)*. Prevalence at T ∈ {0, 0.3, 0.7, 1.0, 1.5}. A pattern present at T=0 sits at the greedy centre of the distribution; not a sampling accident.
+
+Ships with a four-preset pattern library (Not X but Y, Hyland hedging triplets, tricolon, modal stacking) and a 20-prompt default suite across six registers (speech, op-ed, explainer, technical, poetic, dialogue).
 
 ## Compare Mode (Dual Panel)
 
@@ -255,6 +270,10 @@ The architecture follows the Manifold Atlas pattern: a thin `page.tsx` manages m
 - [x] Top-5 alternatives with probabilities on each annotated token
 - [x] Vector Lab family branding and navigation
 - [x] Canonical Vector Lab toolbar layout: clustered views, right-hand icon dock for Export and History
+- [x] Investigate tier with Grammar Probe (Phase A: prevalence heatmap across pattern × prompt × temperature × model)
+- [ ] Grammar Probe Phase B (continuation logprobs) and Phase C (forced-continuation with Manifold Atlas hand-off)
+- [ ] Grammar Probe Phases D (perturbation) and E (temperature sweep)
+- [ ] Logit-bias "suppress tokens" experiment for Grammar Probe
 - [ ] Embedding-based semantic similarity in divergence mode
 - [ ] Supabase cloud persistence and sharing
 

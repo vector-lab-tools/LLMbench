@@ -6,9 +6,10 @@ export type TabId =
   | "sensitivity"
   | "temperature"
   | "logprobs"
-  | "divergence";
+  | "divergence"
+  | "grammar";
 
-export type GroupId = "compare" | "analyse";
+export type GroupId = "compare" | "analyse" | "investigate";
 
 export interface TabGroup {
   id: GroupId;
