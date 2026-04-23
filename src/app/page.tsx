@@ -348,8 +348,11 @@ export default function Home() {
                     <strong className="text-foreground">B. Continuation logprobs.</strong> Picks the pattern&rsquo;s canonical scaffolds (e.g. &ldquo;Democracy is not just a system of government, but a &rdquo;) and fetches the top-K next-token distribution at position 0. Tokens the construction typically leans on (<em>not</em>, <em>just</em>, <em>merely</em>&hellip;) are highlighted in burgundy; Shannon entropy (bits) appears per card. Requires Gemini 2.0, OpenAI, OpenRouter, or Hugging Face.
                   </p>
                 </div>
-                <p className="text-muted-foreground">
+                <p className="text-muted-foreground mb-2">
                   Ships with a four-preset pattern library (Not X but Y, Hyland hedges, tricolon, modal stacking) and a 20-prompt suite across six registers (speech, op-ed, explainer, technical, poetic, dialogue). Add patterns by editing <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">src/lib/grammar/patterns.ts</code>.
+                </p>
+                <p className="text-muted-foreground">
+                  <strong className="text-foreground">Coming in Phase C: the Grammar Probe Bundle.</strong> Phase C will harvest top-K Y continuations at the &ldquo;but a &rdquo; cut-point and save them as a portable <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">*.grammar.json</code> file you can download for the record or open directly in Manifold Atlas. Atlas embeds X and each Y, reports cosine, and surfaces the rank correlation between logprob and cosine-to-X &mdash; the headline number for whether the construction has collapsed into a geometric reflex. The bundle is always downloadable; the hand-off is the convenience.
                 </p>
               </div>
 
