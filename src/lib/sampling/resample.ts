@@ -57,3 +57,23 @@ export function resample(
     rank,
   }));
 }
+
+/**
+ * Draw a token stochastically from a re-softmaxed distribution. With T=0.01
+ * (near-deterministic) this behaves like argmax; with higher T and top-p the
+ * sampler explores. Returns the token and its rank inside the distribution.
+ */
+export function sampleFromDistribution(
+  dist: { token: string; softmaxP: number; rank: number }[]
+): { token: string; rank: number } | null {
+  if (dist.length === 0) return null;
+  const total = dist.reduce((s, d) => s + d.softmaxP, 0);
+  if (!(total > 0)) return { token: dist[0].token, rank: 0 };
+  let r = Math.random() * total;
+  for (const d of dist) {
+    r -= d.softmaxP;
+    if (r <= 0) return { token: d.token, rank: d.rank };
+  }
+  // Floating-point fallthrough: return the highest-prob entry.
+  return { token: dist[0].token, rank: 0 };
+}

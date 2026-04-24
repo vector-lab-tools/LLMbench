@@ -25,7 +25,7 @@ import type {
   SamplingStep, SamplingBranch, SamplingTrace, SamplingStepResponse,
 } from "@/lib/sampling/types";
 import { SAMPLING_PROVIDERS, type SamplingSlotPayload } from "@/lib/sampling/provider";
-import { resample } from "@/lib/sampling/resample";
+import { resample, sampleFromDistribution } from "@/lib/sampling/resample";
 import {
   entropyBits, surprisalBits, rankOf, jaccard, klDivergenceBits, perplexity,
 } from "@/lib/sampling/metrics";
@@ -160,7 +160,8 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
 
       // Choose argmax of the re-softmaxed distribution as "chosen" token.
       const distA = resample(respA.distribution, current.params.temperature, current.params.topP);
-      const chosenA = distA[0]?.token ?? (respA.chosen?.token ?? "");
+      const sampledA = sampleFromDistribution(distA);
+      const chosenA = sampledA?.token ?? (respA.chosen?.token ?? "");
       if (!chosenA) throw new Error("Provider returned no token.");
 
       const newStepA: SamplingStep = {
@@ -247,7 +248,8 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
           const prefixB = branchPrefix(branchB, currentB.prompt);
           const respB = await fetchStep(slotB, prefixB, current.params.topK);
           const distB = resample(respB.distribution, current.params.temperature, current.params.topP);
-          const chosenB = distB[0]?.token ?? (respB.chosen?.token ?? "");
+          const sampledB = sampleFromDistribution(distB);
+          const chosenB = sampledB?.token ?? (respB.chosen?.token ?? "");
           if (!chosenB) break;
           const newStepB: SamplingStep = {
             id: freshId(), prefix: prefixB, rawDistribution: respB.distribution,
@@ -339,25 +341,34 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
   }, [traceB, dualPanel, activeBranchB, inspectedStepIndex]);
 
   // Per-step surprisal/entropy for the active branch under current T/topP.
-  const stepMetrics = useMemo(() => {
-    if (!trace || !activeBranch) return [];
-    return activeBranch.steps.map(s => {
-      const d = resample(s.rawDistribution, trace.params.temperature, trace.params.topP);
-      const entry = d.find(t => t.token === s.chosenToken);
+  const buildStepMetrics = (
+    t: SamplingTrace | null,
+    b: SamplingBranch | null
+  ) => {
+    if (!t || !b) return [];
+    return b.steps.map(s => {
+      const d = resample(s.rawDistribution, t.params.temperature, t.params.topP);
+      const entry = d.find(tok => tok.token === s.chosenToken);
       const p = entry?.softmaxP ?? 0;
       return {
-        step: s,
-        dist: d,
+        step: s, dist: d,
         entropy: entropyBits(d),
         surprisal: surprisalBits(p),
         rank: rankOf(s.chosenToken, d),
         p,
       };
     });
-  }, [trace, activeBranch]);
+  };
+  const stepMetrics = useMemo(() => buildStepMetrics(trace, activeBranch), [trace, activeBranch]);
+  const stepMetricsB = useMemo(
+    () => dualPanel ? buildStepMetrics(traceB, activeBranchB) : [],
+    [dualPanel, traceB, activeBranchB]
+  );
 
   const totalSurprisal = stepMetrics.reduce((s, m) => s + (Number.isFinite(m.surprisal) ? m.surprisal : 0), 0);
   const branchPerplexity = perplexity(stepMetrics.map(m => m.surprisal));
+  const totalSurprisalB = stepMetricsB.reduce((s, m) => s + (Number.isFinite(m.surprisal) ? m.surprisal : 0), 0);
+  const branchPerplexityB = perplexity(stepMetricsB.map(m => m.surprisal));
 
   // -------------------- Guards & messages --------------------
 
@@ -484,36 +495,37 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
         {/* Main content: only when we have a trace */}
         {trace && activeBranch && activeBranch.steps.length > 0 && (
           <>
-            {/* Generation strip */}
-            <div className="border border-parchment/60 rounded-sm p-3 bg-card/40">
-              <div className="flex items-baseline justify-between mb-2">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
-                  Generation — click a token to inspect, click a top-K entry to fork
-                </div>
-                <div className="text-[10px] font-mono text-muted-foreground">
-                  {activeBranch.steps.length} tokens · Σsurprisal {totalSurprisal.toFixed(2)} bits · perplexity {Number.isFinite(branchPerplexity) ? branchPerplexity.toFixed(2) : "—"}
-                </div>
-              </div>
-              <div className="font-mono text-body-sm leading-7 whitespace-pre-wrap break-words">
-                <span className="text-muted-foreground">{trace.prompt}</span>
-                {stepMetrics.map((m, i) => (
-                  <button
-                    key={m.step.id}
-                    type="button"
-                    onClick={() => setSelectedStepIndex(i)}
-                    className={`${surprisalColour(m.surprisal)} px-0.5 rounded-sm ${
-                      inspectedStepIndex === i ? "ring-2 ring-burgundy ring-offset-1" : ""
-                    } hover:ring-1 hover:ring-burgundy/50`}
-                    title={`rank ${m.rank} · p=${(m.p * 100).toFixed(1)}% · surprisal ${Number.isFinite(m.surprisal) ? m.surprisal.toFixed(2) : "—"} bits`}
-                  >{m.step.chosenToken}</button>
-                ))}
-              </div>
-              <div className="text-caption text-muted-foreground mt-2 italic">
-                Shading: green (low surprisal, expected) → burgundy (high surprisal, rare). Branch: <span className="font-mono">{activeBranch.label}</span>.
-              </div>
+            {/* Generation + trajectory, one column per active panel */}
+            <div className={`grid gap-3 ${dualPanel ? "md:grid-cols-2" : "grid-cols-1"}`}>
+              <PanelOutputColumn
+                title={getSlotLabel(primarySlotPanel)}
+                promptText={trace.prompt}
+                branchLabel={activeBranch.label}
+                metrics={stepMetrics}
+                totalSurprisal={totalSurprisal}
+                branchPerplexity={branchPerplexity}
+                inspectedStepIndex={inspectedStepIndex}
+                onSelectStep={setSelectedStepIndex}
+                onDownloadCsv={() => trace && downloadTrajectoryCsv(trace, activeBranch.id)}
+                tokenCount={activeBranch.steps.length}
+              />
+              {dualPanel && traceB && activeBranchB && (
+                <PanelOutputColumn
+                  title={getSlotLabel("B")}
+                  promptText={traceB.prompt}
+                  branchLabel={activeBranchB.label}
+                  metrics={stepMetricsB}
+                  totalSurprisal={totalSurprisalB}
+                  branchPerplexity={branchPerplexityB}
+                  inspectedStepIndex={inspectedStepIndex}
+                  onSelectStep={setSelectedStepIndex}
+                  onDownloadCsv={() => traceB && downloadTrajectoryCsv(traceB, activeBranchB.id)}
+                  tokenCount={activeBranchB.steps.length}
+                />
+              )}
             </div>
 
-            {/* Inspector row: top-K distribution(s) */}
+            {/* Inspector row: top-K distribution(s) at the selected step */}
             {inspectedStep && (
               <div className={`grid gap-3 ${dualPanel ? "md:grid-cols-2" : "grid-cols-1"}`}>
                 <TopKPanel
@@ -534,30 +546,6 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
                 )}
               </div>
             )}
-
-            {/* Trajectory: entropy + surprisal curves */}
-            <div className="border border-parchment/60 rounded-sm p-3 bg-card/40">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-2">
-                Trajectory
-              </div>
-              <TrajectoryChart
-                metrics={stepMetrics}
-                onSelectStep={setSelectedStepIndex}
-                selectedIndex={inspectedStepIndex}
-              />
-              <div className="flex items-center gap-2 mt-2">
-                <button
-                  type="button"
-                  onClick={() => activeBranch && trace && downloadTrajectoryCsv(trace, activeBranch.id)}
-                  className="btn-editorial-ghost flex items-center gap-1 text-[10px] px-2 py-0.5"
-                >
-                  <Download className="w-3 h-3" /> Trajectory CSV
-                </button>
-                <span className="text-caption text-muted-foreground">
-                  Green line: entropy H (bits) over returned top-K. Red bars: surprisal of the chosen token (−log₂p).
-                </span>
-              </div>
-            </div>
 
             {/* Branches */}
             <BranchList trace={trace} onSwitch={id => {
@@ -603,6 +591,68 @@ function Slider({ label, value, onChange, min, max, step, integer = false }: {
         {integer ? value : value.toFixed(step < 1 ? 2 : 1)}
       </span>
     </label>
+  );
+}
+
+function PanelOutputColumn({
+  title, promptText, branchLabel, metrics, totalSurprisal, branchPerplexity,
+  inspectedStepIndex, onSelectStep, onDownloadCsv, tokenCount,
+}: {
+  title: string;
+  promptText: string;
+  branchLabel: string;
+  metrics: { step: SamplingStep; entropy: number; surprisal: number; rank: number; p: number }[];
+  totalSurprisal: number;
+  branchPerplexity: number;
+  inspectedStepIndex: number | null;
+  onSelectStep: (i: number) => void;
+  onDownloadCsv: () => void;
+  tokenCount: number;
+}) {
+  return (
+    <div className="border border-parchment/60 rounded-sm p-3 bg-card/40 space-y-3">
+      <div className="flex items-baseline justify-between">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold truncate">
+          {title} <span className="text-muted-foreground/60 normal-case tracking-normal">· branch {branchLabel}</span>
+        </div>
+        <div className="text-[10px] font-mono text-muted-foreground shrink-0 ml-2">
+          {tokenCount}t · Σ{totalSurprisal.toFixed(2)}b · PPL {Number.isFinite(branchPerplexity) ? branchPerplexity.toFixed(2) : "—"}
+        </div>
+      </div>
+      <div className="font-mono text-body-sm leading-7 whitespace-pre-wrap break-words">
+        <span className="text-muted-foreground">{promptText}</span>
+        {metrics.map((m, i) => (
+          <button
+            key={m.step.id}
+            type="button"
+            onClick={() => onSelectStep(i)}
+            className={`${surprisalColour(m.surprisal)} px-0.5 rounded-sm ${
+              inspectedStepIndex === i ? "ring-2 ring-burgundy ring-offset-1" : ""
+            } hover:ring-1 hover:ring-burgundy/50`}
+            title={`rank ${m.rank} · p=${(m.p * 100).toFixed(1)}% · surprisal ${Number.isFinite(m.surprisal) ? m.surprisal.toFixed(2) : "—"} bits`}
+          >{m.step.chosenToken}</button>
+        ))}
+      </div>
+      <div>
+        <TrajectoryChart
+          metrics={metrics}
+          onSelectStep={onSelectStep}
+          selectedIndex={inspectedStepIndex}
+        />
+        <div className="flex items-center gap-2 mt-1">
+          <button
+            type="button"
+            onClick={onDownloadCsv}
+            className="btn-editorial-ghost flex items-center gap-1 text-[10px] px-2 py-0.5"
+          >
+            <Download className="w-3 h-3" /> Trajectory CSV
+          </button>
+          <span className="text-[10px] text-muted-foreground italic">
+            Green line: entropy H (bits). Burgundy bars: chosen-token surprisal.
+          </span>
+        </div>
+      </div>
+    </div>
   );
 }
 
