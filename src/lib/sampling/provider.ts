@@ -153,11 +153,25 @@ async function runDirect(
   const data = await response.json();
   const choice = data.choices?.[0];
   const content = choice?.logprobs?.content || [];
+  // `choice.message.content` is the raw generated text as the model
+  // emitted it. OpenRouter (and some other OpenAI-compatible proxies)
+  // sometimes strip the leading BPE whitespace from
+  // `logprobs.content[0].token` AND its `bytes`, while leaving the
+  // top_logprobs[i] entries untouched. `message.content` is the
+  // authoritative source for what was actually appended to the stream,
+  // so prefer it for the chosen token's text.
+  const messageContent: string = typeof choice?.message?.content === "string"
+    ? choice.message.content
+    : "";
   let chosen: RawTokenProb | null = null;
   let distribution: RawTokenProb[] = [];
   if (content.length > 0) {
     const entry = content[0];
-    chosen = { token: decodeTokenField(entry), logprob: entry.logprob ?? 0 };
+    const decodedChosen = decodeTokenField(entry);
+    chosen = {
+      token: messageContent.length > 0 ? messageContent : decodedChosen,
+      logprob: entry.logprob ?? 0,
+    };
     distribution = (entry.top_logprobs || []).map(
       (t: { token?: string; bytes?: number[] | null; logprob: number }) =>
         ({ token: decodeTokenField(t), logprob: t.logprob })
