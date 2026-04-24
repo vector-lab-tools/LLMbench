@@ -453,7 +453,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       createdAt: now.toISOString(),
       source: {
         tool: "LLMbench",
-        version: "2.15.12",
+        version: "2.15.13",
         phase: dominantPhase,
         phases,
       },
@@ -1956,9 +1956,9 @@ import type { GrammarPattern } from "@/lib/grammar/patterns";
 // UI around /api/investigate/grammar-expand. Depends on Phase B having run.
 // For each scaffold, pulls the top-N distribution entries as candidate Y
 // tokens and asks the model to expand each into a short continuation
-// phrase. Renders a scaffold × Y-token × Y-phrase table with an
-// "Open in Atlas" deep link per scaffold so David can carry the harvested
-// Ys straight into the Grammar-of-Vectors cosine view.
+// phrase. Renders a scaffold × Y-token × Y-phrase table. The harvested
+// Ys travel to Manifold Atlas via the full Grammar data bundle export,
+// which Atlas imports directly — no per-scaffold deep link is needed.
 function ForcedContinuationPanel({
   pattern,
   continuationResults,
@@ -2009,23 +2009,6 @@ function ForcedContinuationPanel({
     } catch {
       return null;
     }
-  };
-
-  // Build the Atlas deep link for a given scaffold's Y-phrases. Atlas reads
-  // ?x=<X>&ys=<comma-list>&source=llmbench-grammar-probe-c.
-  const atlasLink = (scaffold: string, expansions: typeof forcedExpansions): string | null => {
-    const x = extractX(scaffold);
-    const ys = expansions
-      .map(e => (e.phrase ? `${e.token.trim()}${e.phrase.startsWith(" ") ? "" : " "}${e.phrase}`.trim() : ""))
-      .filter(Boolean);
-    if (!x || ys.length === 0) return null;
-    const params = new URLSearchParams({
-      x,
-      ys: ys.join(","),
-      source: "llmbench-grammar-probe-c",
-      pattern: pattern.id,
-    });
-    return `https://vector-lab-tools.github.io/atlas/?${params.toString()}`;
   };
 
   return (
@@ -2091,25 +2074,13 @@ function ForcedContinuationPanel({
           {Array.from(byScaffold.entries()).map(([scaffoldId, group]) => {
             const scaffold = group[0].scaffold;
             const x = extractX(scaffold);
-            const link = atlasLink(scaffold, group);
             return (
               <div key={scaffoldId} className="border border-parchment/60 rounded-sm bg-card/40">
                 <div className="flex items-baseline justify-between gap-2 px-2 py-1.5 border-b border-parchment/40 bg-cream/30 dark:bg-burgundy/10">
                   <div className="text-caption font-mono text-foreground truncate" title={scaffold}>
                     {scaffold}<span className="text-muted-foreground/50">▋</span>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {x && <span className="text-[10px] font-mono text-muted-foreground">X: <span className="text-foreground">{x}</span></span>}
-                    {link && (
-                      <a
-                        href={link} target="_blank" rel="noopener noreferrer"
-                        className="btn-editorial-ghost flex items-center gap-1 text-[10px] px-2 py-0.5"
-                        title="Open these Ys against this X in Manifold Atlas"
-                      >
-                        Open in Atlas
-                      </a>
-                    )}
-                  </div>
+                  {x && <span className="text-[10px] font-mono text-muted-foreground shrink-0">X: <span className="text-foreground">{x}</span></span>}
                 </div>
                 <table className="w-full text-caption border-collapse">
                   <thead className="text-[10px] uppercase tracking-wider text-muted-foreground/70 border-b border-parchment/40">
