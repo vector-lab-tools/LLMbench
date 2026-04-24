@@ -68,7 +68,7 @@ interface GrammarModeProps {
 const PHASES: { id: Phase; label: string; short: string; available: boolean; description: string }[] = [
   { id: "prevalence",   label: "A. Prevalence",           short: "A",     available: true,  description: "Regex-count pattern hits across the suite × temperatures × models." },
   { id: "continuation", label: "B. Continuation logprobs", short: "B",   available: true,  description: "For each pattern scaffold, inspect the top-K next-token distribution." },
-  { id: "forced",       label: "C. Forced continuation",  short: "C",    available: false, description: "Cap scaffolds at 'but a ' and harvest top-20 Ys. Cross-link to Manifold Atlas." },
+  { id: "forced",       label: "C. Forced continuation",  short: "C",    available: true,  description: "For each scaffold, take the top-N Y tokens from Phase B and expand each into a short Y-phrase. Hand off to Manifold Atlas." },
   { id: "perturbation", label: "D. Perturbation",         short: "D",    available: false, description: "Neutral vs anti-pattern vs pro-pattern framings. Measure compliance." },
   { id: "temperature",  label: "E. Temperature sweep",    short: "E",    available: true,  description: "Prevalence vs T ∈ {0, 0.3, 0.7, 1.0, 1.5}. Is the pattern at the greedy centre?" },
 ];
@@ -135,6 +135,29 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
   const [isContinuationLoading, setIsContinuationLoading] = useState(false);
   const [continuationProgress, setContinuationProgress] = useState<{ done: number; total: number } | null>(null);
   const [continuationError, setContinuationError] = useState<string | null>(null);
+
+  // ---- Phase C (Forced continuation / Y-phrase expansion) state ----
+  // Phase C takes Phase B's top-K next-token distributions (the candidate Y
+  // tokens) and, for each (scaffold, Y-token) pair, asks the model to expand
+  // the token into a short Y-phrase. The result is a harvestable
+  // scaffold → Y-token → Y-phrase table that hands off to Manifold Atlas via
+  // the grammar-probe bundle for higher-volume geometric scrutiny. The
+  // backend is /api/investigate/grammar-expand; this UI drives it.
+  interface ForcedExpansion {
+    scaffoldId: string;
+    scaffold: string;
+    panel: "A" | "B";
+    rank: number;
+    token: string;
+    tokenLogprob: number;
+    phrase: string | null;
+    error?: string;
+  }
+  const [forcedExpansions, setForcedExpansions] = useState<ForcedExpansion[]>([]);
+  const [isForcedLoading, setIsForcedLoading] = useState(false);
+  const [forcedProgress, setForcedProgress] = useState<{ done: number; total: number } | null>(null);
+  const [forcedError, setForcedError] = useState<string | null>(null);
+  const [forcedTopN, setForcedTopN] = useState(5);
 
   // ---- Phase E (temperature sweep) state ----
   const [sweepRuns, setSweepRuns] = useState<RunRecord[]>([]);
@@ -396,9 +419,10 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     const slotB = slots.B;
     const modelName = slotA.customModelId || slotA.model;
 
-    const phases = (["A", "B", "E"] as const).filter(p => {
+    const phases = (["A", "B", "C", "E"] as const).filter(p => {
       if (p === "A") return runs.length > 0;
       if (p === "B") return continuationResults.length > 0;
+      if (p === "C") return forcedExpansions.length > 0;
       return sweepRuns.length > 0;
     });
     // `phase` (singular) is the dominant phase for importers that expect
@@ -413,7 +437,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       createdAt: now.toISOString(),
       source: {
         tool: "LLMbench",
-        version: "2.15.1",
+        version: "2.15.9",
         phase: dominantPhase,
         phases,
       },
@@ -472,6 +496,19 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
         provenance: c.provenance,
         error: c.error,
       })),
+      // Phase C: forced-continuation Y-phrase expansions, one row per
+      // (scaffold, top-N Y token) pair. Consumed by Manifold Atlas for
+      // Grammar-of-Vectors cosine scrutiny.
+      forcedExpansions: forcedExpansions.map(e => ({
+        scaffoldId: e.scaffoldId,
+        scaffold: e.scaffold,
+        panel: e.panel,
+        rank: e.rank,
+        token: e.token,
+        tokenLogprob: e.tokenLogprob,
+        phrase: e.phrase,
+        error: e.error,
+      })),
       // Phase E: temperature sweep runs (same shape as Phase A but across
       // {0, 0.3, 0.7, 1.0, 1.5}).
       sweepRuns: sweepRuns.map(r => ({
@@ -500,7 +537,95 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [runs, continuationResults, sweepRuns, pattern, selectedPatterns, slots, getSlotLabel]);
+  }, [runs, continuationResults, sweepRuns, forcedExpansions, pattern, selectedPatterns, slots, getSlotLabel]);
+
+  // ---- Phase C: Forced continuation / Y-phrase expansion -------------------
+  // For each scaffold already probed in Phase B, take the top-N highest
+  // logprob tokens (the candidate Ys) and ask the model to expand each one
+  // into a short continuation phrase (via /api/investigate/grammar-expand).
+  // The result is a (scaffold, Y-token, Y-phrase) table harvestable for
+  // downstream cosine geometry in Manifold Atlas.
+  const handleRunForced = useCallback(async () => {
+    if (isForcedLoading) return;
+    if (continuationResults.length === 0) {
+      setForcedError("Run Phase B first — Phase C expands the top-K tokens returned by the continuation probe.");
+      return;
+    }
+    const slot = panelSelection === "B" && slotBConfigured ? slots.B : slots.A;
+    if (!isSlotConfigured(panelSelection === "B" ? "B" : "A")) {
+      setForcedError("Configure a model slot before running Phase C.");
+      return;
+    }
+    // Build (scaffold, token) pairs from Phase B results. Dedup by scaffold;
+    // use one panel per scaffold to keep volume manageable.
+    const byScaffold = new Map<string, ContinuationResult>();
+    for (const r of continuationResults) {
+      if (r.error || !r.distribution?.length) continue;
+      // Prefer the panel we're running Phase C against; otherwise the first
+      // one we see.
+      const preferredPanel: "A" | "B" = panelSelection === "B" ? "B" : "A";
+      if (!byScaffold.has(r.scaffoldId) || r.panel === preferredPanel) {
+        byScaffold.set(r.scaffoldId, r);
+      }
+    }
+    const pairs: { scaffoldId: string; scaffold: string; token: string; rank: number; logprob: number }[] = [];
+    for (const r of byScaffold.values()) {
+      const top = r.distribution.slice(0, forcedTopN);
+      top.forEach((t, rank) => {
+        pairs.push({
+          scaffoldId: r.scaffoldId, scaffold: r.scaffold,
+          token: t.token, rank, logprob: t.logprob,
+        });
+      });
+    }
+    if (pairs.length === 0) {
+      setForcedError("No usable scaffolds from Phase B (all errored or returned empty distributions).");
+      return;
+    }
+
+    setIsForcedLoading(true);
+    setForcedError(null);
+    setForcedExpansions([]);
+    setForcedProgress({ done: 0, total: pairs.length });
+
+    try {
+      await fetchStreaming<StreamEvent>(
+        "/api/investigate/grammar-expand",
+        {
+          pairs: pairs.map(p => ({ scaffoldId: p.scaffoldId, scaffold: p.scaffold, token: p.token })),
+          slot,
+          maxTokens: 6,
+        },
+        (event) => {
+          if (event.type === "expansion") {
+            // Match back to the originating pair to preserve rank and
+            // logprob — the stream returns one event per pair in order.
+            setForcedExpansions(prev => {
+              const pair = pairs[prev.length];
+              if (!pair) return prev;
+              const exp: ForcedExpansion = {
+                scaffoldId: event.scaffoldId,
+                scaffold: pair.scaffold,
+                panel: panelSelection === "B" ? "B" : "A",
+                rank: pair.rank,
+                token: event.token,
+                tokenLogprob: pair.logprob,
+                phrase: event.phrase ?? null,
+                error: event.error,
+              };
+              return [...prev, exp];
+            });
+            setForcedProgress(p => p ? { ...p, done: p.done + 1 } : p);
+          }
+        }
+      );
+    } catch (err) {
+      setForcedError(err instanceof Error ? err.message : "Phase C expansion failed");
+    } finally {
+      setIsForcedLoading(false);
+    }
+  }, [isForcedLoading, continuationResults, slots, panelSelection, slotBConfigured,
+      isSlotConfigured, forcedTopN]);
 
   // ---- Phase E: Temperature sweep -----------------------------------------
   const handleRunSweep = useCallback(async () => {
@@ -752,7 +877,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="max-w-6xl mx-auto px-4 py-4">
 
-          {activePhase !== "prevalence" && activePhase !== "continuation" && activePhase !== "temperature" && (
+          {activePhase !== "prevalence" && activePhase !== "continuation" && activePhase !== "temperature" && activePhase !== "forced" && (
             <div className="border border-parchment/60 rounded-sm p-4 bg-cream/20 text-body-sm text-muted-foreground">
               <strong className="text-foreground">Coming soon.</strong> {PHASES.find(p => p.id === activePhase)?.description}
             </div>
@@ -917,6 +1042,22 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
                 </div>
               )}
             </>
+          )}
+
+          {activePhase === "forced" && (
+            <ForcedContinuationPanel
+              pattern={pattern}
+              continuationResults={continuationResults}
+              forcedExpansions={forcedExpansions}
+              isForcedLoading={isForcedLoading}
+              forcedProgress={forcedProgress}
+              forcedError={forcedError}
+              forcedTopN={forcedTopN}
+              setForcedTopN={setForcedTopN}
+              handleRunForced={handleRunForced}
+              getSlotLabel={getSlotLabel}
+              panelSelection={panelSelection}
+            />
           )}
 
           {activePhase === "temperature" && (
@@ -1667,6 +1808,203 @@ function ScaffoldConcentrationTable({
 // Negative → the pattern emerges out of the sampler (rarer, more interesting).
 import type { ProviderSlots } from "@/types/ai-settings";
 import type { GrammarPattern } from "@/lib/grammar/patterns";
+
+// ---- ForcedContinuationPanel (Phase C) ------------------------------------
+// UI around /api/investigate/grammar-expand. Depends on Phase B having run.
+// For each scaffold, pulls the top-N distribution entries as candidate Y
+// tokens and asks the model to expand each into a short continuation
+// phrase. Renders a scaffold × Y-token × Y-phrase table with an
+// "Open in Atlas" deep link per scaffold so David can carry the harvested
+// Ys straight into the Grammar-of-Vectors cosine view.
+function ForcedContinuationPanel({
+  pattern,
+  continuationResults,
+  forcedExpansions,
+  isForcedLoading,
+  forcedProgress,
+  forcedError,
+  forcedTopN,
+  setForcedTopN,
+  handleRunForced,
+  getSlotLabel,
+  panelSelection,
+}: {
+  pattern: GrammarPattern;
+  continuationResults: ContinuationResult[];
+  forcedExpansions: {
+    scaffoldId: string; scaffold: string; panel: "A" | "B";
+    rank: number; token: string; tokenLogprob: number;
+    phrase: string | null; error?: string;
+  }[];
+  isForcedLoading: boolean;
+  forcedProgress: { done: number; total: number } | null;
+  forcedError: string | null;
+  forcedTopN: number;
+  setForcedTopN: (n: number) => void;
+  handleRunForced: () => void;
+  getSlotLabel: (panel: "A" | "B") => string;
+  panelSelection: PanelSelection;
+}) {
+  const activePanel: "A" | "B" = panelSelection === "B" ? "B" : "A";
+
+  // Group expansions by scaffold for the table and the per-scaffold Atlas
+  // deep link.
+  const byScaffold = new Map<string, typeof forcedExpansions>();
+  for (const e of forcedExpansions) {
+    const bucket = byScaffold.get(e.scaffoldId) ?? [];
+    bucket.push(e);
+    byScaffold.set(e.scaffoldId, bucket);
+  }
+
+  // Extract the X term from a scaffold using pattern.xExtractor, if defined.
+  const extractX = (scaffold: string): string | null => {
+    if (!pattern.xExtractor) return null;
+    try {
+      const re = new RegExp(pattern.xExtractor);
+      const m = scaffold.match(re);
+      return m?.[1]?.trim() ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Build the Atlas deep link for a given scaffold's Y-phrases. Atlas reads
+  // ?x=<X>&ys=<comma-list>&source=llmbench-grammar-probe-c.
+  const atlasLink = (scaffold: string, expansions: typeof forcedExpansions): string | null => {
+    const x = extractX(scaffold);
+    const ys = expansions
+      .map(e => (e.phrase ? `${e.token.trim()}${e.phrase.startsWith(" ") ? "" : " "}${e.phrase}`.trim() : ""))
+      .filter(Boolean);
+    if (!x || ys.length === 0) return null;
+    const params = new URLSearchParams({
+      x,
+      ys: ys.join(","),
+      source: "llmbench-grammar-probe-c",
+      pattern: pattern.id,
+    });
+    return `https://vector-lab-tools.github.io/atlas/?${params.toString()}`;
+  };
+
+  return (
+    <div>
+      {/* Toolbar */}
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-caption">
+        <button
+          type="button"
+          onClick={handleRunForced}
+          disabled={isForcedLoading || continuationResults.length === 0}
+          className="btn-editorial flex items-center gap-1 text-caption disabled:opacity-50"
+          title={continuationResults.length === 0 ? "Run Phase B first to populate candidate Y tokens" : "Expand top-N Y tokens per scaffold into phrases"}
+        >
+          <Play className="w-3 h-3" /> Run Phase C
+        </button>
+        <button
+          type="button"
+          onClick={() => { /* reset */ void setForcedTopN(forcedTopN); }}
+          className="hidden"
+        />
+        <label className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground">
+          top-N
+          <input
+            type="range" min={3} max={15} step={1} value={forcedTopN}
+            onChange={e => setForcedTopN(Number(e.target.value))}
+            className="w-20 accent-burgundy"
+          />
+          <span className="text-foreground w-6 text-right">{forcedTopN}</span>
+        </label>
+        <span className="text-muted-foreground">
+          Expands the top-N tokens per scaffold on <strong className="text-foreground">Panel {activePanel}</strong> ({getSlotLabel(activePanel)}).
+        </span>
+      </div>
+
+      {/* Pre-flight guard */}
+      {continuationResults.length === 0 && (
+        <div className="border border-parchment/60 rounded-sm p-3 bg-cream/30 dark:bg-burgundy/10 text-caption text-muted-foreground">
+          Phase C expands Phase B&apos;s candidate Y tokens into short phrases. Switch to <strong className="text-foreground">Phase B. Continuation logprobs</strong>, run the probe on your primary pattern&apos;s scaffolds, then return here.
+        </div>
+      )}
+
+      {/* Progress / error */}
+      {isForcedLoading && forcedProgress && (
+        <div className="text-caption text-muted-foreground mb-2">
+          <div className="flex justify-between items-baseline mb-1">
+            <span>Expanding… {forcedProgress.done} / {forcedProgress.total}</span>
+            <span>{forcedProgress.total > 0 ? Math.round(100 * forcedProgress.done / forcedProgress.total) : 0}%</span>
+          </div>
+          <div className="w-full h-1 bg-parchment/30 rounded-sm overflow-hidden">
+            <div className="h-full bg-burgundy/70" style={{ width: `${forcedProgress.total > 0 ? Math.round(100 * forcedProgress.done / forcedProgress.total) : 0}%` }} />
+          </div>
+        </div>
+      )}
+      {forcedError && (
+        <div className="border border-burgundy/40 bg-burgundy/5 rounded-sm p-2 text-caption text-foreground flex items-start gap-2 mb-2">
+          <AlertCircle className="w-4 h-4 text-burgundy mt-0.5 shrink-0" /><span>{forcedError}</span>
+        </div>
+      )}
+
+      {/* Results */}
+      {forcedExpansions.length > 0 && (
+        <div className="space-y-3">
+          {Array.from(byScaffold.entries()).map(([scaffoldId, group]) => {
+            const scaffold = group[0].scaffold;
+            const x = extractX(scaffold);
+            const link = atlasLink(scaffold, group);
+            return (
+              <div key={scaffoldId} className="border border-parchment/60 rounded-sm bg-card/40">
+                <div className="flex items-baseline justify-between gap-2 px-2 py-1.5 border-b border-parchment/40 bg-cream/30 dark:bg-burgundy/10">
+                  <div className="text-caption font-mono text-foreground truncate" title={scaffold}>
+                    {scaffold}<span className="text-muted-foreground/50">▋</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {x && <span className="text-[10px] font-mono text-muted-foreground">X: <span className="text-foreground">{x}</span></span>}
+                    {link && (
+                      <a
+                        href={link} target="_blank" rel="noopener noreferrer"
+                        className="btn-editorial-ghost flex items-center gap-1 text-[10px] px-2 py-0.5"
+                        title="Open these Ys against this X in Manifold Atlas"
+                      >
+                        Open in Atlas
+                      </a>
+                    )}
+                  </div>
+                </div>
+                <table className="w-full text-caption border-collapse">
+                  <thead className="text-[10px] uppercase tracking-wider text-muted-foreground/70 border-b border-parchment/40">
+                    <tr>
+                      <th className="px-2 py-1 text-left">#</th>
+                      <th className="px-2 py-1 text-left">Y-token</th>
+                      <th className="px-2 py-1 text-left">Y-phrase</th>
+                      <th className="px-2 py-1 text-right">logprob</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {group.map((e, i) => (
+                      <tr key={i} className="border-t border-parchment/40">
+                        <td className="px-2 py-1 font-mono text-[10px] text-muted-foreground">{e.rank}</td>
+                        <td className="px-2 py-1 font-mono text-[11px] text-foreground">{JSON.stringify(e.token)}</td>
+                        <td className="px-2 py-1 text-[11px] text-foreground">
+                          {e.error ? <span className="text-red-700 dark:text-red-300">err: {e.error}</span> : (e.phrase ?? <span className="text-muted-foreground italic">empty</span>)}
+                        </td>
+                        <td className="px-2 py-1 text-right font-mono text-[10px] text-muted-foreground">{e.tokenLogprob.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Idle helper */}
+      {forcedExpansions.length === 0 && !isForcedLoading && continuationResults.length > 0 && (
+        <div className="text-caption text-muted-foreground border border-dashed border-parchment/60 rounded-sm p-4 text-center">
+          Ready to expand <strong>{continuationResults.filter(r => !r.error).length}</strong> Phase B scaffold results. Press <strong>Run Phase C</strong>.
+        </div>
+      )}
+    </div>
+  );
+}
 
 function TemperatureSweepPanel(props: {
   pattern: GrammarPattern;

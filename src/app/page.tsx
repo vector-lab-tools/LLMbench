@@ -360,8 +360,11 @@ export default function Home() {
                 <p className="text-muted-foreground mb-2">
                   Ships with a four-preset pattern library (Not X but Y, Hyland hedges, tricolon, modal stacking) and a <strong className="text-foreground">thematic suite library</strong> with two axes you can combine: four <em>purpose</em> suites &mdash; <strong className="text-foreground">baseline</strong> (unprimed), <strong className="text-foreground">invitation</strong> (ceiling), <strong className="text-foreground">resistance</strong> (floor), <strong className="text-foreground">adversarial</strong> (lexical-cue stress test) &mdash; and six <em>domain</em> suites (politics, technology, science, ethics, pedagogy, everyday). Tick any combination; the heatmap stratifies by suite and the verdict tile reports per-suite hit rates. Add patterns or suites by editing <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">src/lib/grammar/</code>.
                 </p>
+                <p className="text-muted-foreground mb-1">
+                  <strong className="text-foreground">C. Forced continuation</strong> (new in v2.15.9). For each scaffold already probed in Phase B, takes the top-N highest-logprob candidate Y tokens and asks the model to expand each into a short Y-phrase. Renders a scaffold &times; Y-token &times; Y-phrase table with an <strong className="text-foreground">Open in Atlas</strong> deep link per scaffold so the harvested Ys can be carried directly into the Manifold Atlas Grammar-of-Vectors cosine view. Output is included in the Grammar data bundle as <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">forcedExpansions</code>.
+                </p>
                 <p className="text-muted-foreground">
-                  <strong className="text-foreground">Coming in Phase C.</strong> Phase C will harvest top-20 Ys at the &ldquo;but a &rdquo; cut-point across a wider scaffold set and hand off to Manifold Atlas using the same Grammar Probe Bundle format introduced in Phase B.
+                  <strong className="text-foreground">Coming in Phase D.</strong> Perturbation: same prompt &times; &#123;neutral, anti-pattern, pro-pattern&#125; framings, delta chart showing whether the pattern persists under explicit negative instruction (structural) or flexes (stylistic).
                 </p>
               </div>
 
