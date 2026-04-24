@@ -17,7 +17,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.15.9
+**Version:** 2.15.10
 **Date:** 24 April 2026
 **Licence:** MIT
 
@@ -79,7 +79,7 @@ Five phases, each a distinct research question:
 - **E. Temperature sweep** *(available in v2.13.0)*. Runs the selected prompt suite across **T ∈ {0, 0.3, 0.7, 1.0, 1.5}** and plots prevalence (hit rate) against T, one line per model. The headline is the **greediness index**: `hitRate(T=0) − mean hitRate(T>0)`. Positive → the construction lives at the argmax (reflex). Near-zero → register-driven, not greedy. Negative → the pattern emerges out of the sampler (rarer, more interesting). A sustained flat-line across T suggests the model is producing the construction as default rhetoric, not as a considered choice.
 
 **Pattern library aligned with Manifold Atlas (v2.13.0).** The antithesis family now ships with five constructions matching Atlas's `Grammar of Vectors` grammars — `not-x-but-y`, `not-just-x-but-y`, `it-is-not-x-it-is-y` (false correction), `while-x-y` (conciliation pivot), and `what-matters-is-not-x-but-y` (cleft emphasis) — so that a probe in LLMbench and the corresponding Atlas operation are testing the same rhetorical target. The three non-antithesis patterns (Hyland hedges, tricolon, modal stacking) remain LLMbench-specific research axes.
-- **D. Perturbation** *(planned)*. Neutral vs anti-pattern vs pro-pattern framings. Does the pattern persist under explicit negative instruction (structural) or flex (stylistic)?
+- **D. Perturbation** *(available in v2.15.10)*. Each selected prompt is run under three framings: **neutral** (as-is), **anti-pattern** (directive prefix asking the model not to use the primary construction), and **pro-pattern** (directive prefix inviting it). Hit rate is reported per construction per framing, with deltas `Δanti = anti − neutral` and `Δpro = pro − neutral`. A **verdict** column classifies each pattern: **structural** if the model holds it under suppression (`|Δanti| < 10pp` at non-trivial baseline), **stylistic** if it collapses (`Δanti < −30pp`), **invitable** if it inflates under invitation (`Δpro > 30pp`), **mixed** otherwise. Reuses the Phase A prevalence backend; writes `perturbationRuns` into the Grammar data bundle with a `framing` tag per run.
 - **E. Temperature sweep** *(planned)*. Prevalence at T ∈ {0, 0.3, 0.7, 1.0, 1.5}. A pattern present at T=0 sits at the greedy centre of the distribution; not a sampling accident.
 
 Ships with a four-preset pattern library (Not X but Y, Hyland hedging triplets, tricolon, modal stacking) and a **thematic suite library** that makes Phase A a research instrument rather than a demo.

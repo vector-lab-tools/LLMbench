@@ -69,7 +69,7 @@ const PHASES: { id: Phase; label: string; short: string; available: boolean; des
   { id: "prevalence",   label: "A. Prevalence",           short: "A",     available: true,  description: "Regex-count pattern hits across the suite × temperatures × models." },
   { id: "continuation", label: "B. Continuation logprobs", short: "B",   available: true,  description: "For each pattern scaffold, inspect the top-K next-token distribution." },
   { id: "forced",       label: "C. Forced continuation",  short: "C",    available: true,  description: "For each scaffold, take the top-N Y tokens from Phase B and expand each into a short Y-phrase. Hand off to Manifold Atlas." },
-  { id: "perturbation", label: "D. Perturbation",         short: "D",    available: false, description: "Neutral vs anti-pattern vs pro-pattern framings. Measure compliance." },
+  { id: "perturbation", label: "D. Perturbation",         short: "D",    available: true,  description: "Neutral vs anti-pattern vs pro-pattern framings. Measures whether the construction is structural (persists under suppression) or stylistic (flexes with instruction)." },
   { id: "temperature",  label: "E. Temperature sweep",    short: "E",    available: true,  description: "Prevalence vs T ∈ {0, 0.3, 0.7, 1.0, 1.5}. Is the pattern at the greedy centre?" },
 ];
 
@@ -158,6 +158,21 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
   const [forcedProgress, setForcedProgress] = useState<{ done: number; total: number } | null>(null);
   const [forcedError, setForcedError] = useState<string | null>(null);
   const [forcedTopN, setForcedTopN] = useState(5);
+
+  // ---- Phase D (Perturbation) state ----
+  // Three framings per selected prompt: neutral (as-is), anti-pattern
+  // (instruction prefix suppressing the construction), pro-pattern
+  // (instruction prefix inviting it). We reuse /api/investigate/grammar-
+  // prevalence with the framing baked into the prompt text, tag each
+  // returned run by framing client-side, and render a delta table. If the
+  // anti rate ≈ neutral rate, the construction is *structural* (survives
+  // explicit suppression). If it collapses, the construction is *stylistic*.
+  type PerturbationFraming = "neutral" | "anti" | "pro";
+  interface PerturbationRun extends RunRecord { framing: PerturbationFraming }
+  const [perturbationRuns, setPerturbationRuns] = useState<PerturbationRun[]>([]);
+  const [isPerturbationLoading, setIsPerturbationLoading] = useState(false);
+  const [perturbationProgress, setPerturbationProgress] = useState<{ done: number; total: number } | null>(null);
+  const [perturbationError, setPerturbationError] = useState<string | null>(null);
 
   // ---- Phase E (temperature sweep) state ----
   const [sweepRuns, setSweepRuns] = useState<RunRecord[]>([]);
@@ -419,10 +434,11 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     const slotB = slots.B;
     const modelName = slotA.customModelId || slotA.model;
 
-    const phases = (["A", "B", "C", "E"] as const).filter(p => {
+    const phases = (["A", "B", "C", "D", "E"] as const).filter(p => {
       if (p === "A") return runs.length > 0;
       if (p === "B") return continuationResults.length > 0;
       if (p === "C") return forcedExpansions.length > 0;
+      if (p === "D") return perturbationRuns.length > 0;
       return sweepRuns.length > 0;
     });
     // `phase` (singular) is the dominant phase for importers that expect
@@ -437,7 +453,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       createdAt: now.toISOString(),
       source: {
         tool: "LLMbench",
-        version: "2.15.9",
+        version: "2.15.10",
         phase: dominantPhase,
         phases,
       },
@@ -509,6 +525,22 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
         phrase: e.phrase,
         error: e.error,
       })),
+      // Phase D: perturbation runs, tagged by framing (neutral/anti/pro).
+      perturbationRuns: perturbationRuns.map(r => ({
+        runIndex: r.runIndex,
+        panel: r.panel,
+        promptId: r.promptId,
+        register: r.register,
+        prompt: r.prompt,
+        temperature: r.temperature,
+        framing: r.framing,
+        text: r.text,
+        error: r.error,
+        provenance: r.provenance,
+        perPatternHits: Object.fromEntries(selectedPatterns.map(p => [
+          p.id, r.text ? countMatches(r.text, p) : 0,
+        ])),
+      })),
       // Phase E: temperature sweep runs (same shape as Phase A but across
       // {0, 0.3, 0.7, 1.0, 1.5}).
       sweepRuns: sweepRuns.map(r => ({
@@ -537,7 +569,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [runs, continuationResults, sweepRuns, forcedExpansions, pattern, selectedPatterns, slots, getSlotLabel]);
+  }, [runs, continuationResults, sweepRuns, forcedExpansions, perturbationRuns, pattern, selectedPatterns, slots, getSlotLabel]);
 
   // ---- Phase C: Forced continuation / Y-phrase expansion -------------------
   // For each scaffold already probed in Phase B, take the top-N highest
@@ -626,6 +658,98 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     }
   }, [isForcedLoading, continuationResults, slots, panelSelection, slotBConfigured,
       isSlotConfigured, forcedTopN]);
+
+  // ---- Phase D: Perturbation ---------------------------------------------
+  // Reuses Phase A's prevalence backend. Each selected prompt becomes three
+  // prompts (neutral / anti / pro) by prepending a framing directive; we tag
+  // each returned run by its framing via a suffix on the promptId, then
+  // aggregate per (pattern × framing) client-side.
+  const handleRunPerturbation = useCallback(async () => {
+    if (isPerturbationLoading || selectedPrompts.length === 0) return;
+    const usingBoth = panelSelection === "both" && slotBConfigured;
+    if (!slotAConfigured && !usingBoth) {
+      setPerturbationError("Configure at least one model slot before running.");
+      return;
+    }
+    // Framing instructions are keyed to the primary pattern: anti suppresses
+    // its characteristic move; pro invites it explicitly. We use the
+    // pattern's shortLabel as a human-readable cue so the model knows what
+    // to suppress or use.
+    const antiDirective =
+      `Respond to the following request without using the "${pattern.shortLabel}" construction or any similar antithetical / contrastive framing. Be direct. Do not say "not X but Y" patterns, do not stage false dilemmas, do not build the response around contrast. `;
+    const proDirective =
+      `You may freely use the "${pattern.shortLabel}" construction, antithesis, and contrastive framing where it fits. `;
+
+    const framings: { id: PerturbationFraming; prefix: string }[] = [
+      { id: "neutral", prefix: "" },
+      { id: "anti", prefix: antiDirective },
+      { id: "pro", prefix: proDirective },
+    ];
+
+    // One temperature to keep volume manageable (Phase A runs 2, Phase E
+    // runs 5; Phase D × 3 framings would blow up otherwise).
+    const PERTURBATION_TEMP = 0.7;
+    const expandedPrompts = framings.flatMap(f =>
+      selectedPrompts.map(p => ({
+        id: `${p.id}::${f.id}`,
+        prompt: `${f.prefix}${p.prompt}`,
+        register: p.register,
+      }))
+    );
+
+    setIsPerturbationLoading(true);
+    setPerturbationError(null);
+    setPerturbationRuns([]);
+    const total = expandedPrompts.length * (usingBoth ? 2 : 1);
+    setPerturbationProgress({ done: 0, total });
+
+    try {
+      const slotAConfigForRun = panelSelection === "B" ? slots.B : slots.A;
+      const slotBForRun = usingBoth ? slots.B : null;
+
+      await fetchStreaming<StreamEvent>(
+        "/api/investigate/grammar-prevalence",
+        {
+          prompts: expandedPrompts,
+          temperatures: [PERTURBATION_TEMP],
+          slotA: { ...slotAConfigForRun, temperature: PERTURBATION_TEMP, systemPrompt: "" },
+          slotB: slotBForRun ? { ...slotBForRun, temperature: PERTURBATION_TEMP, systemPrompt: "" } : null,
+          noMarkdown,
+        },
+        (event) => {
+          if (event.type === "run") {
+            const compoundId: string = event.promptId;
+            const sep = "::";
+            const idx = compoundId.lastIndexOf(sep);
+            const basePromptId = idx >= 0 ? compoundId.slice(0, idx) : compoundId;
+            const framing: PerturbationFraming = (idx >= 0 ? compoundId.slice(idx + sep.length) : "neutral") as PerturbationFraming;
+            const originalPrompt = selectedPrompts.find(p => p.id === basePromptId)?.prompt ?? event.prompt;
+            setPerturbationRuns(prev => [
+              ...prev,
+              {
+                runIndex: prev.length,
+                panel: event.panel,
+                promptId: basePromptId,
+                register: event.register,
+                prompt: originalPrompt,
+                temperature: event.temperature,
+                text: event.result?.text,
+                error: event.result?.error,
+                provenance: event.result?.provenance,
+                framing,
+              },
+            ]);
+            setPerturbationProgress(p => p ? { ...p, done: p.done + 1 } : p);
+          }
+        }
+      );
+    } catch (err) {
+      setPerturbationError(err instanceof Error ? err.message : "Perturbation run failed");
+    } finally {
+      setIsPerturbationLoading(false);
+    }
+  }, [isPerturbationLoading, selectedPrompts, panelSelection, slotAConfigured,
+      slotBConfigured, slots, noMarkdown, pattern]);
 
   // ---- Phase E: Temperature sweep -----------------------------------------
   const handleRunSweep = useCallback(async () => {
@@ -877,7 +1001,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="max-w-6xl mx-auto px-4 py-4">
 
-          {activePhase !== "prevalence" && activePhase !== "continuation" && activePhase !== "temperature" && activePhase !== "forced" && (
+          {activePhase !== "prevalence" && activePhase !== "continuation" && activePhase !== "temperature" && activePhase !== "forced" && activePhase !== "perturbation" && (
             <div className="border border-parchment/60 rounded-sm p-4 bg-cream/20 text-body-sm text-muted-foreground">
               <strong className="text-foreground">Coming soon.</strong> {PHASES.find(p => p.id === activePhase)?.description}
             </div>
@@ -1057,6 +1181,25 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
               handleRunForced={handleRunForced}
               getSlotLabel={getSlotLabel}
               panelSelection={panelSelection}
+            />
+          )}
+
+          {activePhase === "perturbation" && (
+            <PerturbationPanel
+              pattern={pattern}
+              selectedPatterns={selectedPatterns}
+              selectedPrompts={selectedPrompts}
+              perturbationRuns={perturbationRuns}
+              isLoading={isPerturbationLoading}
+              progress={perturbationProgress}
+              error={perturbationError}
+              onRun={handleRunPerturbation}
+              patternId={patternId}
+              selectedPatternIds={selectedPatternIds}
+              togglePatternSelected={togglePatternSelected}
+              promotePatternToPrimary={promotePatternToPrimary}
+              panelSelection={panelSelection}
+              getSlotLabel={getSlotLabel}
             />
           )}
 
@@ -2000,6 +2143,184 @@ function ForcedContinuationPanel({
       {forcedExpansions.length === 0 && !isForcedLoading && continuationResults.length > 0 && (
         <div className="text-caption text-muted-foreground border border-dashed border-parchment/60 rounded-sm p-4 text-center">
           Ready to expand <strong>{continuationResults.filter(r => !r.error).length}</strong> Phase B scaffold results. Press <strong>Run Phase C</strong>.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---- PerturbationPanel (Phase D) -----------------------------------------
+// Renders the three-framing comparison. Each selected pattern appears as a
+// row; columns are Neutral / Anti / Pro hit rate, plus the delta anti −
+// neutral (negative = the instruction suppressed the construction) and the
+// delta pro − neutral (positive = the construction inflates under explicit
+// invitation). The verdict column summarises the reading:
+//   |Δanti| < 0.1 → "structural" (persists under suppression)
+//   Δanti < −0.3 → "stylistic" (collapses under suppression)
+//   Δpro > 0.3   → "invitable" (the model reaches for it when permitted)
+function PerturbationPanel({
+  pattern, selectedPatterns, selectedPrompts,
+  perturbationRuns, isLoading, progress, error, onRun,
+  patternId, selectedPatternIds, togglePatternSelected, promotePatternToPrimary,
+  panelSelection, getSlotLabel,
+}: {
+  pattern: GrammarPattern;
+  selectedPatterns: GrammarPattern[];
+  selectedPrompts: GrammarSuitePrompt[];
+  perturbationRuns: (RunRecord & { framing: "neutral" | "anti" | "pro" })[];
+  isLoading: boolean;
+  progress: { done: number; total: number } | null;
+  error: string | null;
+  onRun: () => void;
+  patternId: string;
+  selectedPatternIds: Set<string>;
+  togglePatternSelected: (id: string) => void;
+  promotePatternToPrimary: (id: string) => void;
+  panelSelection: PanelSelection;
+  getSlotLabel: (panel: "A" | "B") => string;
+}) {
+  // Aggregate: per (pattern × framing), hit rate = runs_with_hit / runs_with_text.
+  const rowsByPattern = selectedPatterns.map(p => {
+    const framings = (["neutral", "anti", "pro"] as const).map(f => {
+      const textedRuns = perturbationRuns.filter(r => r.framing === f && r.text);
+      const runsWithHit = textedRuns.filter(r => countMatches(r.text!, p) > 0).length;
+      const rate = textedRuns.length > 0 ? runsWithHit / textedRuns.length : NaN;
+      return { framing: f, rate, runs: textedRuns.length, runsWithHit };
+    });
+    const neutral = framings[0].rate, anti = framings[1].rate, pro = framings[2].rate;
+    const dAnti = Number.isFinite(neutral) && Number.isFinite(anti) ? anti - neutral : NaN;
+    const dPro = Number.isFinite(neutral) && Number.isFinite(pro) ? pro - neutral : NaN;
+    let verdict = "insufficient";
+    if (Number.isFinite(dAnti)) {
+      if (Math.abs(dAnti) < 0.1 && neutral > 0.2) verdict = "structural";
+      else if (dAnti < -0.3) verdict = "stylistic";
+      else if (Number.isFinite(dPro) && dPro > 0.3) verdict = "invitable";
+      else verdict = "mixed";
+    }
+    return { pattern: p, neutral, anti, pro, dAnti, dPro, framings, verdict };
+  });
+
+  const fmtPct = (v: number) => Number.isFinite(v) ? `${(v * 100).toFixed(1)}%` : "—";
+  const fmtDelta = (v: number) => {
+    if (!Number.isFinite(v)) return "—";
+    const pct = (v * 100).toFixed(1);
+    const sign = v > 0 ? "+" : "";
+    return `${sign}${pct}pp`;
+  };
+  const deltaColour = (v: number, sense: "anti" | "pro"): string => {
+    if (!Number.isFinite(v)) return "text-muted-foreground/50";
+    if (sense === "anti") {
+      // Large negative delta = pattern was suppressed (good compliance = stylistic)
+      if (v < -0.3) return "text-emerald-700 dark:text-emerald-400";
+      if (v > -0.1) return "text-burgundy font-semibold"; // persists → structural
+      return "text-amber-700 dark:text-amber-400";
+    }
+    if (v > 0.3) return "text-burgundy font-semibold"; // rises on invite → invitable
+    if (v < -0.1) return "text-emerald-700 dark:text-emerald-400";
+    return "text-foreground";
+  };
+  const verdictBadge = (v: string) => {
+    switch (v) {
+      case "structural": return "bg-burgundy/20 text-burgundy";
+      case "stylistic": return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300";
+      case "invitable": return "bg-amber-100 dark:bg-amber-900/30 text-amber-900 dark:text-amber-200";
+      case "mixed": return "bg-parchment/60 text-foreground";
+      default: return "bg-muted/30 text-muted-foreground";
+    }
+  };
+
+  const activePanel: "A" | "B" = panelSelection === "B" ? "B" : "A";
+
+  return (
+    <div>
+      <PatternPicker
+        selectedIds={selectedPatternIds}
+        primaryId={patternId}
+        onToggle={togglePatternSelected}
+        onPromote={promotePatternToPrimary}
+      />
+
+      {/* Toolbar */}
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-caption">
+        <button
+          type="button"
+          onClick={onRun}
+          disabled={isLoading || selectedPrompts.length === 0}
+          className="btn-editorial flex items-center gap-1 text-caption disabled:opacity-50"
+        >
+          <Play className="w-3 h-3" /> Run Phase D
+        </button>
+        <span className="text-muted-foreground">
+          Runs <strong className="text-foreground">{selectedPrompts.length}</strong> prompts × 3 framings × {panelSelection === "both" ? "2 panels" : `1 panel (${getSlotLabel(activePanel)})`} @ T=0.7. Anti/pro directives are keyed to the primary pattern &ldquo;<strong className="text-foreground">{pattern.shortLabel}</strong>&rdquo;.
+        </span>
+      </div>
+
+      {/* Progress / error */}
+      {isLoading && progress && (
+        <div className="text-caption text-muted-foreground mb-2">
+          <div className="flex justify-between items-baseline mb-1">
+            <span>Generating under three framings… {progress.done} / {progress.total}</span>
+            <span>{progress.total > 0 ? Math.round(100 * progress.done / progress.total) : 0}%</span>
+          </div>
+          <div className="w-full h-1 bg-parchment/30 rounded-sm overflow-hidden">
+            <div className="h-full bg-burgundy/70" style={{ width: `${progress.total > 0 ? Math.round(100 * progress.done / progress.total) : 0}%` }} />
+          </div>
+        </div>
+      )}
+      {error && (
+        <div className="border border-burgundy/40 bg-burgundy/5 rounded-sm p-2 text-caption text-foreground flex items-start gap-2 mb-2">
+          <AlertCircle className="w-4 h-4 text-burgundy mt-0.5 shrink-0" /><span>{error}</span>
+        </div>
+      )}
+
+      {/* Results table */}
+      {perturbationRuns.length > 0 && (
+        <div className="overflow-x-auto border border-parchment/60 rounded-sm bg-card">
+          <table className="w-full text-caption border-collapse">
+            <thead className="bg-cream/40 dark:bg-burgundy/10">
+              <tr className="text-left">
+                <th className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/70">Construction</th>
+                <th className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/70 text-right">Neutral</th>
+                <th className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/70 text-right">Anti</th>
+                <th className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/70 text-right">Δanti</th>
+                <th className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/70 text-right">Pro</th>
+                <th className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/70 text-right">Δpro</th>
+                <th className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/70">Verdict</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rowsByPattern.map(r => (
+                <tr key={r.pattern.id} className="border-t border-parchment/40">
+                  <td className="px-2 py-1.5 text-foreground text-[11px]">{r.pattern.shortLabel}</td>
+                  <td className="px-2 py-1.5 font-mono text-[11px] text-right text-foreground">{fmtPct(r.neutral)}</td>
+                  <td className="px-2 py-1.5 font-mono text-[11px] text-right text-foreground">{fmtPct(r.anti)}</td>
+                  <td className={`px-2 py-1.5 font-mono text-[11px] text-right ${deltaColour(r.dAnti, "anti")}`}>{fmtDelta(r.dAnti)}</td>
+                  <td className="px-2 py-1.5 font-mono text-[11px] text-right text-foreground">{fmtPct(r.pro)}</td>
+                  <td className={`px-2 py-1.5 font-mono text-[11px] text-right ${deltaColour(r.dPro, "pro")}`}>{fmtDelta(r.dPro)}</td>
+                  <td className="px-2 py-1.5">
+                    <span className={`text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded-sm ${verdictBadge(r.verdict)}`}>{r.verdict}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Reading guide */}
+      {perturbationRuns.length > 0 && (
+        <div className="text-caption text-muted-foreground mt-2 leading-relaxed">
+          <strong className="text-foreground">Reading the verdict.</strong>{" "}
+          <span className="text-burgundy font-semibold">Structural</span> = the construction persists under explicit instruction not to use it (|Δanti| &lt; 10pp at non-trivial baseline).{" "}
+          <span className="text-emerald-700 dark:text-emerald-400 font-semibold">Stylistic</span> = the construction collapses under suppression (Δanti &lt; &minus;30pp) — the model is willing to drop it, so its Phase A prevalence is a matter of style, not grammar.{" "}
+          <span className="text-amber-700 dark:text-amber-300 font-semibold">Invitable</span> = Δpro &gt; 30pp; the construction is on the shelf and the model reaches for it when permitted. <em>Mixed</em> = partial suppression, neither clean structural nor clean stylistic.
+        </div>
+      )}
+
+      {/* Idle helper */}
+      {perturbationRuns.length === 0 && !isLoading && (
+        <div className="text-caption text-muted-foreground border border-dashed border-parchment/60 rounded-sm p-4 text-center">
+          Press <strong>Run Phase D</strong> to generate under three framings and score each against every selected construction. Best used on the baseline or invitation suites with 6-12 prompts.
         </div>
       )}
     </div>

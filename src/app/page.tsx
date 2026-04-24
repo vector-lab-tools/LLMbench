@@ -364,7 +364,7 @@ export default function Home() {
                   <strong className="text-foreground">C. Forced continuation</strong> (new in v2.15.9). For each scaffold already probed in Phase B, takes the top-N highest-logprob candidate Y tokens and asks the model to expand each into a short Y-phrase. Renders a scaffold &times; Y-token &times; Y-phrase table with an <strong className="text-foreground">Open in Atlas</strong> deep link per scaffold so the harvested Ys can be carried directly into the Manifold Atlas Grammar-of-Vectors cosine view. Output is included in the Grammar data bundle as <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">forcedExpansions</code>.
                 </p>
                 <p className="text-muted-foreground">
-                  <strong className="text-foreground">Coming in Phase D.</strong> Perturbation: same prompt &times; &#123;neutral, anti-pattern, pro-pattern&#125; framings, delta chart showing whether the pattern persists under explicit negative instruction (structural) or flexes (stylistic).
+                  <strong className="text-foreground">D. Perturbation</strong> (new in v2.15.10). Each selected prompt is run under three framings &mdash; neutral, anti-pattern (&ldquo;do not use the <em>Not X but Y</em> construction&rdquo;), pro-pattern (&ldquo;you may use it&rdquo;) &mdash; and hit rate is reported per construction per framing with deltas. A <strong className="text-foreground">verdict</strong> column summarises the reading: <em>structural</em> if |&Delta;anti| &lt; 10pp at non-trivial baseline, <em>stylistic</em> if &Delta;anti &lt; &minus;30pp, <em>invitable</em> if &Delta;pro &gt; 30pp.
                 </p>
               </div>
 
