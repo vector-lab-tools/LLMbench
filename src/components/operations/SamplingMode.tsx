@@ -17,7 +17,7 @@
 
 import { useState, useCallback, useMemo, useRef, Fragment } from "react";
 import {
-  AlertCircle, Play, StepForward, RotateCcw, Download, Microscope, GitBranch, Square,
+  AlertCircle, Play, StepForward, RotateCcw, Download, Microscope, GitBranch, Square, FileText,
 } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { ModelSelector, type PanelSelection } from "@/components/shared/ModelSelector";
@@ -31,7 +31,7 @@ import { resample, sampleFromDistribution } from "@/lib/sampling/resample";
 import {
   entropyBits, surprisalBits, rankOf, jaccard, klDivergenceBits, perplexity,
 } from "@/lib/sampling/metrics";
-import { downloadBundle, downloadTrajectoryCsv } from "@/lib/sampling/export";
+import { downloadBundle, downloadTrajectoryCsv, downloadTracePdf } from "@/lib/sampling/export";
 
 interface SamplingModeProps {
   isDark: boolean;
@@ -48,6 +48,38 @@ const DEFAULT_MAX_STEPS = 40;
 const VERSION = "2.15.0";
 
 const SAMPLE_PROMPT = "Democracy is";
+
+// Hand-picked prompts covering different registers and research questions.
+// The goal is to give the user one-click ways to probe different sampler
+// behaviours: sharp argmax vs flat distribution, narrative vs argumentative
+// register, short factual completions vs long-horizon generation, framings
+// that tend to trip the chat-as-completion restart pathology, etc.
+const SAMPLE_PROMPTS: { label: string; text: string; note: string }[] = [
+  { label: "Antithesis baseline", text: "Democracy is",
+    note: "Classic Grammar-of-Vectors target; watch for \"not X but Y\" emergence." },
+  { label: "Scientific register", text: "Recent research suggests that",
+    note: "Probes hedging tokens (\"may\", \"possibly\") at T≈0.7." },
+  { label: "Narrative opener", text: "It was the best of times,",
+    note: "High-entropy fork point; model can continue Dickens or riff." },
+  { label: "Factual lookup", text: "The capital of France is",
+    note: "Peaked distribution; near-deterministic argmax." },
+  { label: "Philosophical claim", text: "Consciousness is not",
+    note: "Primes the antithesis construction directly." },
+  { label: "Poetic line", text: "The road not taken",
+    note: "Whether the model completes Frost verbatim or paraphrases." },
+  { label: "Critical theory", text: "Under surveillance capitalism,",
+    note: "Academic register; tests critical-vocabulary distribution." },
+  { label: "Everyday register", text: "So the other day I was at the café when",
+    note: "Conversational / narrative — flatter distribution." },
+  { label: "Formal address", text: "Dear colleagues, I am writing to",
+    note: "Formal register; probes register-coherent continuations." },
+  { label: "Hedging invitation", text: "The question of whether AI can truly think is",
+    note: "Primes hedge stacks (\"complex\", \"nuanced\", \"multifaceted\")." },
+  { label: "Restart-test", text: "Hello my name is",
+    note: "Chat-as-completion stress test — does the model echo or continue?" },
+  { label: "Tricolon primer", text: "What this country needs is courage,",
+    note: "Invites three-part parallelism." },
+];
 
 function slotPayload(slot: ProviderSlot): SamplingSlotPayload {
   return {
@@ -173,10 +205,22 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
     setStatus("stepping");
     setErrorMsg(null);
     try {
+      // Fetch A and B in parallel so the two commits happen without an
+      // await between them — React batches the paired setState calls and
+      // Panel B no longer "flashes off" each step as A commits first.
       const slotForA = primarySlotPanel === "A" ? slotA : slotB;
       const branchA = current.branches[current.activeBranchId];
       const prefixA = branchPrefix(branchA, current.prompt);
-      const respA = await fetchStep(slotForA, prefixA, current.params.topK);
+      const branchB = dualPanel && currentB ? currentB.branches[currentB.activeBranchId] : null;
+      const prefixB = branchB && currentB ? branchPrefix(branchB, currentB.prompt) : null;
+
+      const [respA, respB] = await Promise.all([
+        fetchStep(slotForA, prefixA, current.params.topK),
+        dualPanel && currentB && prefixB !== null
+          ? fetchStep(slotB, prefixB, current.params.topK)
+          : Promise.resolve(null),
+      ]);
+
       const distA = resample(respA.distribution, current.params.temperature, current.params.topP);
       const sampledA = sampleFromDistribution(distA);
       const chosenA = sampledA?.token ?? (respA.chosen?.token ?? "");
@@ -189,25 +233,26 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
         ...current,
         branches: { ...current.branches, [branchA.id]: { ...branchA, steps: [...branchA.steps, newStepA] } },
       };
-      setTrace(current);
 
-      if (dualPanel && currentB) {
-        const branchB = currentB.branches[currentB.activeBranchId];
-        const prefixB = branchPrefix(branchB, currentB.prompt);
-        const respB = await fetchStep(slotB, prefixB, current.params.topK);
+      let nextB: SamplingTrace | null = currentB;
+      if (respB && branchB && currentB) {
         const distB = resample(respB.distribution, current.params.temperature, current.params.topP);
         const sampledB = sampleFromDistribution(distB);
         const chosenB = sampledB?.token ?? (respB.chosen?.token ?? "");
         const newStepB: SamplingStep = {
-          id: freshId(), prefix: prefixB, rawDistribution: respB.distribution,
+          id: freshId(), prefix: prefixB!, rawDistribution: respB.distribution,
           chosenToken: chosenB, provenance: respB.provenance,
         };
-        currentB = {
+        nextB = {
           ...currentB,
           branches: { ...currentB.branches, [branchB.id]: { ...branchB, steps: [...branchB.steps, newStepB] } },
         };
-        setTraceB(currentB);
       }
+
+      // Both setState calls happen back-to-back with no await → React 18
+      // auto-batches them into a single render. Panels update together.
+      setTrace(current);
+      if (nextB) setTraceB(nextB);
 
       setStatus("idle");
     } catch (err) {
@@ -254,11 +299,21 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
 
         const slotForA = primarySlotPanel === "A" ? slotA : slotB;
         const prefixA = branchPrefix(branch, current.prompt);
-        const respA = await fetchStep(slotForA, prefixA, current.params.topK);
+        const branchB = dualPanel && currentB ? currentB.branches[currentB.activeBranchId] : null;
+        const prefixB = branchB && currentB ? branchPrefix(branchB, currentB.prompt) : null;
+
+        // Fetch A and B in parallel so the two commits below are back-to-back
+        // (React 18 batches them). Kills the Panel-B-flashes-on-and-off bug
+        // where A's state committed, the UI re-rendered with A-advanced + B-
+        // stale, and only after another await-gap did B catch up.
+        const [respA, respB] = await Promise.all([
+          fetchStep(slotForA, prefixA, current.params.topK),
+          dualPanel && currentB && prefixB !== null
+            ? fetchStep(slotB, prefixB, current.params.topK)
+            : Promise.resolve(null),
+        ]);
+
         const distA = resample(respA.distribution, current.params.temperature, current.params.topP);
-        // Stochastic sampler (not argmax) — temperature and top-p actually
-        // shape the sequence. Panel B already used sampleFromDistribution;
-        // this line was still take-max from before v2.15.3 reached this path.
         const sampledA = sampleFromDistribution(distA);
         const chosenA = sampledA?.token ?? (respA.chosen?.token ?? "");
         if (!chosenA) break;
@@ -270,26 +325,26 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
           ...current,
           branches: { ...current.branches, [branch.id]: { ...branch, steps: [...branch.steps, newStepA] } },
         };
-        setTrace(current);
 
-        if (dualPanel && currentB) {
-          const branchB = currentB.branches[currentB.activeBranchId];
-          const prefixB = branchPrefix(branchB, currentB.prompt);
-          const respB = await fetchStep(slotB, prefixB, current.params.topK);
+        if (respB && branchB && currentB) {
           const distB = resample(respB.distribution, current.params.temperature, current.params.topP);
           const sampledB = sampleFromDistribution(distB);
           const chosenB = sampledB?.token ?? (respB.chosen?.token ?? "");
           if (!chosenB) break;
           const newStepB: SamplingStep = {
-            id: freshId(), prefix: prefixB, rawDistribution: respB.distribution,
+            id: freshId(), prefix: prefixB!, rawDistribution: respB.distribution,
             chosenToken: chosenB, provenance: respB.provenance,
           };
           currentB = {
             ...currentB,
             branches: { ...currentB.branches, [branchB.id]: { ...branchB, steps: [...branchB.steps, newStepB] } },
           };
-          setTraceB(currentB);
         }
+
+        // Commit A and B back-to-back so React 18 batches the two setState
+        // calls into a single render — no more mid-step flash on Panel B.
+        setTrace(current);
+        if (respB && currentB) setTraceB(currentB);
 
         // Stop on self-restart: the model has begun echoing the prompt
         // mid-generation (the chat-as-completion pathology). Surface the
@@ -464,14 +519,24 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
         <div className="ml-auto flex items-center gap-2">
           <ModelSelector value={panelSelection} onChange={setPanelSelection} />
           {trace && (
-            <button
-              type="button"
-              onClick={() => downloadBundle(trace, VERSION)}
-              className="btn-editorial-ghost flex items-center gap-1 text-caption"
-              title="Export sampling trace bundle"
-            >
-              <Download className="w-3 h-3" /> Bundle
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => downloadBundle(trace, VERSION)}
+                className="btn-editorial-ghost flex items-center gap-1 text-caption"
+                title="Export the full trace as JSON (vector-lab.sampling-trace.v1) — fully replayable"
+              >
+                <Download className="w-3 h-3" /> Bundle
+              </button>
+              <button
+                type="button"
+                onClick={() => { void downloadTracePdf(trace, VERSION); }}
+                className="btn-editorial-ghost flex items-center gap-1 text-caption"
+                title="Export a formatted PDF report with generated text, per-step metrics, and override log"
+              >
+                <FileText className="w-3 h-3" /> PDF
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -510,6 +575,32 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
               Editing the prompt clears the current trace — Run / Step will start fresh.
             </div>
           )}
+          {/* Sample-prompt chip rail: click-to-fill, each targets a different
+              research question. Useful for quickly surveying the sampler's
+              behaviour across registers without having to hand-type every
+              seed. Covered registers: antithesis, hedging, narrative,
+              factual, philosophical, poetic, critical-theory, conversational,
+              formal, chat-as-completion stress, and tricolon. */}
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mr-1">
+              Try
+            </span>
+            {SAMPLE_PROMPTS.map(s => (
+              <button
+                key={s.label}
+                type="button"
+                onClick={() => {
+                  setPrompt(s.text);
+                  if (trace) { setTrace(null); setTraceB(null); setSelectedStepIndex(null); }
+                }}
+                disabled={status === "running" || status === "stepping"}
+                className="text-[10px] px-2 py-0.5 rounded-sm border border-parchment bg-card text-muted-foreground hover:text-foreground hover:bg-cream/50 disabled:opacity-50"
+                title={`${s.text}\n\n${s.note}`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button" onClick={runToEnd} disabled={!canRun}
@@ -881,10 +972,16 @@ function TranscriptBlock({ label, prompt, branch }: {
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-0.5">
         Current branch
       </div>
+      {/* Match the strip's render: inline-block spans with the same px-0.5
+          padding as the generation strip's <button> tokens, so the visual
+          gaps between tokens are identical. Previously the transcript used
+          plain <span> which collapses adjacent tokens with no gap, and the
+          user saw "Democracy isasysteminwhich…" while the strip up top
+          appeared correctly spaced. */}
       <div className="font-mono text-[11px] bg-background/60 p-2 rounded-sm whitespace-pre-wrap break-words">
         <span className="text-muted-foreground">{prompt}</span>
         {branch.steps.map(s => (
-          <span key={s.id}>{s.chosenToken}</span>
+          <span key={s.id} className="inline-block px-0.5">{s.chosenToken}</span>
         ))}
       </div>
 
@@ -910,13 +1007,13 @@ function TranscriptBlock({ label, prompt, branch }: {
                 <div className="font-mono text-[11px] bg-background/60 p-2 rounded-sm whitespace-pre-wrap break-words">
                   <span className="text-muted-foreground">{prompt}</span>
                   {preOverrideTokens.map((t, j) => (
-                    <span key={j}>{t}</span>
+                    <span key={j} className="inline-block px-0.5">{t}</span>
                   ))}
-                  <span className="bg-parchment/60 dark:bg-parchment/30 text-foreground rounded-sm px-0.5">
+                  <span className="inline-block px-0.5 bg-parchment/60 dark:bg-parchment/30 text-foreground rounded-sm">
                     {o.from}
                   </span>
                   {o.tail.map((t, j) => (
-                    <span key={`tail-${j}`} className="text-muted-foreground">{t}</span>
+                    <span key={`tail-${j}`} className="inline-block px-0.5 text-muted-foreground">{t}</span>
                   ))}
                 </div>
               </div>
