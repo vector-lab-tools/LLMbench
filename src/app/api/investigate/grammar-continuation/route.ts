@@ -185,11 +185,19 @@ async function runDirect(
   const content = choice?.logprobs?.content || [];
   let chosen: TokenProb | null = null;
   let distribution: TokenProb[] = [];
+  const decode = (e: { token?: string; bytes?: number[] | null }): string => {
+    if (e.bytes && Array.isArray(e.bytes) && e.bytes.length > 0) {
+      try { return new TextDecoder("utf-8").decode(new Uint8Array(e.bytes)); }
+      catch { /* fall through */ }
+    }
+    return e.token ?? "";
+  };
   if (content.length > 0) {
     const entry = content[0];
-    chosen = { token: entry.token || "", logprob: entry.logprob ?? 0 };
+    chosen = { token: decode(entry), logprob: entry.logprob ?? 0 };
     distribution = (entry.top_logprobs || []).map(
-      (t: { token: string; logprob: number }) => ({ token: t.token, logprob: t.logprob })
+      (t: { token?: string; bytes?: number[] | null; logprob: number }) =>
+        ({ token: decode(t), logprob: t.logprob })
     );
   }
   return { chosen, distribution };

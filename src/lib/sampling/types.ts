@@ -50,8 +50,17 @@ export interface SamplingBranch {
   steps: SamplingStep[];
   /** Display label for the branch (e.g. main / "but a …"). */
   label: string;
-  /** Audit trail of user-applied counterfactual overrides on this branch. */
-  overrides?: { stepIndex: number; from: string; to: string; at: string }[];
+  /** Audit trail of user-applied counterfactual overrides on this branch.
+   *  `tail` captures the tokens that came after the overridden step on the
+   *  original generation, so the UI can show "what the model was going to
+   *  say" next to "what you made it say" for comparison. */
+  overrides?: {
+    stepIndex: number;
+    from: string;
+    to: string;
+    tail: string[];
+    at: string;
+  }[];
 }
 
 export interface SamplingTrace {

@@ -315,7 +315,16 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
             steps: [...branch.steps.slice(0, stepIndex), overriddenStep],
             overrides: [
               ...(branch.overrides ?? []),
-              { stepIndex, from: step.chosenToken, to: newToken, at: new Date().toISOString() },
+              {
+                stepIndex,
+                from: step.chosenToken,
+                to: newToken,
+                // Capture the tokens that came after the overridden step so
+                // the user can compare "what the model was going to say"
+                // with "what I made it say" in the transcript block.
+                tail: branch.steps.slice(stepIndex + 1).map(s => s.chosenToken),
+                at: new Date().toISOString(),
+              },
             ],
           },
         },
@@ -835,29 +844,62 @@ function TranscriptBlock({ label, prompt, branch }: {
   branch: SamplingBranch;
 }) {
   const overrides = branch.overrides ?? [];
+  const currentText = prompt + branch.steps.map(s => s.chosenToken).join("");
+
   return (
     <div>
       <div className="font-semibold text-foreground mb-1">{label}</div>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-0.5">
+        Current branch
+      </div>
       <div className="font-mono text-[11px] bg-background/60 p-2 rounded-sm whitespace-pre-wrap break-words">
         <span className="text-muted-foreground">{prompt}</span>
         {branch.steps.map(s => (
           <span key={s.id}>{s.chosenToken}</span>
         ))}
       </div>
+
       {overrides.length > 0 && (
-        <div className="mt-1.5">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-0.5">
-            Counterfactual overrides on this branch ({overrides.length})
+        <div className="mt-2 space-y-2">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
+            Counterfactual overrides ({overrides.length}) — original text the model was generating before each override, shown for comparison
           </div>
-          <ul className="text-caption text-muted-foreground list-disc pl-4 space-y-0.5">
-            {overrides.map((o, i) => (
-              <li key={i}>
-                step {o.stepIndex + 1}: model chose <span className="font-mono text-foreground">{JSON.stringify(o.from)}</span>, you picked <span className="font-mono text-burgundy">{JSON.stringify(o.to)}</span>
-              </li>
-            ))}
-          </ul>
+          {overrides.map((o, i) => {
+            // Reconstruct "what the model was going to say" for this
+            // override: prompt + tokens up to the override point + the
+            // model's original chosen token + the tail that followed on
+            // the pre-override sequence.
+            const preOverrideTokens = branch.steps.slice(0, o.stepIndex).map(s => s.chosenToken);
+            return (
+              <div key={i} className="border-l-2 border-parchment/60 pl-2">
+                <div className="text-caption text-muted-foreground mb-0.5">
+                  Step {o.stepIndex + 1}: model chose{" "}
+                  <span className="font-mono text-foreground">{JSON.stringify(o.from)}</span>,
+                  you picked{" "}
+                  <span className="font-mono text-burgundy">{JSON.stringify(o.to)}</span>
+                </div>
+                <div className="font-mono text-[11px] bg-background/60 p-2 rounded-sm whitespace-pre-wrap break-words">
+                  <span className="text-muted-foreground">{prompt}</span>
+                  {preOverrideTokens.map((t, j) => (
+                    <span key={j}>{t}</span>
+                  ))}
+                  <span className="bg-parchment/60 dark:bg-parchment/30 text-foreground rounded-sm px-0.5">
+                    {o.from}
+                  </span>
+                  {o.tail.map((t, j) => (
+                    <span key={`tail-${j}`} className="text-muted-foreground">{t}</span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          <div className="text-caption text-muted-foreground italic">
+            Above: highlighted token is what the model chose at the override point; grey tokens after it are the continuation the model was producing before you intervened. The <strong>Current branch</strong> block at the top is the post-override sequence.
+          </div>
         </div>
       )}
+
+      <div className="sr-only">{currentText}</div>
     </div>
   );
 }

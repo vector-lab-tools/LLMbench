@@ -88,40 +88,40 @@ async function runGoogle(
   return { chosen, distribution };
 }
 
-// ---------- OpenAI / compatible ----------
+// ---------- OpenAI / compatible (direct fetch) ----------
+// We bypass the AI SDK here because its `providerMetadata.openai.logprobs`
+// normalisation strips the leading BPE whitespace from token strings — so a
+// token the API actually returns as " system" arrives as "system". That
+// destroys the ability to reconstruct the generated text by concatenation
+// and makes the transcript read as "Democracy isasysteminwhich…". Calling
+// /chat/completions directly gives us OpenAI's raw `token` field intact,
+// including its leading space where applicable.
 async function runOpenAI(
   slot: SamplingSlotPayload, prefix: string, topK: number
 ): Promise<{ chosen: RawTokenProb | null; distribution: RawTokenProb[] }> {
-  const { generateText } = await import("ai");
-  const { createOpenAI } = await import("@ai-sdk/openai");
-  const model = slot.customModelId || slot.model;
-  const client = createOpenAI({ apiKey: slot.apiKey, baseURL: slot.baseUrl });
-  const result = await generateText({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    model: client.chat(model) as any,
-    system: SAMPLING_SYSTEM_PROMPT,
-    messages: [{ role: "user", content: prefix }],
-    temperature: 0,
-    maxOutputTokens: 1,
-    providerOptions: { openai: { logprobs: true, topLogprobs: topK } },
-  });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const raw = (result as any).providerMetadata?.openai?.logprobs;
-  let chosen: RawTokenProb | null = null;
-  let distribution: RawTokenProb[] = [];
-  if (Array.isArray(raw) && raw.length > 0) {
-    const first = Array.isArray(raw[0]) ? raw[0][0] : raw[0];
-    if (first) {
-      chosen = { token: first.token || "", logprob: first.logprob ?? 0 };
-      distribution = (first.top_logprobs || []).map(
-        (t: { token: string; logprob: number }) => ({ token: t.token, logprob: t.logprob })
-      );
-    }
-  }
-  return { chosen, distribution };
+  const baseUrl = slot.baseUrl || "https://api.openai.com/v1";
+  return runDirect(slot, baseUrl, prefix, topK);
 }
 
-// ---------- Direct fetch (OpenRouter, Hugging Face) ----------
+// ---------- Direct fetch (OpenRouter, Hugging Face, OpenAI) ----------
+// Some OpenAI-compatible proxies (notably OpenRouter for certain GPT-4o
+// routes) return `token` stripped of its leading BPE whitespace — so
+// " system" comes back as "system" and the concatenated transcript reads
+// as "Democracy isasysteminwhich…". The underlying `bytes` field, however,
+// is the true UTF-8 byte sequence (e.g. [32, 115, 121, 115, 116, 101, 109]
+// for " system"). Prefer bytes when present so the reconstructed text is
+// faithful to what the model actually emitted.
+function decodeTokenField(entry: { token?: string; bytes?: number[] | null }): string {
+  if (entry.bytes && Array.isArray(entry.bytes) && entry.bytes.length > 0) {
+    try {
+      return new TextDecoder("utf-8").decode(new Uint8Array(entry.bytes));
+    } catch {
+      // fall through to token
+    }
+  }
+  return entry.token ?? "";
+}
+
 async function runDirect(
   slot: SamplingSlotPayload, baseUrl: string, prefix: string, topK: number,
   extraHeaders: Record<string, string> = {}
@@ -157,9 +157,10 @@ async function runDirect(
   let distribution: RawTokenProb[] = [];
   if (content.length > 0) {
     const entry = content[0];
-    chosen = { token: entry.token || "", logprob: entry.logprob ?? 0 };
+    chosen = { token: decodeTokenField(entry), logprob: entry.logprob ?? 0 };
     distribution = (entry.top_logprobs || []).map(
-      (t: { token: string; logprob: number }) => ({ token: t.token, logprob: t.logprob })
+      (t: { token?: string; bytes?: number[] | null; logprob: number }) =>
+        ({ token: decodeTokenField(t), logprob: t.logprob })
     );
   }
   return { chosen, distribution };
