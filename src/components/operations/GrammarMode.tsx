@@ -29,9 +29,12 @@ import {
   findMatchSpans,
 } from "@/lib/grammar/patterns";
 import {
-  DEFAULT_GRAMMAR_SUITE,
+  GRAMMAR_SUITES,
+  promptsForSuites,
+  suiteOfPrompt,
   REGISTER_LABELS,
   type GrammarSuitePrompt,
+  type GrammarSuiteKind,
   type GrammarRegister,
 } from "@/lib/grammar/prompt-suite";
 
@@ -94,10 +97,22 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
   const [activePhase, setActivePhase] = useState<Phase>("prevalence");
   const [panelSelection, setPanelSelection] = useState<PanelSelection>("A");
   const [patternId, setPatternId] = useState(DEFAULT_PATTERNS[0].id);
-  const [suite] = useState<GrammarSuitePrompt[]>(DEFAULT_GRAMMAR_SUITE);
-  const [selectedPromptIds, setSelectedPromptIds] = useState<Set<string>>(
-    () => new Set(DEFAULT_GRAMMAR_SUITE.map(p => p.id))
+  // Suite selection: users tick one or more suites; `suite` is the derived
+  // union of their prompts. `selectedPromptIds` then lets them refine.
+  const [activeSuiteIds, setActiveSuiteIds] = useState<Set<GrammarSuiteKind>>(
+    () => new Set<GrammarSuiteKind>(["purpose-baseline"])
   );
+  const suite = useMemo<GrammarSuitePrompt[]>(
+    () => promptsForSuites(activeSuiteIds),
+    [activeSuiteIds]
+  );
+  const [selectedPromptIds, setSelectedPromptIds] = useState<Set<string>>(
+    () => new Set(promptsForSuites(new Set(["purpose-baseline"])).map(p => p.id))
+  );
+  // When the suite set changes, default to selecting every prompt inside it.
+  useEffect(() => {
+    setSelectedPromptIds(new Set(suite.map(p => p.id)));
+  }, [suite]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [runs, setRuns] = useState<RunRecord[]>([]);
@@ -349,6 +364,22 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     stats: aggregateBy(c => c.temperature === t),
   })).filter(x => x.stats && x.stats.runs > 0);
 
+  // Per suite (reflects which suite each prompt came from, stratified by
+  // purpose/domain so the user can compare baseline vs invitation vs
+  // resistance, or cross-domain prevalence).
+  const perSuite = Array.from(activeSuiteIds)
+    .map(id => {
+      const s = GRAMMAR_SUITES.find(x => x.id === id);
+      if (!s) return null;
+      return {
+        suite: s,
+        stats: aggregateBy(c => suiteOfPrompt(c.promptId)?.id === id),
+      };
+    })
+    .filter((x): x is { suite: typeof GRAMMAR_SUITES[number]; stats: ReturnType<typeof aggregateBy> } =>
+      !!x && !!x.stats && x.stats.runs > 0
+    );
+
   // Per register
   const registerOf = (promptId: string): GrammarRegister | undefined =>
     suite.find(p => p.id === promptId)?.register;
@@ -370,6 +401,19 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     low: "text-emerald-700 dark:text-emerald-400 border-l-emerald-400",
     moderate: "text-amber-700 dark:text-amber-400 border-l-amber-500",
     high: "text-burgundy border-l-burgundy",
+  };
+
+  const toggleSuite = (id: GrammarSuiteKind) => {
+    setActiveSuiteIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        // Don't let the user deselect the last suite — leaves nothing to run.
+        if (next.size > 1) next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   };
 
   const toggleAll = (on: boolean) => {
@@ -615,14 +659,66 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
                 </div>
               </div>
 
+              {/* Suite picker */}
+              <div className="mb-3">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-1.5">
+                  Prompt suites
+                </div>
+                <div className="flex flex-wrap gap-1.5 mb-1">
+                  {GRAMMAR_SUITES.filter(s => s.category === "purpose").map(s => {
+                    const active = activeSuiteIds.has(s.id);
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => toggleSuite(s.id)}
+                        title={s.description}
+                        className={`px-2.5 py-1 text-caption rounded-sm border transition-colors ${
+                          active
+                            ? "border-burgundy bg-burgundy/10 text-burgundy"
+                            : "border-parchment bg-card text-muted-foreground hover:text-foreground hover:bg-cream/50"
+                        }`}
+                      >
+                        {s.shortLabel}
+                      </button>
+                    );
+                  })}
+                  <div className="w-px h-6 bg-parchment/60 self-center mx-1" />
+                  {GRAMMAR_SUITES.filter(s => s.category === "domain").map(s => {
+                    const active = activeSuiteIds.has(s.id);
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => toggleSuite(s.id)}
+                        title={s.description}
+                        className={`px-2.5 py-1 text-caption rounded-sm border transition-colors ${
+                          active
+                            ? "border-burgundy bg-burgundy/10 text-burgundy"
+                            : "border-parchment bg-card text-muted-foreground hover:text-foreground hover:bg-cream/50"
+                        }`}
+                      >
+                        {s.shortLabel}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="text-caption text-muted-foreground leading-relaxed">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mr-1.5">Purpose</span>
+                  baseline · invite · resist · adversarial
+                  <span className="mx-2 text-muted-foreground/40">|</span>
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mr-1.5">Domain</span>
+                  politics, tech, science, ethics, pedagogy, everyday
+                </div>
+              </div>
+
               {/* Suite controls */}
               <div className="mb-3 flex items-center gap-3 flex-wrap">
                 <button
                   onClick={() => setShowSuiteEditor(v => !v)}
                   className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5"
+                  disabled={suite.length === 0}
                 >
                   <Settings2 className="w-3.5 h-3.5" />
-                  Suite ({selectedPrompts.length}/{suite.length})
+                  Prompts ({selectedPrompts.length}/{suite.length})
                 </button>
                 <div className="text-caption text-muted-foreground">
                   Temperatures: <span className="font-mono">0, 0.7</span>
@@ -716,7 +812,30 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
                 </div>
               )}
 
-              {/* Per-panel + per-temperature + per-register quick stats */}
+              {/* Per-suite + per-panel + per-temperature + per-register quick stats */}
+              {runs.length > 0 && perSuite.length > 1 && (
+                <div className="mb-3 border border-parchment/60 rounded-sm p-3 bg-card">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-1.5">
+                    By suite <span className="text-muted-foreground/60 normal-case tracking-normal">— purpose & domain conditions</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+                    {perSuite.map(({ suite: s, stats }) => (
+                      <div key={s.id} className="flex justify-between text-caption py-0.5">
+                        <span className="text-foreground">
+                          <span className="text-[9px] uppercase tracking-wider text-muted-foreground/70 font-semibold mr-1.5">
+                            {s.category}
+                          </span>
+                          {s.label}
+                        </span>
+                        <span className="font-mono text-muted-foreground">
+                          {((stats!.hitRate) * 100).toFixed(0)}%{" "}
+                          <span className="opacity-60">({stats!.runsWithHit}/{stats!.runs})</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {runs.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
                   {perPanel.length > 0 && (
@@ -786,11 +905,25 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
                         </tr>
                       </thead>
                       <tbody>
-                        {suite.filter(p => selectedPromptIds.has(p.id)).map(p => (
+                        {suite.filter(p => selectedPromptIds.has(p.id)).map(p => {
+                          const promptSuite = suiteOfPrompt(p.id);
+                          return (
                           <tr key={p.id} className="border-b border-parchment/30 last:border-b-0">
                             <td className="px-2 py-1 sticky left-0 bg-card z-10">
-                              <div className="text-[9px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
-                                {REGISTER_LABELS[p.register]}
+                              <div className="text-[9px] uppercase tracking-wider text-muted-foreground/70 font-semibold flex items-center gap-1.5">
+                                {activeSuiteIds.size > 1 && promptSuite && (
+                                  <span
+                                    className={`inline-block px-1 py-0.5 rounded-sm text-[8px] ${
+                                      promptSuite.category === "purpose"
+                                        ? "bg-burgundy/15 text-burgundy"
+                                        : "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                                    }`}
+                                    title={promptSuite.description}
+                                  >
+                                    {promptSuite.shortLabel}
+                                  </span>
+                                )}
+                                <span>{REGISTER_LABELS[p.register]}</span>
                               </div>
                               <div className="text-foreground text-[11px] truncate max-w-[340px]" title={p.prompt}>
                                 {p.prompt}
@@ -817,7 +950,8 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
                               })
                             )}
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

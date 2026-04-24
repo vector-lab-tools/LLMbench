@@ -77,7 +77,7 @@ Five phases, each a distinct research question:
 - **D. Perturbation** *(planned)*. Neutral vs anti-pattern vs pro-pattern framings. Does the pattern persist under explicit negative instruction (structural) or flex (stylistic)?
 - **E. Temperature sweep** *(planned)*. Prevalence at T ∈ {0, 0.3, 0.7, 1.0, 1.5}. A pattern present at T=0 sits at the greedy centre of the distribution; not a sampling accident.
 
-Ships with a four-preset pattern library (Not X but Y, Hyland hedging triplets, tricolon, modal stacking) and a 20-prompt default suite across six registers (speech, op-ed, explainer, technical, poetic, dialogue).
+Ships with a four-preset pattern library (Not X but Y, Hyland hedging triplets, tricolon, modal stacking) and a **thematic suite library** that makes Phase A a research instrument rather than a demo. Ten suites on two axes: four *purpose* suites (**neutral baseline**, **invitation**, **resistance**, **adversarial**) that test whether the pattern appears unprovoked, under favourable framing, under explicit suppression, or when prompts merely surface the pattern's lexical cues; and six *domain* suites (politics, technology, science, ethics, pedagogy, everyday) for topic sensitivity. Suites are composable — tick any combination, and the heatmap stratifies results by suite while the verdict banner reports per-suite hit rates.
 
 ## Compare Mode (Dual Panel)
 
@@ -272,6 +272,7 @@ The architecture follows the Manifold Atlas pattern: a thin `page.tsx` manages m
 - [x] Canonical Vector Lab toolbar layout: clustered views, right-hand icon dock for Export and History
 - [x] Investigate tier with Grammar Probe (Phase A: prevalence heatmap across pattern × prompt × temperature × model)
 - [x] Grammar Probe Phase B: continuation logprobs — top-K next-token distribution per scaffold with suppress-token highlighting and entropy
+- [x] Grammar Probe suite library — four purpose suites (baseline / invitation / resistance / adversarial) and six domain suites (politics, technology, science, ethics, pedagogy, everyday), composable with per-suite stratification
 - [ ] Grammar Probe Phase C (forced-continuation with Manifold Atlas hand-off)
 - [ ] Grammar Probe Phases D (perturbation) and E (temperature sweep)
 - [ ] Logit-bias "suppress tokens" experiment for Grammar Probe
