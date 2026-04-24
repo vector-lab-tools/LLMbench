@@ -168,14 +168,25 @@ async function runDirect(
   if (content.length > 0) {
     const entry = content[0];
     const decodedChosen = decodeTokenField(entry);
-    chosen = {
-      token: messageContent.length > 0 ? messageContent : decodedChosen,
-      logprob: entry.logprob ?? 0,
-    };
+    const authoritativeChosen = messageContent.length > 0 ? messageContent : decodedChosen;
+    chosen = { token: authoritativeChosen, logprob: entry.logprob ?? 0 };
     distribution = (entry.top_logprobs || []).map(
       (t: { token?: string; bytes?: number[] | null; logprob: number }) =>
         ({ token: decodeTokenField(t), logprob: t.logprob })
     );
+    // Critical path: advanceOne's sampler picks from `distribution`, not from
+    // `chosen`. Without this alignment the argmax pick at T≈0 still uses the
+    // OpenRouter-stripped token string and the transcript comes out as
+    // "Democracy isasysteminwhich…". Overwrite the rank-0 entry with
+    // message.content (the raw emitted text) so sampleFromDistribution
+    // returns the faithful token at the most-likely pick — which is where
+    // almost every step lands with peaked distributions.
+    if (distribution.length > 0 && distribution[0].token !== authoritativeChosen) {
+      distribution = [
+        { ...distribution[0], token: authoritativeChosen },
+        ...distribution.slice(1),
+      ];
+    }
   }
   return { chosen, distribution };
 }

@@ -199,14 +199,23 @@ async function runDirect(
   };
   if (content.length > 0) {
     const entry = content[0];
-    chosen = {
-      token: messageContent.length > 0 ? messageContent : decode(entry),
-      logprob: entry.logprob ?? 0,
-    };
+    const authoritativeChosen = messageContent.length > 0 ? messageContent : decode(entry);
+    chosen = { token: authoritativeChosen, logprob: entry.logprob ?? 0 };
     distribution = (entry.top_logprobs || []).map(
       (t: { token?: string; bytes?: number[] | null; logprob: number }) =>
         ({ token: decode(t), logprob: t.logprob })
     );
+    // Align rank-0 of the distribution with the authoritative chosen text —
+    // so the "currently chosen" highlight in Phase B's top-K card matches
+    // the continuation that was actually emitted (OpenRouter strips leading
+    // whitespace from the chosen entry's token/bytes but keeps message.content
+    // intact).
+    if (distribution.length > 0 && distribution[0].token !== authoritativeChosen) {
+      distribution = [
+        { ...distribution[0], token: authoritativeChosen },
+        ...distribution.slice(1),
+      ];
+    }
   }
   return { chosen, distribution };
 }
