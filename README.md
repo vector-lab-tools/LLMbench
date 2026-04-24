@@ -17,7 +17,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.15.0
+**Version:** 2.15.1
 **Date:** 24 April 2026
 **Licence:** MIT
 
@@ -114,7 +114,7 @@ Suites are additive (union of prompts, deduplicated), and every prompt still car
 
 Where Grammar Probe asks *how often does this rhetorical shape appear across a corpus?*, **Sampling Probe** asks *how does the sampler arrive at any shape at all, step by step?* Autoregressive generation is unfolded into a data structure: one HTTP call per sampled token, each step stores its full top-K distribution, and the browser holds the sampler state machine so every knob is instant. Requires a logprobs-capable slot (Gemini 2.0, OpenAI, OpenRouter, or Hugging Face).
 
-- **Per-step data.** Top-K bar chart (K up to 50) showing real next-token probabilities, re-softmaxed client-side under your current **T** and **top-p** so sliders update the chart without a new API call. Each row shows rank, token, softmax probability (bar), and raw logprob. The chosen token is highlighted in burgundy.
+- **Per-step data.** Top-K bar chart (K up to 20, the provider-side cap) showing real next-token probabilities, re-softmaxed client-side under your current **T** and **top-p** so sliders update the chart without a new API call. Each row shows rank, token, softmax probability (bar), and raw logprob. The chosen token is highlighted in burgundy.
 - **Generation strip.** The whole generated sequence rendered inline, each token shaded by its **surprisal** (−log₂p): green for low-surprisal (expected) tokens, amber for moderate, burgundy for high-surprisal (rare) choices. Click any token to rewind the inspector to that step.
 - **Trajectory chart.** Per-step entropy H (green line, bits over top-K) and chosen-token surprisal (burgundy bars). Click the bars to jump to any step. A summary row reports total surprisal and branch perplexity.
 - **Counterfactual branching.** Click any non-chosen token in the top-K inspector to **fork** a new branch from that step. Branches are tracked as a tree — switch between branches from the Branches row, and each branch's transcript and trajectory are independent. Because raw logprobs are cached, forking re-uses the existing distribution — no new API call until you advance.

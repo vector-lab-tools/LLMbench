@@ -180,6 +180,22 @@ export async function runSamplingStep(
       );
   }
 
+  // Fail loudly on silent empty logprobs — same class of bug that bit Atlas
+  // when a pre-v2.14.0 Phase B bundle was generated on OpenRouter + a
+  // non-OpenAI model. Better to surface a provider-specific hint per step
+  // than to accumulate an empty trace.
+  if (!raw.distribution || raw.distribution.length === 0) {
+    const hint =
+      slot.provider === "openrouter"
+        ? `OpenRouter returned no logprobs for ${model}. On OpenRouter only OpenAI models (e.g. openai/gpt-4o, openai/gpt-4o-mini) expose logprobs; other routes silently drop the logprobs field. Switch to a direct OpenAI slot or Google Gemini 2.0.`
+        : slot.provider === "huggingface"
+        ? `Hugging Face returned no logprobs for ${model}. Not every HF-routed chat model exposes logprobs. Switch to OpenAI or Google Gemini 2.0.`
+        : slot.provider === "openai-compatible"
+        ? `The OpenAI-compatible endpoint for ${model} returned no logprobs. Verify the provider actually exposes top_logprobs.`
+        : `${slot.provider} returned no logprobs for ${model}.`;
+    throw new Error(hint);
+  }
+
   return {
     distribution: raw.distribution,
     chosen: raw.chosen,

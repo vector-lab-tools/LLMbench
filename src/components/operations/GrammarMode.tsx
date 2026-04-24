@@ -396,14 +396,27 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     const slotB = slots.B;
     const modelName = slotA.customModelId || slotA.model;
 
+    const phases = (["A", "B", "E"] as const).filter(p => {
+      if (p === "A") return runs.length > 0;
+      if (p === "B") return continuationResults.length > 0;
+      return sweepRuns.length > 0;
+    });
+    // `phase` (singular) is the dominant phase for importers that expect
+    // a single identifier (e.g. Manifold Atlas checks `source.phase` when
+    // routing between its geometry and prevalence views). `phases` (plural)
+    // carries the full set so importers that support multi-phase bundles
+    // can use it directly.
+    const dominantPhase = phases.includes("B") ? "B" : phases[0] ?? null;
+
     const bundle = {
       format: "vector-lab.grammar-probe.v1",
       createdAt: now.toISOString(),
-      source: { tool: "LLMbench", version: "2.14.0", phases: ["A", "B", "E"].filter(p => {
-        if (p === "A") return runs.length > 0;
-        if (p === "B") return continuationResults.length > 0;
-        return sweepRuns.length > 0;
-      }) },
+      source: {
+        tool: "LLMbench",
+        version: "2.15.1",
+        phase: dominantPhase,
+        phases,
+      },
       pattern: {
         id: pattern.id,
         label: pattern.label,
@@ -414,8 +427,16 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
         id: p.id, label: p.label, category: p.category,
       })),
       models: {
-        A: { provider: slotA.provider, name: slotA.customModelId || slotA.model },
-        B: { provider: slotB.provider, name: slotB.customModelId || slotB.model },
+        A: {
+          provider: slotA.provider,
+          name: slotA.customModelId || slotA.model,
+          displayName: getSlotLabel("A"),
+        },
+        B: {
+          provider: slotB.provider,
+          name: slotB.customModelId || slotB.model,
+          displayName: getSlotLabel("B"),
+        },
       },
       parameters: {
         prevalenceTemperatures: PREVALENCE_TEMPS,
@@ -479,7 +500,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [runs, continuationResults, sweepRuns, pattern, selectedPatterns, slots]);
+  }, [runs, continuationResults, sweepRuns, pattern, selectedPatterns, slots, getSlotLabel]);
 
   // ---- Phase E: Temperature sweep -----------------------------------------
   const handleRunSweep = useCallback(async () => {
@@ -1403,11 +1424,11 @@ function PatternPicker({
       {/* Row 1: multi-select — what to count. Hidden in single-select mode. */}
       {!allowSingleSelectOnly && (
         <div>
-          <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center justify-between mb-0.5">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
-              Count these constructions
+              Patterns to count
               <span className="ml-2 text-muted-foreground/60 normal-case tracking-normal font-normal">
-                {selectedIds.size} of {DEFAULT_PATTERNS.length} selected &middot; applied to every run
+                {selectedIds.size} of {DEFAULT_PATTERNS.length} selected
               </span>
             </div>
             <div className="flex items-center gap-1">
@@ -1430,6 +1451,9 @@ function PatternPicker({
                 Clear
               </button>
             </div>
+          </div>
+          <div className="text-caption text-muted-foreground/80 mb-1.5 normal-case tracking-normal">
+            Every generated run will be scored for each ticked pattern. Hit rates, co-occurrence, and register breakdowns in the Deep Dive are computed across all of them.
           </div>
           <div className="flex flex-wrap gap-1.5">
             {DEFAULT_PATTERNS.map(p => {
@@ -1473,17 +1497,16 @@ function PatternPicker({
         </div>
       )}
 
-      {/* Row 2: primary radio — which one Phase B scaffolds run against. */}
+      {/* Row 2: primary radio — which pattern the continuation probe (Phase B)
+          fetches scaffold-by-scaffold top-K distributions for. */}
       <div>
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-1.5">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-0.5">
+          {allowSingleSelectOnly ? "Pattern to probe" : "Primary pattern"}
+        </div>
+        <div className="text-caption text-muted-foreground/80 mb-1.5 normal-case tracking-normal">
           {allowSingleSelectOnly
-            ? "Choose construction"
-            : "Primary construction"}
-          <span className="ml-2 text-muted-foreground/60 normal-case tracking-normal font-normal">
-            {allowSingleSelectOnly
-              ? "Phase B scaffolds will probe this one"
-              : "used by Phase B scaffolds; must be one of the selected constructions above"}
-          </span>
+            ? "The continuation view fetches a top-K next-token distribution for each of this pattern's scaffold sentences."
+            : "The continuation view (Phase B) uses this pattern's scaffold sentences. Pick one of the constructions you selected above."}
         </div>
         <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Primary construction">
           {(allowSingleSelectOnly ? DEFAULT_PATTERNS : selectedPatterns).map(p => {

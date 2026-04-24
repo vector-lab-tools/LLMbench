@@ -36,7 +36,10 @@ interface SamplingModeProps {
   pendingPrompt?: string;
 }
 
-const DEFAULT_TOP_K = 40;
+// OpenAI / OpenRouter / most providers cap top_logprobs at 20. Keep the
+// slider in-range so we never hit a provider-side 400.
+const DEFAULT_TOP_K = 20;
+const MAX_TOP_K = 20;
 const DEFAULT_TEMPERATURE = 0.7;
 const DEFAULT_TOP_P = 0.9;
 const DEFAULT_MAX_STEPS = 40;
@@ -447,7 +450,7 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
                 onChange={v => updateParams({ topP: v })}
               />
               <Slider
-                label="top-K" min={5} max={50} step={5} integer
+                label="top-K" min={5} max={MAX_TOP_K} step={1} integer
                 value={trace?.params.topK ?? DEFAULT_TOP_K}
                 onChange={v => updateParams({ topK: v })}
               />

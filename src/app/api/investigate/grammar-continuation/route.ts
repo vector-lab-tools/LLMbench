@@ -199,26 +199,50 @@ async function runOne(
   slot: SlotPayload, scaffold: string, topK: number, noMarkdown: boolean
 ): Promise<ContinuationResult> {
   const model = slot.customModelId || slot.model;
+  let result: ContinuationResult;
   switch (slot.provider) {
     case "google": {
       if (model.includes("2.5")) throw new Error(`${model} does not provide logprobs. Use gemini-2.0-flash.`);
-      return runGoogle(slot, scaffold, topK, noMarkdown);
+      result = await runGoogle(slot, scaffold, topK, noMarkdown);
+      break;
     }
     case "openai":
     case "openai-compatible":
-      return runOpenAI(slot, scaffold, topK, noMarkdown);
+      result = await runOpenAI(slot, scaffold, topK, noMarkdown);
+      break;
     case "openrouter":
-      return runDirect(slot, "https://openrouter.ai/api/v1", scaffold, topK, noMarkdown, {
+      result = await runDirect(slot, "https://openrouter.ai/api/v1", scaffold, topK, noMarkdown, {
         "HTTP-Referer": "https://llm-bench.vercel.app",
         "X-Title": "LLMbench",
       });
+      break;
     case "huggingface":
-      return runDirect(slot, "https://router.huggingface.co/v1", scaffold, topK, noMarkdown);
+      result = await runDirect(slot, "https://router.huggingface.co/v1", scaffold, topK, noMarkdown);
+      break;
     default:
       throw new Error(
         `Continuation logprobs require Gemini (2.0), OpenAI, OpenRouter, or Hugging Face. ${slot.provider} is not supported.`
       );
   }
+  // Fail loudly if the provider responded 200 but returned no logprobs. This
+  // happens on OpenRouter for non-OpenAI chat models (Qwen, Llama, Mistral,
+  // Gemini-via-OR, etc.) and on some HF router models — they accept the
+  // `logprobs` flag but their chat completions response never populates
+  // `choice.logprobs.content`. Without this check the bundle exports with
+  // empty distributions and the downstream tool cannot tell generation
+  // failed from a legitimately flat distribution.
+  if (!result.distribution || result.distribution.length === 0) {
+    const hint =
+      slot.provider === "openrouter"
+        ? `OpenRouter returned no logprobs for ${model}. On OpenRouter only OpenAI models (e.g. openai/gpt-4o, openai/gpt-4o-mini) expose logprobs; other routes silently drop the logprobs field. Switch to a direct OpenAI slot or Google Gemini 2.0.`
+        : slot.provider === "huggingface"
+        ? `Hugging Face returned no logprobs for ${model}. Not every HF-routed chat model exposes logprobs. Switch to OpenAI or Google Gemini 2.0.`
+        : slot.provider === "openai-compatible"
+        ? `The OpenAI-compatible endpoint for ${model} returned no logprobs. Verify the provider actually exposes top_logprobs.`
+        : `${slot.provider} returned no logprobs for ${model}.`;
+    throw new Error(hint);
+  }
+  return result;
 }
 
 export async function POST(request: NextRequest) {

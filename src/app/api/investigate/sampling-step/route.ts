@@ -38,7 +38,9 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "slot with provider is required" }, { status: 400 });
   }
 
-  const k = Math.min(Math.max(topK ?? 40, 5), 50);
+  // OpenAI caps top_logprobs at 20 and OpenRouter/HF pass through that same
+  // limit; clamping here prevents the provider from returning a 400.
+  const k = Math.min(Math.max(topK ?? 20, 1), 20);
 
   const validation = validateAIConfig({
     provider: slot.provider,
