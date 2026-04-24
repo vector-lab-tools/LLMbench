@@ -17,7 +17,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.15.3
+**Version:** 2.15.4
 **Date:** 24 April 2026
 **Licence:** MIT
 
@@ -117,7 +117,7 @@ Where Grammar Probe asks *how often does this rhetorical shape appear across a c
 - **Per-step data.** Top-K bar chart (K up to 20, the provider-side cap) showing real next-token probabilities, re-softmaxed client-side under your current **T** and **top-p** so sliders update the chart without a new API call. Each row shows rank, token, softmax probability (bar), and raw logprob. The chosen token is highlighted in burgundy.
 - **Generation strip.** The whole generated sequence rendered inline, each token shaded by its **surprisal** (−log₂p): green for low-surprisal (expected) tokens, amber for moderate, burgundy for high-surprisal (rare) choices. Click any token to rewind the inspector to that step.
 - **Trajectory chart.** Per-step entropy H (green line, bits over top-K) and chosen-token surprisal (burgundy bars). Click the bars to jump to any step. A summary row reports total surprisal and branch perplexity.
-- **Counterfactual branching.** Click any non-chosen token in the top-K inspector to **fork** a new branch from that step. Branches are tracked as a tree — switch between branches from the Branches row, and each branch's transcript and trajectory are independent. Because raw logprobs are cached, forking re-uses the existing distribution — no new API call until you advance.
+- **Counterfactual override.** Click any non-chosen token in the top-K inspector to **override** the model's pick at that step. The current branch is truncated (every token after the overridden step is cleared) and the step's chosen token is swapped for your pick; pressing **Step** or **Run** continues generating from the new choice. This is the counterfactual workflow: walk the sequence, disagree with the sampler at any step, keep walking. A **Stop** button halts an in-flight Run between tokens. Because raw logprobs are cached, the override re-uses the existing distribution — no new API call until you advance.
 - **Dual-panel A/B lockstep.** Both slots generate against the same prefix. Top-K bar charts render side by side; the inspector footer reports **Jaccard(A,B)** (overlap of top-K token sets) and **KL(A‖B)** (bits). The Deep Dive shows a per-step divergence table with ● markers on steps where the two models chose different tokens.
 - **Exports.** A one-click **Bundle** button writes the full trace as `vector-lab.sampling-trace.v1` JSON (prompt, params, every branch's every step with raw top-K, provider/model, slot metadata). The Deep Dive ships a per-branch **Trajectory CSV** (step / chosen token / entropy / surprisal / rank / softmax p). Bundle files are fully replayable — re-softmax, branch comparisons, and new metrics can all be computed downstream without re-calling the provider.
 

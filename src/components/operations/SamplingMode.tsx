@@ -6,16 +6,18 @@
  * Autoregressive generation as data. One HTTP call per token. Each step's
  * full top-K distribution is stored client-side so the user can:
  *   - re-softmax under any T and top-p without a new API call,
- *   - click any non-chosen top-K token to fork a counterfactual branch,
+ *   - click any non-chosen top-K token to *override* the model's pick at
+ *     that step and continue stepping from the user's choice,
  *   - compare two models in lockstep (dual-panel: Jaccard + KL per step),
+ *   - stop an in-flight Run between tokens,
  *   - export the full trace as a bundle.
  *
  * Requires a logprobs-capable slot: Gemini 2.0, OpenAI, OpenRouter, HF.
  */
 
-import { useState, useCallback, useMemo, Fragment } from "react";
+import { useState, useCallback, useMemo, useRef, Fragment } from "react";
 import {
-  AlertCircle, Play, StepForward, RotateCcw, Download, Microscope, GitBranch,
+  AlertCircle, Play, StepForward, RotateCcw, Download, Microscope, GitBranch, Square,
 } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { ModelSelector, type PanelSelection } from "@/components/shared/ModelSelector";
@@ -61,7 +63,11 @@ function freshId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-function emptyTrace(prompt: string, slots: { A: ProviderSlot | null; B: ProviderSlot | null }): SamplingTrace {
+function emptyTrace(
+  prompt: string,
+  slots: { A: ProviderSlot | null; B: ProviderSlot | null },
+  params: SamplingTrace["params"],
+): SamplingTrace {
   const rootId = "main";
   return {
     prompt,
@@ -72,12 +78,7 @@ function emptyTrace(prompt: string, slots: { A: ProviderSlot | null; B: Provider
       },
     },
     activeBranchId: rootId,
-    params: {
-      temperature: DEFAULT_TEMPERATURE,
-      topP: DEFAULT_TOP_P,
-      topK: DEFAULT_TOP_K,
-      maxSteps: DEFAULT_MAX_STEPS,
-    },
+    params,
     slots: {
       A: slots.A ? { provider: slots.A.provider, model: slots.A.customModelId || slots.A.model } : null,
       B: slots.B ? { provider: slots.B.provider, model: slots.B.customModelId || slots.B.model } : null,
@@ -108,6 +109,19 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
   const [status, setStatus] = useState<"idle" | "stepping" | "running" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [selectedStepIndex, setSelectedStepIndex] = useState<number | null>(null);
+  // Flipped to true by the Stop button; runToEnd checks it between iterations
+  // so a long batch run can be cancelled without a page refresh.
+  const stopRequested = useRef(false);
+  // Sampling parameters live in their own state so they survive Reset (when
+  // `trace` becomes null) and are always editable. The trace's params are
+  // seeded from this state when a new trace is created, and both stay in
+  // sync when the sliders move.
+  const [params, setParams] = useState<SamplingTrace["params"]>({
+    temperature: DEFAULT_TEMPERATURE,
+    topP: DEFAULT_TOP_P,
+    topK: DEFAULT_TOP_K,
+    maxSteps: DEFAULT_MAX_STEPS,
+  });
 
   const slotAConfigured = isSlotConfigured("A");
   const slotBConfigured = isSlotConfigured("B");
@@ -144,10 +158,16 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
   // -------------------- Advance one step --------------------
 
   const advanceOne = useCallback(async () => {
-    const current = trace ?? emptyTrace(prompt, { A: slotA, B: dualPanel ? slotB : null });
+    // Work against local variables rather than the React state closure so the
+    // first step doesn't race: previously `traceB` was still null in the
+    // closure even after calling setTraceB on the empty trace, so Panel B
+    // skipped its first token and stayed one step behind Panel A forever.
+    let current = trace ?? emptyTrace(prompt, { A: slotA, B: dualPanel ? slotB : null }, params);
     if (!trace) setTrace(current);
-    if (dualPanel && !traceB) {
-      setTraceB(emptyTrace(prompt, { A: slotA, B: slotB }));
+    let currentB = traceB;
+    if (dualPanel && !currentB) {
+      currentB = emptyTrace(prompt, { A: slotA, B: slotB }, params);
+      setTraceB(currentB);
     }
 
     setStatus("stepping");
@@ -157,49 +177,36 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
       const branchA = current.branches[current.activeBranchId];
       const prefixA = branchPrefix(branchA, current.prompt);
       const respA = await fetchStep(slotForA, prefixA, current.params.topK);
-
-      // Choose argmax of the re-softmaxed distribution as "chosen" token.
       const distA = resample(respA.distribution, current.params.temperature, current.params.topP);
       const sampledA = sampleFromDistribution(distA);
       const chosenA = sampledA?.token ?? (respA.chosen?.token ?? "");
       if (!chosenA) throw new Error("Provider returned no token.");
-
       const newStepA: SamplingStep = {
-        id: freshId(),
-        prefix: prefixA,
-        rawDistribution: respA.distribution,
-        chosenToken: chosenA,
-        provenance: respA.provenance,
+        id: freshId(), prefix: prefixA, rawDistribution: respA.distribution,
+        chosenToken: chosenA, provenance: respA.provenance,
       };
+      current = {
+        ...current,
+        branches: { ...current.branches, [branchA.id]: { ...branchA, steps: [...branchA.steps, newStepA] } },
+      };
+      setTrace(current);
 
-      setTrace(prev => {
-        const t = prev ?? current;
-        const b = t.branches[t.activeBranchId];
-        return {
-          ...t,
-          branches: {
-            ...t.branches,
-            [b.id]: { ...b, steps: [...b.steps, newStepA] },
-          },
-        };
-      });
-
-      // Dual-panel: also advance B against the same prefix.
-      if (dualPanel && traceB) {
-        const branchB = traceB.branches[traceB.activeBranchId];
-        const prefixB = branchPrefix(branchB, traceB.prompt);
+      if (dualPanel && currentB) {
+        const branchB = currentB.branches[currentB.activeBranchId];
+        const prefixB = branchPrefix(branchB, currentB.prompt);
         const respB = await fetchStep(slotB, prefixB, current.params.topK);
         const distB = resample(respB.distribution, current.params.temperature, current.params.topP);
-        const chosenB = distB[0]?.token ?? (respB.chosen?.token ?? "");
+        const sampledB = sampleFromDistribution(distB);
+        const chosenB = sampledB?.token ?? (respB.chosen?.token ?? "");
         const newStepB: SamplingStep = {
           id: freshId(), prefix: prefixB, rawDistribution: respB.distribution,
           chosenToken: chosenB, provenance: respB.provenance,
         };
-        setTraceB(prev => {
-          const t = prev!;
-          const b = t.branches[t.activeBranchId];
-          return { ...t, branches: { ...t.branches, [b.id]: { ...b, steps: [...b.steps, newStepB] } } };
-        });
+        currentB = {
+          ...currentB,
+          branches: { ...currentB.branches, [branchB.id]: { ...branchB, steps: [...branchB.steps, newStepB] } },
+        };
+        setTraceB(currentB);
       }
 
       setStatus("idle");
@@ -207,23 +214,25 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
       setErrorMsg(err instanceof Error ? err.message : "Step failed");
       setStatus("error");
     }
-  }, [trace, traceB, prompt, slotA, slotB, dualPanel, primarySlotPanel, fetchStep]);
+  }, [trace, traceB, prompt, slotA, slotB, dualPanel, primarySlotPanel, fetchStep, params]);
 
   // -------------------- Run until maxSteps --------------------
 
   const runToEnd = useCallback(async () => {
+    stopRequested.current = false;
     setStatus("running");
     setErrorMsg(null);
     try {
-      let current = trace ?? emptyTrace(prompt, { A: slotA, B: dualPanel ? slotB : null });
+      let current = trace ?? emptyTrace(prompt, { A: slotA, B: dualPanel ? slotB : null }, params);
       if (!trace) setTrace(current);
       let currentB = traceB;
       if (dualPanel && !currentB) {
-        currentB = emptyTrace(prompt, { A: slotA, B: slotB });
+        currentB = emptyTrace(prompt, { A: slotA, B: slotB }, params);
         setTraceB(currentB);
       }
 
       while (true) {
+        if (stopRequested.current) break;
         const branch = current.branches[current.activeBranchId];
         if (branch.steps.length >= current.params.maxSteps) break;
 
@@ -270,47 +279,64 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
       setErrorMsg(err instanceof Error ? err.message : "Run failed");
       setStatus("error");
     }
-  }, [trace, traceB, prompt, slotA, slotB, dualPanel, primarySlotPanel, fetchStep]);
+  }, [trace, traceB, prompt, slotA, slotB, dualPanel, primarySlotPanel, fetchStep, params]);
 
-  // -------------------- Fork a branch --------------------
+  // -------------------- Override a token --------------------
+  //
+  // The user's mental model: "step through and, when I see the top-K, pick a
+  // different token than the one the model picked, then keep stepping." This
+  // is a truncate-and-replace on the active branch — everything *after* the
+  // overridden step is discarded (we no longer know whether it would still
+  // have been sampled from the new prefix), the step's chosenToken is swapped
+  // for the user's pick, and subsequent Run/Step calls continue from there.
+  // Replaces the earlier "fork creates a new invisible branch" UX, which was
+  // unintuitive.
 
-  const fork = useCallback((stepIndex: number, forkToken: string) => {
+  const overrideAt = useCallback((stepIndex: number, newToken: string) => {
     setTrace(prev => {
       if (!prev) return prev;
-      const parent = prev.branches[prev.activeBranchId];
-      if (stepIndex < 0 || stepIndex >= parent.steps.length) return prev;
-      const parentStep = parent.steps[stepIndex];
-      const newId = freshId();
-      const newBranch: SamplingBranch = {
-        id: newId,
-        parentId: parent.id,
-        forkStepIndex: stepIndex,
-        forkChoice: forkToken,
-        panel: parent.panel,
-        label: `${parent.label}→${forkToken.trim().slice(0, 8)}`,
-        steps: [
-          ...parent.steps.slice(0, stepIndex),
-          // Replace the step at stepIndex with one whose chosen is the fork choice;
-          // reuse the cached raw distribution.
-          {
-            ...parentStep,
-            id: freshId(),
-            chosenToken: forkToken,
-          },
-        ],
+      const branch = prev.branches[prev.activeBranchId];
+      if (stepIndex < 0 || stepIndex >= branch.steps.length) return prev;
+      const step = branch.steps[stepIndex];
+      // Keep the cached raw distribution (so the inspector still reflects the
+      // choice point), bump the id so React re-keys, and drop every step that
+      // came after.
+      const overriddenStep: SamplingStep = {
+        ...step,
+        id: freshId(),
+        chosenToken: newToken,
       };
       return {
         ...prev,
-        branches: { ...prev.branches, [newId]: newBranch },
-        activeBranchId: newId,
+        branches: {
+          ...prev.branches,
+          [branch.id]: {
+            ...branch,
+            steps: [...branch.steps.slice(0, stepIndex), overriddenStep],
+          },
+        },
       };
     });
-    setSelectedStepIndex(null);
+    // Also truncate Panel B's trace so the two stay aligned.
+    setTraceB(prev => {
+      if (!prev) return prev;
+      const branch = prev.branches[prev.activeBranchId];
+      if (stepIndex < 0) return prev;
+      return {
+        ...prev,
+        branches: {
+          ...prev.branches,
+          [branch.id]: { ...branch, steps: branch.steps.slice(0, stepIndex) },
+        },
+      };
+    });
+    setSelectedStepIndex(stepIndex);
   }, []);
 
   // -------------------- Slider updates --------------------
 
   const updateParams = (patch: Partial<SamplingTrace["params"]>) => {
+    setParams(prev => ({ ...prev, ...patch }));
     setTrace(prev => prev ? { ...prev, params: { ...prev.params, ...patch } } : prev);
     setTraceB(prev => prev ? { ...prev, params: { ...prev.params, ...patch } } : prev);
   };
@@ -455,6 +481,16 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
             >
               <StepForward className="w-3 h-3" /> Step
             </button>
+            {status === "running" && (
+              <button
+                type="button"
+                onClick={() => { stopRequested.current = true; }}
+                className="btn-editorial-ghost flex items-center gap-1 text-caption text-burgundy border-burgundy"
+                title="Stop the current Run between tokens"
+              >
+                <Square className="w-3 h-3" /> Stop
+              </button>
+            )}
             <button
               type="button" onClick={reset} disabled={!trace || status === "running"}
               className="btn-editorial-ghost flex items-center gap-1 text-caption disabled:opacity-50"
@@ -464,22 +500,22 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
             <div className="ml-4 flex items-center gap-3 text-caption">
               <Slider
                 label="T" min={0.1} max={2} step={0.1}
-                value={trace?.params.temperature ?? DEFAULT_TEMPERATURE}
+                value={params.temperature}
                 onChange={v => updateParams({ temperature: v })}
               />
               <Slider
                 label="top-p" min={0.1} max={1} step={0.05}
-                value={trace?.params.topP ?? DEFAULT_TOP_P}
+                value={params.topP}
                 onChange={v => updateParams({ topP: v })}
               />
               <Slider
                 label="top-K" min={5} max={MAX_TOP_K} step={1} integer
-                value={trace?.params.topK ?? DEFAULT_TOP_K}
+                value={params.topK}
                 onChange={v => updateParams({ topK: v })}
               />
               <Slider
                 label="max" min={5} max={100} step={5} integer
-                value={trace?.params.maxSteps ?? DEFAULT_MAX_STEPS}
+                value={params.maxSteps}
                 onChange={v => updateParams({ maxSteps: v })}
               />
             </div>
@@ -532,7 +568,7 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
                   title={`${getSlotLabel(primarySlotPanel)} · step ${(inspectedStepIndex ?? 0) + 1}`}
                   dist={inspectedDist}
                   chosenToken={inspectedStep.chosenToken}
-                  onFork={(token) => inspectedStepIndex !== null && fork(inspectedStepIndex, token)}
+                  onFork={(token) => inspectedStepIndex !== null && overrideAt(inspectedStepIndex, token)}
                 />
                 {dualPanel && inspectedDistB.length > 0 && (
                   <TopKPanel
@@ -564,8 +600,7 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
         {/* Empty state */}
         {!trace && !capabilityError && (
           <div className="text-caption text-muted-foreground border border-dashed border-parchment/60 rounded-sm p-4 text-center">
-            Enter a prompt, press <strong>Run</strong> to sample until punctuation, or <strong>Step</strong> to advance one token at a time.
-            Every top-K distribution is stored locally so you can adjust T / top-p without re-calling the model.
+            Enter a prompt. <strong>Run</strong> samples until punctuation; <strong>Step</strong> advances one token; <strong>Stop</strong> halts a Run. Click any generated token to open the top-K inspector for that step, then click a non-chosen entry to <strong>override</strong> the model&apos;s pick and continue stepping from your choice.
           </div>
         )}
       </div>
@@ -689,7 +724,7 @@ function TopKPanel({ title, dist, chosenToken, onFork, divergenceNote }: {
                   onFork ? "hover:bg-amber-100 dark:hover:bg-amber-900/30 cursor-pointer text-foreground" :
                   "text-foreground"
                 }`}
-                title={onFork && !isChosen ? `Fork branch at this token: "${d.token}"` : d.token}
+                title={onFork && !isChosen ? `Override: replace the chosen token with "${d.token}" and continue from here` : d.token}
               >{JSON.stringify(d.token)}</button>
               <div className="bg-parchment/30 dark:bg-parchment/10 h-2 rounded-sm overflow-hidden">
                 <div className={`h-full ${isChosen ? "bg-burgundy" : "bg-amber-500/70"}`} style={{ width: `${w}%` }} />
@@ -702,7 +737,7 @@ function TopKPanel({ title, dist, chosenToken, onFork, divergenceNote }: {
       </div>
       {onFork && (
         <div className="text-[10px] text-muted-foreground mt-1 italic">
-          Click any non-chosen token to fork a counterfactual branch from this step.
+          Click any non-chosen token to <strong>override</strong> the model&apos;s pick at this step. Subsequent tokens are cleared; press <strong>Step</strong> or <strong>Run</strong> to continue from the new choice.
         </div>
       )}
     </div>
