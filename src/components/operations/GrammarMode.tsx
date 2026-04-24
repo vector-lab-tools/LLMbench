@@ -17,7 +17,7 @@
 
 import { useState, useCallback, useMemo, useEffect } from "react";
 import {
-  AlertCircle, Microscope, Play, RotateCcw, Settings2, FileText, BarChart3, Download, ScatterChart,
+  AlertCircle, Microscope, Play, RotateCcw, Settings2, FileText, BarChart3, Download, Sigma,
 } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { ModelSelector, type PanelSelection } from "@/components/shared/ModelSelector";
@@ -28,7 +28,6 @@ import {
   countMatches,
   findMatchSpans,
 } from "@/lib/grammar/patterns";
-import { extractX, cosine, spearman } from "@/lib/grammar/geometry";
 import {
   GRAMMAR_SUITES,
   promptsForSuites,
@@ -77,9 +76,6 @@ const PREVALENCE_TEMPS = [0, 0.7];
 const SWEEP_TEMPS = [0, 0.3, 0.7, 1.0, 1.5];
 const CONTINUATION_TOP_K = 15;
 const CONTINUATION_PROVIDERS = new Set(["google", "openai", "openai-compatible", "openrouter", "huggingface"]);
-const EMBEDDING_PROVIDERS = new Set(["openai", "openai-compatible", "google"]);
-const EXPANSION_MAX_TOKENS = 6;
-const GEOMETRY_CANDIDATES_PER_SCAFFOLD = 8; // embed top-8 to keep the scatter readable and the embedding bill small
 
 interface ContinuationTokenProb { token: string; logprob: number }
 interface ContinuationResult {
@@ -92,26 +88,6 @@ interface ContinuationResult {
   provenance?: { modelDisplayName: string; responseTimeMs: number };
 }
 
-interface GeometryYPoint {
-  token: string;
-  phrase: string;
-  logprob: number;
-  probability: number;
-  cosineToX: number;
-  rank: number;       // 1 = top-probability
-}
-interface GeometryScaffoldResult {
-  panel: "A" | "B";
-  scaffoldId: string;
-  scaffold: string;
-  x: string;
-  ys: GeometryYPoint[];
-  spearman: number | null;
-  embeddingModel: string;
-  embeddingProvider: string;
-  error?: string;
-}
-
 // `pendingPrompt` is accepted for nav compatibility with the rest of the app
 // (tutorial cards can deep-link into any mode with a pre-filled prompt).
 // Grammar mode does not yet consume it.
@@ -122,6 +98,13 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
   const [activePhase, setActivePhase] = useState<Phase>("prevalence");
   const [panelSelection, setPanelSelection] = useState<PanelSelection>("A");
   const [patternId, setPatternId] = useState(DEFAULT_PATTERNS[0].id);
+  // Multi-select set for Phase A / Phase E aggregations. `patternId` above
+  // remains the *primary* pattern — the one Phase B (continuation, geometry)
+  // operates on, and the one whose scaffolds seed the continuation probe.
+  // The primary is always included in the selection set.
+  const [selectedPatternIds, setSelectedPatternIds] = useState<Set<string>>(
+    () => new Set([DEFAULT_PATTERNS[0].id])
+  );
   // Suite selection: users tick one or more suites; `suite` is the derived
   // union of their prompts. `selectedPromptIds` then lets them refine.
   const [activeSuiteIds, setActiveSuiteIds] = useState<Set<GrammarSuiteKind>>(
@@ -152,12 +135,6 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
   const [continuationProgress, setContinuationProgress] = useState<{ done: number; total: number } | null>(null);
   const [continuationError, setContinuationError] = useState<string | null>(null);
 
-  // ---- Phase B geometry state ----
-  const [geometryResults, setGeometryResults] = useState<GeometryScaffoldResult[]>([]);
-  const [isGeometryLoading, setIsGeometryLoading] = useState(false);
-  const [geometryError, setGeometryError] = useState<string | null>(null);
-  const [geometryProgress, setGeometryProgress] = useState<{ stage: string; done: number; total: number } | null>(null);
-
   // ---- Phase E (temperature sweep) state ----
   const [sweepRuns, setSweepRuns] = useState<RunRecord[]>([]);
   const [isSweepLoading, setIsSweepLoading] = useState(false);
@@ -169,6 +146,56 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     () => DEFAULT_PATTERNS.find(p => p.id === patternId) || DEFAULT_PATTERNS[0],
     [patternId]
   );
+  const selectedPatterns = useMemo(
+    () => DEFAULT_PATTERNS.filter(p => selectedPatternIds.has(p.id)),
+    [selectedPatternIds]
+  );
+  // Keep the primary inside the selection set. If the user clicks "primary"
+  // on a currently-unselected chip, add it; if they deselect the primary
+  // outright, silently promote the first remaining selection to primary.
+  const togglePatternSelected = useCallback((id: string) => {
+    setSelectedPatternIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        // Do not allow zero selection.
+        if (next.size <= 1) return next;
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+    // If we just removed the primary, promote the first remaining.
+    setPatternId(prevPrimary => {
+      const next = new Set(selectedPatternIds);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      if (prevPrimary === id && !next.has(id)) {
+        const first = DEFAULT_PATTERNS.find(p => next.has(p.id));
+        return first ? first.id : prevPrimary;
+      }
+      return prevPrimary;
+    });
+  }, [selectedPatternIds]);
+  const promotePatternToPrimary = useCallback((id: string) => {
+    setSelectedPatternIds(prev => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    setPatternId(id);
+  }, []);
+
+  // Primary must always be a member of the selection set.
+  useEffect(() => {
+    if (!selectedPatternIds.has(patternId)) {
+      setSelectedPatternIds(prev => {
+        const next = new Set(prev);
+        next.add(patternId);
+        return next;
+      });
+    }
+  }, [patternId, selectedPatternIds]);
 
   // When the pattern changes, default to selecting all scaffolds and clear stale results.
   useEffect(() => {
@@ -176,9 +203,6 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     setContinuationResults([]);
     setContinuationProgress(null);
     setContinuationError(null);
-    setGeometryResults([]);
-    setGeometryProgress(null);
-    setGeometryError(null);
     setSweepRuns([]);
     setSweepProgress(null);
     setSweepError(null);
@@ -350,234 +374,97 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     setContinuationResults([]);
     setContinuationProgress(null);
     setContinuationError(null);
-    setGeometryResults([]);
-    setGeometryProgress(null);
-    setGeometryError(null);
   }, []);
 
-  // ---- Phase B: geometry (expand → embed → cosine → Spearman) -------------
-  const canDoGeometry = !!pattern.xExtractor;
-
-  const handleRunGeometry = useCallback(async () => {
-    if (isGeometryLoading) return;
-    if (!pattern.xExtractor) {
-      setGeometryError("This pattern has no extractable X; the geometry view is only defined for antithesis patterns.");
-      return;
-    }
-    if (continuationResults.length === 0) {
-      setGeometryError("Run continuation first so we have top-K tokens to expand.");
-      return;
-    }
-
-    // Build the set of scaffolds that (a) have results, (b) yield an X.
-    const baseResults = continuationResults.filter(r => !r.error && r.distribution.length > 0);
-    const usable = baseResults
-      .map(r => ({ result: r, x: extractX(r.scaffold, pattern) }))
-      .filter((x): x is { result: typeof baseResults[number]; x: string } => !!x.x);
-    if (usable.length === 0) {
-      setGeometryError("No scaffolds in the current results yielded an extractable X. Check that the scaffold contains both halves of the construction (e.g. '…not just X, but ').");
-      return;
-    }
-
-    // Embedding slot: reuse whichever of slotA / slotB we can for this panel.
-    const embeddingSlotFor = (panel: "A" | "B") => {
-      const s = panel === "A" ? slots.A : slots.B;
-      return EMBEDDING_PROVIDERS.has(s.provider) ? s : null;
-    };
-
-    setIsGeometryLoading(true);
-    setGeometryError(null);
-    setGeometryResults([]);
-
-    // Cap K per scaffold for scatter readability and embedding cost.
-    const capped = usable.map(u => ({
-      ...u,
-      top: u.result.distribution.slice(0, GEOMETRY_CANDIDATES_PER_SCAFFOLD),
-    }));
-    const totalExpansions = capped.reduce((s, u) => s + u.top.length, 0);
-
-    // Per-scaffold processing so we can stream progress and intermediate
-    // scaffold results into the scatter as they resolve.
-    let expansionsDone = 0;
-    setGeometryProgress({ stage: "Expanding Y tokens into phrases", done: 0, total: totalExpansions });
-
-    for (const u of capped) {
-      const panel = u.result.panel;
-      const embedSlot = embeddingSlotFor(panel);
-      if (!embedSlot) {
-        setGeometryResults(prev => [...prev, {
-          panel,
-          scaffoldId: u.result.scaffoldId,
-          scaffold: u.result.scaffold,
-          x: u.x,
-          ys: [],
-          spearman: null,
-          embeddingModel: "",
-          embeddingProvider: "",
-          error: `Panel ${panel}'s provider does not support embeddings. Use an OpenAI, OpenAI-compatible, or Google slot.`,
-        }]);
-        expansionsDone += u.top.length;
-        setGeometryProgress(p => p ? { ...p, done: expansionsDone } : p);
-        continue;
-      }
-
-      // The chat slot (for expansion) — same slot as produced the logprobs.
-      const chatSlot = panel === "A" ? slots.A : slots.B;
-
-      try {
-        // 1. Expand tokens → phrases.
-        const pairs = u.top.map(t => ({
-          scaffoldId: u.result.scaffoldId,
-          scaffold: u.result.scaffold,
-          token: t.token,
-        }));
-        const phraseByToken = new Map<string, string>();
-        await fetchStreaming<StreamEvent>(
-          "/api/investigate/grammar-expand",
-          { pairs, maxTokens: EXPANSION_MAX_TOKENS, slot: chatSlot },
-          (ev) => {
-            if (ev.type === "expansion" && ev.phrase) {
-              phraseByToken.set(ev.token, ev.phrase);
-              expansionsDone++;
-              setGeometryProgress(p => p ? { ...p, done: expansionsDone } : p);
-            } else if (ev.type === "expansion") {
-              expansionsDone++;
-              setGeometryProgress(p => p ? { ...p, done: expansionsDone } : p);
-            }
-          }
-        );
-
-        const phrasePoints = u.top
-          .map(t => ({
-            token: t.token,
-            logprob: t.logprob,
-            phrase: phraseByToken.get(t.token) || t.token.trim() || t.token,
-          }))
-          .filter(p => p.phrase && p.phrase.length > 0);
-
-        if (phrasePoints.length < 2) {
-          setGeometryResults(prev => [...prev, {
-            panel,
-            scaffoldId: u.result.scaffoldId,
-            scaffold: u.result.scaffold,
-            x: u.x,
-            ys: [],
-            spearman: null,
-            embeddingModel: "",
-            embeddingProvider: "",
-            error: "Too few Y-phrases returned to compute geometry.",
-          }]);
-          continue;
-        }
-
-        // 2. Embed X and all Y-phrases in one call.
-        const texts = [u.x, ...phrasePoints.map(p => p.phrase)];
-        const res = await fetch("/api/embeddings", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ texts, slot: embedSlot }),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: "Embeddings failed" }));
-          throw new Error(err.error || `Embeddings HTTP ${res.status}`);
-        }
-        const data = await res.json();
-        const embeddings: number[][] = data.embeddings;
-        const xVec = embeddings[0];
-        const yVecs = embeddings.slice(1);
-
-        // 3. Cosine per Y, then Spearman(logprob rank, cosine).
-        const ys: GeometryYPoint[] = phrasePoints.map((p, i) => ({
-          token: p.token,
-          phrase: p.phrase,
-          logprob: p.logprob,
-          probability: Math.exp(p.logprob),
-          cosineToX: cosine(xVec, yVecs[i]),
-          rank: i + 1, // u.top is already sorted by probability descending
-        }));
-        const rho = spearman(ys.map(y => y.logprob), ys.map(y => y.cosineToX));
-
-        setGeometryResults(prev => [...prev, {
-          panel,
-          scaffoldId: u.result.scaffoldId,
-          scaffold: u.result.scaffold,
-          x: u.x,
-          ys,
-          spearman: rho,
-          embeddingModel: data.model || "unknown",
-          embeddingProvider: data.provider || embedSlot.provider,
-        }]);
-      } catch (err) {
-        setGeometryResults(prev => [...prev, {
-          panel,
-          scaffoldId: u.result.scaffoldId,
-          scaffold: u.result.scaffold,
-          x: u.x,
-          ys: [],
-          spearman: null,
-          embeddingModel: "",
-          embeddingProvider: "",
-          error: err instanceof Error ? err.message : "Geometry run failed",
-        }]);
-      }
-    }
-
-    setIsGeometryLoading(false);
-    setGeometryProgress(null);
-  }, [isGeometryLoading, pattern, continuationResults, slots]);
-
   // ---- Bundle export ------------------------------------------------------
+  // "Grammar data bundle": exports whatever Grammar Probe data the researcher
+  // has generated so far — Phase A prevalence runs, Phase B top-K continuations,
+  // and Phase E temperature sweeps — into a single analysable JSON document.
+  // Previously this required embeddings and exported geometry scatter points;
+  // since LLMbench's slot providers don't reliably expose embedding endpoints,
+  // we now export the raw logprob + prose data and let downstream tools
+  // (Manifold Atlas, notebooks) compute geometry against their own embedders.
   const handleDownloadBundle = useCallback(() => {
-    if (geometryResults.length === 0) return;
+    const hasAny = runs.length > 0 || continuationResults.length > 0 || sweepRuns.length > 0;
+    if (!hasAny) return;
     const now = new Date();
     const pad = (n: number) => n.toString().padStart(2, "0");
     const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
 
-    // Pick the chat slot (take the first represented panel).
-    const firstPanel = geometryResults[0].panel;
-    const chatSlot = firstPanel === "A" ? slots.A : slots.B;
-    const modelName = chatSlot.customModelId || chatSlot.model;
+    const slotA = slots.A;
+    const slotB = slots.B;
+    const modelName = slotA.customModelId || slotA.model;
 
     const bundle = {
       format: "vector-lab.grammar-probe.v1",
       createdAt: now.toISOString(),
-      source: { tool: "LLMbench", version: "2.12.0", phase: "B" },
+      source: { tool: "LLMbench", version: "2.14.0", phases: ["A", "B", "E"].filter(p => {
+        if (p === "A") return runs.length > 0;
+        if (p === "B") return continuationResults.length > 0;
+        return sweepRuns.length > 0;
+      }) },
       pattern: {
         id: pattern.id,
         label: pattern.label,
         category: pattern.category,
         note: pattern.note,
       },
-      model: {
-        provider: chatSlot.provider,
-        name: modelName,
-        displayName: pattern.label, // consumer can relabel; name is the key
-      },
-      embeddingModel: {
-        provider: geometryResults[0].embeddingProvider,
-        name: geometryResults[0].embeddingModel,
+      selectedPatterns: selectedPatterns.map(p => ({
+        id: p.id, label: p.label, category: p.category,
+      })),
+      models: {
+        A: { provider: slotA.provider, name: slotA.customModelId || slotA.model },
+        B: { provider: slotB.provider, name: slotB.customModelId || slotB.model },
       },
       parameters: {
-        temperature: 0,
-        topK: CONTINUATION_TOP_K,
-        geometryK: GEOMETRY_CANDIDATES_PER_SCAFFOLD,
-        expansionMaxTokens: EXPANSION_MAX_TOKENS,
+        prevalenceTemperatures: PREVALENCE_TEMPS,
+        sweepTemperatures: SWEEP_TEMPS,
+        continuationTopK: CONTINUATION_TOP_K,
       },
-      probes: geometryResults.map(r => ({
-        scaffoldId: r.scaffoldId,
+      // Phase A: generated prose + per-pattern hit counts for every
+      // selected construction (so downstream tools can re-score without
+      // re-running the model).
+      prevalenceRuns: runs.map(r => ({
+        runIndex: r.runIndex,
         panel: r.panel,
-        scaffold: r.scaffold,
-        x: r.x,
-        chosen: r.ys[0] ? { token: r.ys[0].token, logprob: r.ys[0].logprob } : null,
-        ys: r.ys.map(y => ({
-          token: y.token,
-          yPhrase: y.phrase,
-          logprob: y.logprob,
-          rank: y.rank,
-          cosineToX: y.cosineToX,
-        })),
-        spearman: r.spearman,
+        promptId: r.promptId,
+        register: r.register,
+        prompt: r.prompt,
+        temperature: r.temperature,
+        text: r.text,
         error: r.error,
+        provenance: r.provenance,
+        perPatternHits: Object.fromEntries(selectedPatterns.map(p => [
+          p.id, r.text ? countMatches(r.text, p) : 0,
+        ])),
+      })),
+      // Phase B: top-K next-token distributions per scaffold per panel.
+      // This is the raw material downstream tools (e.g. Manifold Atlas)
+      // can embed against their own embedder to reconstruct geometry.
+      continuationProbes: continuationResults.map(c => ({
+        scaffoldId: c.scaffoldId,
+        panel: c.panel,
+        scaffold: c.scaffold,
+        chosen: c.chosen,
+        distribution: c.distribution,
+        provenance: c.provenance,
+        error: c.error,
+      })),
+      // Phase E: temperature sweep runs (same shape as Phase A but across
+      // {0, 0.3, 0.7, 1.0, 1.5}).
+      sweepRuns: sweepRuns.map(r => ({
+        runIndex: r.runIndex,
+        panel: r.panel,
+        promptId: r.promptId,
+        register: r.register,
+        prompt: r.prompt,
+        temperature: r.temperature,
+        text: r.text,
+        error: r.error,
+        provenance: r.provenance,
+        perPatternHits: Object.fromEntries(selectedPatterns.map(p => [
+          p.id, r.text ? countMatches(r.text, p) : 0,
+        ])),
       })),
     };
 
@@ -591,7 +478,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [geometryResults, pattern, slots]);
+  }, [runs, continuationResults, sweepRuns, pattern, selectedPatterns, slots]);
 
   // ---- Phase E: Temperature sweep -----------------------------------------
   const handleRunSweep = useCallback(async () => {
@@ -851,31 +738,13 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
 
           {activePhase === "continuation" && (
             <>
-              {/* Pattern selector (shared) */}
-              <div className="mb-3">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-1.5">
-                  Pattern
-                </div>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {DEFAULT_PATTERNS.map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => setPatternId(p.id)}
-                      className={`px-2.5 py-1 text-caption rounded-sm border transition-colors ${
-                        patternId === p.id
-                          ? "border-burgundy bg-burgundy/10 text-burgundy"
-                          : "border-parchment bg-card text-muted-foreground hover:text-foreground hover:bg-cream/50"
-                      }`}
-                      title={p.description}
-                    >
-                      {p.shortLabel}
-                    </button>
-                  ))}
-                </div>
-                <div className="text-caption text-muted-foreground leading-relaxed">
-                  <strong className="text-foreground">{pattern.label}.</strong> {pattern.description}
-                </div>
-              </div>
+              <PatternPicker
+                selectedIds={selectedPatternIds}
+                primaryId={patternId}
+                onToggle={togglePatternSelected}
+                onPromote={promotePatternToPrimary}
+                allowSingleSelectOnly
+              />
 
               {/* Capability note */}
               <div className="mb-3 text-caption text-muted-foreground border-l-2 border-parchment/60 pl-2">
@@ -986,91 +855,43 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
                 </div>
               )}
 
-              {/* ---- Phase B Geometry upgrade --------------------------- */}
+              {/* ---- Scaffold concentration + bundle export --------------- */}
               {continuationResults.length > 0 && (
                 <div className="mt-5 pt-4 border-t border-parchment/60">
                   <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                     <div className="flex items-center gap-2">
-                      <ScatterChart className="w-3.5 h-3.5 text-burgundy" />
-                      <span className="text-caption font-semibold text-foreground">Geometry view</span>
-                      <span className="text-caption text-muted-foreground">— logprob × cosine(X, Y-phrase)</span>
+                      <Sigma className="w-3.5 h-3.5 text-burgundy" />
+                      <span className="text-caption font-semibold text-foreground">Scaffold concentration</span>
+                      <span className="text-caption text-muted-foreground">— top-1 probability, entropy, cliché share</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={handleRunGeometry}
-                        disabled={
-                          !canDoGeometry ||
-                          isGeometryLoading ||
-                          continuationResults.length === 0
-                        }
-                        className="px-3 py-1 text-caption font-medium rounded-sm bg-burgundy text-white hover:bg-burgundy/90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5"
-                      >
-                        <ScatterChart className="w-3.5 h-3.5" />
-                        {isGeometryLoading ? "Computing…" : "Compute geometry"}
-                      </button>
-                      <button
-                        onClick={handleDownloadBundle}
-                        disabled={geometryResults.length === 0}
-                        className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5 disabled:opacity-30"
-                        title="Download grammar-probe bundle (.grammar.json) for import into Manifold Atlas"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        Download bundle
-                      </button>
-                    </div>
+                    <button
+                      onClick={handleDownloadBundle}
+                      disabled={
+                        runs.length === 0 &&
+                        continuationResults.length === 0 &&
+                        sweepRuns.length === 0
+                      }
+                      className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5 disabled:opacity-30"
+                      title="Export all Grammar Probe data (Phase A runs, Phase B distributions, Phase E sweep) as .grammar.json"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Export Grammar data bundle
+                    </button>
                   </div>
 
-                  {!canDoGeometry && (
-                    <div className="text-caption text-muted-foreground border-l-2 border-parchment/60 pl-2 mb-2">
-                      This pattern has no extractable X — the geometry view is only defined
-                      for antithesis patterns like <em>Not X but Y</em>.
-                    </div>
-                  )}
+                  <div className="text-caption text-muted-foreground border-l-2 border-parchment/60 pl-2 mb-2">
+                    For each scaffold, how concentrated is the next-token distribution on the
+                    antithesis slot filler? <strong>Top-1 p</strong> is the probability mass on the single
+                    most-likely token; <strong>H</strong> is Shannon entropy (bits) over the returned top-{CONTINUATION_TOP_K};
+                    <strong> cliché share</strong> is the summed probability of the pattern&apos;s expected slot tokens ({pattern.suppressTokens.slice(0,4).map(t => `"${t}"`).join(", ")}…).
+                    High top-1 + low entropy + high cliché share = the model is parked in the construction&apos;s groove.
+                  </div>
 
-                  {canDoGeometry && geometryResults.length === 0 && !isGeometryLoading && (
-                    <div className="text-caption text-muted-foreground border-l-2 border-parchment/60 pl-2 mb-2">
-                      Expand each top-{GEOMETRY_CANDIDATES_PER_SCAFFOLD} token into a short Y-phrase,
-                      embed it alongside X, and plot logprob against cosine(X, Y-phrase). A flat or
-                      negative Spearman ρ means probability is <em>not</em> tracking semantic distance
-                      from X — evidence the construction has collapsed toward a stable direction.
-                      Requires an OpenAI, OpenAI-compatible, or Google slot for embeddings.
-                    </div>
-                  )}
-
-                  {isGeometryLoading && geometryProgress && (
-                    <div className="mb-3">
-                      <div className="flex items-center justify-between text-caption text-muted-foreground mb-1">
-                        <span>{geometryProgress.stage}… {geometryProgress.done} / {geometryProgress.total}</span>
-                        <span>{geometryProgress.total > 0 ? Math.round(100 * geometryProgress.done / geometryProgress.total) : 0}%</span>
-                      </div>
-                      <div className="h-1.5 bg-parchment/40 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-burgundy transition-all"
-                          style={{ width: `${geometryProgress.total > 0 ? Math.round(100 * geometryProgress.done / geometryProgress.total) : 0}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {geometryError && (
-                    <div className="mb-3 border border-red-400 bg-red-50 dark:bg-red-900/30 rounded-sm p-2 text-caption flex items-start gap-2 text-red-800 dark:text-red-200">
-                      <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                      <span>{geometryError}</span>
-                    </div>
-                  )}
-
-                  {geometryResults.length > 0 && (
-                    <div className="space-y-3">
-                      {geometryResults.map((g, idx) => (
-                        <GeometryScatterCard
-                          key={`${g.scaffoldId}-${g.panel}-${idx}`}
-                          result={g}
-                          panelLabel={getSlotLabel(g.panel)}
-                          suppressTokens={pattern.suppressTokens}
-                        />
-                      ))}
-                    </div>
-                  )}
+                  <ScaffoldConcentrationTable
+                    results={continuationResults}
+                    suppressTokens={pattern.suppressTokens}
+                    getSlotLabel={getSlotLabel}
+                  />
                 </div>
               )}
             </>
@@ -1081,6 +902,10 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
               pattern={pattern}
               patternId={patternId}
               setPatternId={setPatternId}
+              selectedPatternIds={selectedPatternIds}
+              selectedPatterns={selectedPatterns}
+              togglePatternSelected={togglePatternSelected}
+              promotePatternToPrimary={promotePatternToPrimary}
               suitePrompts={suite}
               selectedPrompts={selectedPrompts}
               selectedPromptIds={selectedPromptIds}
@@ -1102,31 +927,12 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
 
           {activePhase === "prevalence" && (
             <>
-              {/* Pattern selector */}
-              <div className="mb-3">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-1.5">
-                  Pattern
-                </div>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {DEFAULT_PATTERNS.map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => setPatternId(p.id)}
-                      className={`px-2.5 py-1 text-caption rounded-sm border transition-colors ${
-                        patternId === p.id
-                          ? "border-burgundy bg-burgundy/10 text-burgundy"
-                          : "border-parchment bg-card text-muted-foreground hover:text-foreground hover:bg-cream/50"
-                      }`}
-                      title={p.description}
-                    >
-                      {p.shortLabel}
-                    </button>
-                  ))}
-                </div>
-                <div className="text-caption text-muted-foreground leading-relaxed">
-                  <strong className="text-foreground">{pattern.label}.</strong> {pattern.description}
-                </div>
-              </div>
+              <PatternPicker
+                selectedIds={selectedPatternIds}
+                primaryId={patternId}
+                onToggle={togglePatternSelected}
+                onPromote={promotePatternToPrimary}
+              />
 
               {/* Suite picker */}
               <div className="mb-3">
@@ -1547,190 +1353,198 @@ function ContinuationCard({
   );
 }
 
-// ---- GeometryScatterCard --------------------------------------------------
-// One card per scaffold: the Y-phrases laid out as logprob × cosine(X, Y-phrase).
-// The headline number is the Spearman rank correlation between the two series.
-function GeometryScatterCard({
-  result,
-  panelLabel,
-  suppressTokens,
+// ---- PatternPicker (shared, multi-select) ---------------------------------
+// One chip per DEFAULT_PATTERNS entry. Click toggles selection. Clicking the
+// small "primary" badge (or alt/opt-clicking the chip) promotes a pattern to
+// primary — the one Phase B / Phase C single-pattern views operate on. The
+// primary is always guaranteed to be in the selection set.
+function PatternPicker({
+  selectedIds,
+  primaryId,
+  onToggle,
+  onPromote,
+  allowSingleSelectOnly = false,
 }: {
-  result: GeometryScaffoldResult;
-  panelLabel: string;
-  suppressTokens: string[];
+  selectedIds: Set<string>;
+  primaryId: string;
+  onToggle: (id: string) => void;
+  onPromote: (id: string) => void;
+  allowSingleSelectOnly?: boolean;
 }) {
-  const suppressSet = new Set(suppressTokens.map(t => t.toLowerCase().trim()));
-  const { ys } = result;
-
-  if (result.error || ys.length === 0) {
-    return (
-      <div className="border border-parchment/60 rounded-sm bg-card overflow-hidden">
-        <div className="px-3 py-2 border-b border-parchment/60 text-caption flex items-center gap-2">
-          <ScatterChart className="w-3.5 h-3.5 text-burgundy shrink-0" />
-          <span className="font-mono text-[11px] text-foreground truncate">{result.scaffold}<span className="text-muted-foreground/50">▋</span></span>
-          <span className="ml-auto text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
-            {result.panel} · {panelLabel}
+  const primary = DEFAULT_PATTERNS.find(p => p.id === primaryId) || DEFAULT_PATTERNS[0];
+  return (
+    <div className="mb-3">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-1.5 flex items-center gap-2">
+        <span>Patterns {allowSingleSelectOnly ? "(pick one)" : `(${selectedIds.size} selected)`}</span>
+        {!allowSingleSelectOnly && (
+          <span className="text-muted-foreground/60 normal-case tracking-normal">
+            &middot; click a chip to toggle; <span className="text-burgundy">★</span> = primary (used by Phase B)
           </span>
-        </div>
-        <div className="p-3 text-caption text-red-700 dark:text-red-300 flex items-start gap-2">
-          <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-          <span>{result.error || "No Y-phrases available."}</span>
-        </div>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {DEFAULT_PATTERNS.map(p => {
+          const isSelected = selectedIds.has(p.id);
+          const isPrimary = p.id === primaryId;
+          return (
+            <div key={p.id} className="inline-flex items-stretch">
+              <button
+                onClick={(e) => {
+                  if (allowSingleSelectOnly) {
+                    onPromote(p.id);
+                  } else if (e.altKey || e.metaKey) {
+                    onPromote(p.id);
+                  } else {
+                    onToggle(p.id);
+                  }
+                }}
+                onContextMenu={(e) => { e.preventDefault(); onPromote(p.id); }}
+                className={`px-2.5 py-1 text-caption rounded-l-sm ${allowSingleSelectOnly ? "rounded-r-sm" : ""} border transition-colors ${
+                  isPrimary
+                    ? "border-burgundy bg-burgundy text-white"
+                    : isSelected
+                    ? "border-burgundy bg-burgundy/15 text-burgundy"
+                    : "border-parchment bg-card text-muted-foreground hover:text-foreground hover:bg-cream/50"
+                }`}
+                title={`${p.description}\n\nClick: toggle. Alt/right-click: promote to primary.`}
+              >
+                {isPrimary && <span className="mr-1">★</span>}
+                {p.shortLabel}
+              </button>
+              {!allowSingleSelectOnly && !isPrimary && isSelected && (
+                <button
+                  onClick={() => onPromote(p.id)}
+                  className="px-1.5 py-1 text-caption rounded-r-sm border border-l-0 border-burgundy bg-burgundy/5 text-burgundy hover:bg-burgundy/15"
+                  title="Promote to primary"
+                  aria-label="Promote to primary"
+                >
+                  ★
+                </button>
+              )}
+              {!allowSingleSelectOnly && !isSelected && (
+                <button
+                  onClick={() => onPromote(p.id)}
+                  className="px-1.5 py-1 text-caption rounded-r-sm border border-l-0 border-parchment bg-card text-muted-foreground/60 hover:text-burgundy hover:bg-cream/50"
+                  title="Add as primary"
+                  aria-label="Add as primary"
+                >
+                  ★
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="text-caption text-muted-foreground leading-relaxed">
+        <strong className="text-foreground">{primary.label}.</strong> {primary.description}
+      </div>
+    </div>
+  );
+}
+
+// ---- ScaffoldConcentrationTable -------------------------------------------
+// Replaces the Geometry view (which required embedding models not reliably
+// available through LLMbench's slot providers). Reuses the existing top-K
+// logprob distributions already fetched by the Continuation probe and reports
+// three concentration metrics per scaffold per panel:
+//   top-1 p         — probability mass on the single most-likely token
+//   H (bits)        — Shannon entropy over the returned top-K
+//   cliché share    — summed probability of pattern.suppressTokens
+// All three are embedding-free signals of "how parked is the model in this
+// construction's groove".
+function ScaffoldConcentrationTable({
+  results,
+  suppressTokens,
+  getSlotLabel,
+}: {
+  results: ContinuationResult[];
+  suppressTokens: string[];
+  getSlotLabel: (panel: "A" | "B") => string;
+}) {
+  const clicheSet = new Set(suppressTokens.map(t => t.toLowerCase().trim()));
+
+  const rows = results.map(r => {
+    const dist = r.distribution ?? [];
+    const probs = dist.map(d => Math.exp(d.logprob));
+    const probSum = probs.reduce((s, p) => s + p, 0) || 1;
+    const normed = probs.map(p => p / probSum);
+    const top1 = normed.length > 0 ? Math.max(...normed) : 0;
+    const entropy = normed.reduce((h, p) => h + (p > 0 ? -p * Math.log2(p) : 0), 0);
+    const clicheShare = dist.reduce((s, d, i) => {
+      return clicheSet.has(d.token.toLowerCase().trim()) ? s + normed[i] : s;
+    }, 0);
+    return {
+      key: `${r.scaffoldId}-${r.panel}`,
+      scaffold: r.scaffold,
+      panel: r.panel,
+      panelLabel: getSlotLabel(r.panel),
+      chosen: r.chosen?.token ?? "—",
+      top1,
+      entropy,
+      clicheShare,
+      error: r.error,
+    };
+  });
+
+  if (rows.length === 0) {
+    return (
+      <div className="text-caption text-muted-foreground italic border-l-2 border-parchment/60 pl-2">
+        Run continuation on at least one scaffold to populate the concentration table.
       </div>
     );
   }
 
-  // Plot dimensions
-  const W = 560, H = 220;
-  const PAD = { l: 44, r: 16, t: 14, b: 34 };
-  const plotW = W - PAD.l - PAD.r;
-  const plotH = H - PAD.t - PAD.b;
+  const fmtPct = (v: number) => `${(v * 100).toFixed(1)}%`;
+  const fmtH = (v: number) => v.toFixed(2);
 
-  const xs = ys.map(y => y.logprob);
-  const cs = ys.map(y => y.cosineToX);
-  const xMin = Math.min(...xs);
-  const xMax = Math.max(...xs);
-  const cMin = Math.min(...cs);
-  const cMax = Math.max(...cs);
-  const xPad = (xMax - xMin) * 0.08 || 0.1;
-  const cPad = (cMax - cMin) * 0.08 || 0.02;
-  const xLo = xMin - xPad, xHi = xMax + xPad;
-  const cLo = Math.max(-1, cMin - cPad), cHi = Math.min(1, cMax + cPad);
-
-  const xScale = (v: number) => PAD.l + ((v - xLo) / (xHi - xLo)) * plotW;
-  const yScale = (v: number) => PAD.t + (1 - (v - cLo) / (cHi - cLo)) * plotH;
-
-  const rho = result.spearman;
-  const rhoLabel = rho === null ? "n/a" : rho.toFixed(3);
-  const rhoColour =
-    rho === null ? "text-muted-foreground" :
-    rho > 0.3 ? "text-emerald-700 dark:text-emerald-400" :
-    rho < -0.3 ? "text-burgundy" :
-    "text-amber-700 dark:text-amber-400";
-
-  const xTicks = 4;
-  const yTicks = 4;
+  // Colour scale for top-1 / cliché share (cream → burgundy).
+  const heatTop1 = (v: number) =>
+    v > 0.6 ? "bg-burgundy/30 text-burgundy dark:text-amber-100"
+    : v > 0.35 ? "bg-amber-200 dark:bg-amber-800/50 text-amber-900 dark:text-amber-100"
+    : v > 0.15 ? "bg-amber-100 dark:bg-amber-900/30 text-amber-900 dark:text-amber-200"
+    : "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-300";
 
   return (
-    <div className="border border-parchment/60 rounded-sm bg-card overflow-hidden">
-      <div className="px-3 py-2 border-b border-parchment/60 text-caption flex items-center gap-2 flex-wrap">
-        <ScatterChart className="w-3.5 h-3.5 text-burgundy shrink-0" />
-        <span className="font-mono text-[11px] text-foreground truncate flex-1 min-w-[12rem]">
-          {result.scaffold}<span className="text-muted-foreground/50">▋</span>
-        </span>
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
-          {result.panel} · {panelLabel}
-        </span>
-      </div>
-      <div className="px-3 py-2 flex items-center gap-3 flex-wrap text-caption">
-        <span className="text-muted-foreground">X =</span>
-        <span className="font-mono text-foreground">&ldquo;{result.x}&rdquo;</span>
-        <span className="ml-auto flex items-center gap-1.5">
-          <span className="text-muted-foreground">Spearman ρ</span>
-          <span className={`font-mono font-semibold ${rhoColour}`}>{rhoLabel}</span>
-        </span>
-      </div>
-      <div className="px-3 pb-3 overflow-x-auto">
-        <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto max-w-full" role="img" aria-label="Scatter plot of log-probability against cosine similarity of Y-phrase to X">
-          {/* gridlines + axes */}
-          <rect x={PAD.l} y={PAD.t} width={plotW} height={plotH} fill="none" stroke="currentColor" strokeOpacity={0.1} />
-          {Array.from({ length: yTicks + 1 }).map((_, i) => {
-            const v = cLo + (i / yTicks) * (cHi - cLo);
-            const y = yScale(v);
+    <div className="overflow-x-auto border border-parchment/60 rounded-sm bg-card">
+      <table className="w-full text-caption border-collapse">
+        <thead className="bg-cream/40 dark:bg-burgundy/10">
+          <tr className="text-left">
+            <th className="px-2 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground/70">Scaffold</th>
+            <th className="px-2 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground/70">Panel</th>
+            <th className="px-2 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground/70">Top-1 token</th>
+            <th className="px-2 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground/70 text-right">Top-1 p</th>
+            <th className="px-2 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground/70 text-right">H (bits)</th>
+            <th className="px-2 py-1.5 font-semibold text-[10px] uppercase tracking-wider text-muted-foreground/70 text-right">Cliché share</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(row => {
+            const isCliche = clicheSet.has(row.chosen.toLowerCase().trim());
             return (
-              <g key={`y${i}`}>
-                <line x1={PAD.l} x2={PAD.l + plotW} y1={y} y2={y} stroke="currentColor" strokeOpacity={0.06} />
-                <text x={PAD.l - 6} y={y + 3} fontSize={9} textAnchor="end" fill="currentColor" fillOpacity={0.55}>
-                  {v.toFixed(2)}
-                </text>
-              </g>
+              <tr key={row.key} className="border-t border-parchment/40">
+                <td className="px-2 py-1.5 font-mono text-[11px] text-foreground truncate max-w-[420px]" title={row.scaffold}>
+                  {row.scaffold}<span className="text-muted-foreground/50">▋</span>
+                </td>
+                <td className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
+                  {row.panel} · {row.panelLabel}
+                </td>
+                <td className={`px-2 py-1.5 font-mono text-[11px] ${isCliche ? "text-burgundy font-semibold" : "text-foreground"}`}>
+                  {row.error ? <span className="text-red-700 dark:text-red-300">err</span> : `"${row.chosen}"`}
+                </td>
+                <td className={`px-2 py-1.5 text-right font-mono text-[11px] ${heatTop1(row.top1)}`}>
+                  {row.error ? "—" : fmtPct(row.top1)}
+                </td>
+                <td className="px-2 py-1.5 text-right font-mono text-[11px] text-foreground">
+                  {row.error ? "—" : fmtH(row.entropy)}
+                </td>
+                <td className={`px-2 py-1.5 text-right font-mono text-[11px] ${heatTop1(row.clicheShare)}`}>
+                  {row.error ? "—" : fmtPct(row.clicheShare)}
+                </td>
+              </tr>
             );
           })}
-          {Array.from({ length: xTicks + 1 }).map((_, i) => {
-            const v = xLo + (i / xTicks) * (xHi - xLo);
-            const x = xScale(v);
-            return (
-              <g key={`x${i}`}>
-                <line x1={x} x2={x} y1={PAD.t} y2={PAD.t + plotH} stroke="currentColor" strokeOpacity={0.06} />
-                <text x={x} y={PAD.t + plotH + 12} fontSize={9} textAnchor="middle" fill="currentColor" fillOpacity={0.55}>
-                  {v.toFixed(2)}
-                </text>
-              </g>
-            );
-          })}
-          {/* axis titles */}
-          <text x={PAD.l + plotW / 2} y={H - 6} fontSize={10} textAnchor="middle" fill="currentColor" fillOpacity={0.7}>
-            log-probability
-          </text>
-          <text
-            x={-PAD.t - plotH / 2}
-            y={12}
-            fontSize={10}
-            textAnchor="middle"
-            fill="currentColor"
-            fillOpacity={0.7}
-            transform="rotate(-90)"
-          >
-            cosine(X, Y-phrase)
-          </text>
-
-          {/* points */}
-          {ys.map((y, i) => {
-            const isSuppress = suppressSet.has(y.token.toLowerCase().trim());
-            const cx = xScale(y.logprob);
-            const cy = yScale(y.cosineToX);
-            const r = 3 + Math.sqrt(y.probability) * 9;
-            const fill = isSuppress ? "#800020" : "#800020";
-            const opacity = 0.35 + 0.6 * y.probability;
-            return (
-              <g key={i}>
-                <circle cx={cx} cy={cy} r={r} fill={fill} fillOpacity={opacity} stroke={isSuppress ? "#800020" : "#fff"} strokeOpacity={isSuppress ? 1 : 0.4} strokeWidth={isSuppress ? 1.5 : 0.75}>
-                  <title>{`"${y.token}" → "${y.phrase}"  p=${(y.probability * 100).toFixed(1)}%  cos=${y.cosineToX.toFixed(3)}  rank=${y.rank}`}</title>
-                </circle>
-                <text
-                  x={cx + r + 3}
-                  y={cy + 3}
-                  fontSize={9}
-                  fill="currentColor"
-                  fillOpacity={0.85}
-                  style={{ pointerEvents: "none" }}
-                >
-                  {y.phrase.length > 26 ? y.phrase.slice(0, 25) + "…" : y.phrase}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-
-      <DeepDive label="Y-phrases (rank · logprob · cosine)">
-        <div className="space-y-0.5 text-[11px]">
-          <div className="grid grid-cols-[2rem_6rem_1fr_4rem_4rem] gap-2 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold pb-1 border-b border-parchment/40">
-            <span>#</span>
-            <span>token</span>
-            <span>Y-phrase</span>
-            <span className="text-right">p</span>
-            <span className="text-right">cos(X,Y)</span>
-          </div>
-          {ys.map((y, i) => {
-            const isSuppress = suppressSet.has(y.token.toLowerCase().trim());
-            return (
-              <div key={i} className="grid grid-cols-[2rem_6rem_1fr_4rem_4rem] gap-2 py-0.5">
-                <span className="font-mono tabular-nums text-muted-foreground">{y.rank}</span>
-                <span className={`font-mono truncate ${isSuppress ? "text-burgundy font-semibold" : "text-foreground"}`}>
-                  &ldquo;{y.token.replace(/\n/g, "⏎")}&rdquo;
-                </span>
-                <span className="font-mono truncate text-foreground">{y.phrase}</span>
-                <span className="font-mono tabular-nums text-right text-muted-foreground">{(y.probability * 100).toFixed(1)}%</span>
-                <span className="font-mono tabular-nums text-right text-muted-foreground">{y.cosineToX.toFixed(3)}</span>
-              </div>
-            );
-          })}
-          <div className="pt-2 mt-2 border-t border-parchment/40 text-caption text-muted-foreground">
-            Embedding model: <span className="font-mono text-foreground">{result.embeddingProvider} / {result.embeddingModel}</span>
-          </div>
-        </div>
-      </DeepDive>
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -1747,6 +1561,10 @@ function TemperatureSweepPanel(props: {
   pattern: GrammarPattern;
   patternId: string;
   setPatternId: (id: string) => void;
+  selectedPatternIds: Set<string>;
+  selectedPatterns: GrammarPattern[];
+  togglePatternSelected: (id: string) => void;
+  promotePatternToPrimary: (id: string) => void;
   suitePrompts: GrammarSuitePrompt[];
   selectedPrompts: GrammarSuitePrompt[];
   selectedPromptIds: Set<string>;
@@ -1765,7 +1583,8 @@ function TemperatureSweepPanel(props: {
   onReset: () => void;
 }) {
   const {
-    pattern, patternId, setPatternId,
+    pattern, patternId,
+    selectedPatternIds, selectedPatterns, togglePatternSelected, promotePatternToPrimary,
     suitePrompts, selectedPrompts, selectedPromptIds, setSelectedPromptIds,
     panelSelection, slots, getSlotLabel,
     slotAConfigured, slotBConfigured,
@@ -1810,30 +1629,14 @@ function TemperatureSweepPanel(props: {
 
   return (
     <>
-      {/* Pattern selector */}
-      <div className="mb-3">
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-1.5">
-          Pattern
-        </div>
-        <div className="flex flex-wrap gap-1.5 mb-2">
-          {DEFAULT_PATTERNS.map(p => (
-            <button
-              key={p.id}
-              onClick={() => setPatternId(p.id)}
-              className={`px-2.5 py-1 text-caption rounded-sm border transition-colors ${
-                patternId === p.id
-                  ? "border-burgundy bg-burgundy/10 text-burgundy"
-                  : "border-parchment bg-card text-muted-foreground hover:text-foreground hover:bg-cream/50"
-              }`}
-              title={p.description}
-            >
-              {p.shortLabel}
-            </button>
-          ))}
-        </div>
-        <div className="text-caption text-muted-foreground leading-relaxed">
-          <strong className="text-foreground">{pattern.label}.</strong> {pattern.description}
-        </div>
+      <PatternPicker
+        selectedIds={selectedPatternIds}
+        primaryId={patternId}
+        onToggle={togglePatternSelected}
+        onPromote={promotePatternToPrimary}
+      />
+      <div className="mb-3 text-caption text-muted-foreground">
+        Counting <strong className="text-foreground">{selectedPatterns.length}</strong> construction{selectedPatterns.length !== 1 ? "s" : ""} per run: {selectedPatterns.map(p => p.shortLabel).join(", ")}.
       </div>
 
       {/* Capability note */}
