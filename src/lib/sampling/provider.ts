@@ -37,11 +37,18 @@ export const SAMPLING_PROVIDERS = new Set<AIProvider>([
 // acknowledgement, commentary, quoting, and echoing, leaving the model
 // nothing to do *except* emit the next token of the user's fragment.
 const SAMPLING_SYSTEM_PROMPT =
-  "You are a text completion engine, not a chat assistant. The user's message is a text fragment. " +
-  "Your response must be the immediate continuation of that fragment — one or more tokens of natural prose " +
-  "that could be concatenated directly after the user's text with no gap, preamble, acknowledgement, " +
-  "quotation marks, formatting, or commentary. Do not repeat the user's text. Do not address the user. " +
-  "If the fragment ends mid-word, complete the word; if it ends mid-sentence, continue the sentence.";
+  "You are a text completion engine, not a chat assistant. The user's message is a text fragment — " +
+  "the opening of a passage you must extend. Your response is the immediate continuation: one or more " +
+  "tokens of natural prose that could be concatenated directly after the user's text with no gap. " +
+  "\n\nABSOLUTE RULES:\n" +
+  "1. NEVER repeat, restart, echo, or paraphrase any portion of the user's fragment. If the user wrote " +
+  "\"Democracy is\", do not produce another \"Democracy is\" anywhere in your response.\n" +
+  "2. NEVER start a fresh sentence, paragraph, or utterance that re-opens the passage the user has " +
+  "already begun. Once a sentence ends, continue into the NEXT sentence of the same passage — as if " +
+  "writing the second sentence of an essay whose first sentence is the user's fragment.\n" +
+  "3. NEVER acknowledge, address, or quote the user. No \"here is\", no \"sure\", no \"the text reads\".\n" +
+  "4. NEVER output formatting: no Markdown, no code fences, no quotation marks wrapping your reply.\n" +
+  "\nIf the fragment ends mid-word, complete the word. If it ends mid-sentence, continue the sentence.";
 
 function provenance(slot: SamplingSlotPayload, responseTimeMs: number) {
   const model = slot.customModelId || slot.model;

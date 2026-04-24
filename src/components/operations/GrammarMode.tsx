@@ -453,7 +453,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       createdAt: now.toISOString(),
       source: {
         tool: "LLMbench",
-        version: "2.15.10",
+        version: "2.15.11",
         phase: dominantPhase,
         phases,
       },

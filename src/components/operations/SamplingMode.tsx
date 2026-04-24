@@ -222,6 +222,22 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
     stopRequested.current = false;
     setStatus("running");
     setErrorMsg(null);
+    // Detect the chat-as-completion pathology where the model, after emitting
+    // a sentence-terminating punctuation mark, "restarts" by echoing the
+    // user's prompt as the beginning of a new sentence ("Hello my name is
+    // Alexander" mid-generation when the prompt was "Hello my name is").
+    // We compare the normalised generated text against the normalised prompt
+    // prefix; if the generated contains the prompt's opening back-to-back,
+    // the model has self-restarted and we stop.
+    const norm = (s: string) => s.replace(/[\s.,!?;:"'\-`]/g, "").toLowerCase();
+    const hasSelfRestart = (promptText: string, generated: string): boolean => {
+      const np = norm(promptText);
+      if (np.length < 6) return false;
+      // Look for the first 12 chars of the prompt (or the whole prompt if
+      // shorter) appearing inside the *generated* portion.
+      const needle = np.slice(0, Math.min(12, np.length));
+      return norm(generated).includes(needle);
+    };
     try {
       let current = trace ?? emptyTrace(prompt, { A: slotA, B: dualPanel ? slotB : null }, params);
       if (!trace) setTrace(current);
@@ -240,7 +256,11 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
         const prefixA = branchPrefix(branch, current.prompt);
         const respA = await fetchStep(slotForA, prefixA, current.params.topK);
         const distA = resample(respA.distribution, current.params.temperature, current.params.topP);
-        const chosenA = distA[0]?.token ?? (respA.chosen?.token ?? "");
+        // Stochastic sampler (not argmax) — temperature and top-p actually
+        // shape the sequence. Panel B already used sampleFromDistribution;
+        // this line was still take-max from before v2.15.3 reached this path.
+        const sampledA = sampleFromDistribution(distA);
+        const chosenA = sampledA?.token ?? (respA.chosen?.token ?? "");
         if (!chosenA) break;
         const newStepA: SamplingStep = {
           id: freshId(), prefix: prefixA, rawDistribution: respA.distribution,
@@ -271,8 +291,17 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
           setTraceB(currentB);
         }
 
+        // Stop on self-restart: the model has begun echoing the prompt
+        // mid-generation (the chat-as-completion pathology). Surface the
+        // reason so the user knows why the run halted early.
+        const activeBranchNow = current.branches[current.activeBranchId];
+        const generatedNow = activeBranchNow.steps.map(s => s.chosenToken).join("");
+        if (hasSelfRestart(current.prompt, generatedNow)) {
+          setErrorMsg("Auto-stopped: the model began echoing the prompt mid-generation (chat-as-completion restart). Override a sentence-end token or lower temperature to explore further.");
+          break;
+        }
         // Stop on sentence-terminating punctuation.
-        if (/[.!?]\s*$/.test(branchPrefix(current.branches[current.activeBranchId], current.prompt))) break;
+        if (/[.!?]\s*$/.test(branchPrefix(activeBranchNow, current.prompt))) break;
       }
       setStatus("idle");
     } catch (err) {
