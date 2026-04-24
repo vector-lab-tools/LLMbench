@@ -29,6 +29,20 @@ export const SAMPLING_PROVIDERS = new Set<AIProvider>([
   "google", "openai", "openai-compatible", "openrouter", "huggingface",
 ]);
 
+// Chat-tuned models treat a bare user message as a conversational turn and
+// respond with something like "Democracy is a system of government…" — they
+// echo and paraphrase rather than continue. For Sampling Probe we need the
+// model to act as a text-completion engine, so the response's first token
+// flows naturally from the end of the prefix. This system prompt disables
+// acknowledgement, commentary, quoting, and echoing, leaving the model
+// nothing to do *except* emit the next token of the user's fragment.
+const SAMPLING_SYSTEM_PROMPT =
+  "You are a text completion engine, not a chat assistant. The user's message is a text fragment. " +
+  "Your response must be the immediate continuation of that fragment — one or more tokens of natural prose " +
+  "that could be concatenated directly after the user's text with no gap, preamble, acknowledgement, " +
+  "quotation marks, formatting, or commentary. Do not repeat the user's text. Do not address the user. " +
+  "If the fragment ends mid-word, complete the word; if it ends mid-sentence, continue the sentence.";
+
 function provenance(slot: SamplingSlotPayload, responseTimeMs: number) {
   const model = slot.customModelId || slot.model;
   return {
@@ -48,6 +62,7 @@ async function runGoogle(
   const genAI = new GoogleGenerativeAI(slot.apiKey);
   const genModel = genAI.getGenerativeModel({
     model,
+    systemInstruction: SAMPLING_SYSTEM_PROMPT,
     generationConfig: {
       temperature: 0,
       responseLogprobs: true,
@@ -84,6 +99,7 @@ async function runOpenAI(
   const result = await generateText({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     model: client.chat(model) as any,
+    system: SAMPLING_SYSTEM_PROMPT,
     messages: [{ role: "user", content: prefix }],
     temperature: 0,
     maxOutputTokens: 1,
@@ -120,7 +136,10 @@ async function runDirect(
     },
     body: JSON.stringify({
       model,
-      messages: [{ role: "user", content: prefix }],
+      messages: [
+        { role: "system", content: SAMPLING_SYSTEM_PROMPT },
+        { role: "user", content: prefix },
+      ],
       temperature: 0,
       max_tokens: 1,
       logprobs: true,

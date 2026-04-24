@@ -413,12 +413,24 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
           </label>
           <textarea
             value={prompt}
-            onChange={e => setPrompt(e.target.value)}
-            disabled={status === "running" || status === "stepping" || !!trace}
+            onChange={e => {
+              setPrompt(e.target.value);
+              // Editing the prompt after a run would mean the trace's steps
+              // no longer correspond to their recorded prefixes. Clear the
+              // trace so Run/Step start fresh against the new prompt. Cheap
+              // safety valve; the user explicitly changed intent.
+              if (trace) { setTrace(null); setTraceB(null); setSelectedStepIndex(null); }
+            }}
+            disabled={status === "running" || status === "stepping"}
             rows={2}
             className="w-full text-caption font-mono bg-background border border-parchment/60 rounded-sm p-2 disabled:opacity-60"
             placeholder="Start the prefix the model will continue from."
           />
+          {trace && (
+            <div className="text-[10px] text-muted-foreground/70 italic -mt-1">
+              Editing the prompt clears the current trace — Run / Step will start fresh.
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button" onClick={runToEnd} disabled={!canRun}
