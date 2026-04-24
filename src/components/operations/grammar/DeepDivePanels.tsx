@@ -60,7 +60,7 @@ interface Props {
 
 // ----------------------------- helpers -------------------------------------
 
-function heatHitRate(rate: number): string {
+export function heatHitRate(rate: number): string {
   if (!Number.isFinite(rate)) return "bg-muted/20 text-muted-foreground/40";
   if (rate >= 0.6) return "bg-burgundy/30 text-burgundy dark:text-amber-100";
   if (rate >= 0.35) return "bg-amber-200 dark:bg-amber-800/50 text-amber-900 dark:text-amber-100";
@@ -69,7 +69,7 @@ function heatHitRate(rate: number): string {
   return "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-300";
 }
 
-function Section({ title, children, defaultOpen = false, actions }: {
+export function Section({ title, children, defaultOpen = false, actions }: {
   title: string;
   children: React.ReactNode;
   defaultOpen?: boolean;
@@ -94,7 +94,7 @@ function Section({ title, children, defaultOpen = false, actions }: {
   );
 }
 
-function CsvButton({ onClick }: { onClick: () => void }) {
+export function CsvButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       type="button"
@@ -107,7 +107,7 @@ function CsvButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function Bar({ value, max, label, colour = "burgundy" }: {
+export function Bar({ value, max, label, colour = "burgundy" }: {
   value: number; max: number; label?: string; colour?: "burgundy" | "amber";
 }) {
   const w = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;

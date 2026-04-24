@@ -530,9 +530,9 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
               </button>
               <button
                 type="button"
-                onClick={() => { void downloadTracePdf(trace, VERSION); }}
+                onClick={() => { void downloadTracePdf(trace, VERSION, dualPanel ? traceB : null); }}
                 className="btn-editorial-ghost flex items-center gap-1 text-caption"
-                title="Export a formatted PDF report with generated text, per-step metrics, and override log"
+                title="Export a formatted PDF report: metadata, prompt, per-panel generated text, per-step metrics, rank histogram, override log, plus A/B divergence table when dual-panel"
               >
                 <FileText className="w-3 h-3" /> PDF
               </button>
@@ -972,17 +972,33 @@ function TranscriptBlock({ label, prompt, branch }: {
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-0.5">
         Current branch
       </div>
-      {/* Match the strip's render: inline-block spans with the same px-0.5
-          padding as the generation strip's <button> tokens, so the visual
-          gaps between tokens are identical. Previously the transcript used
-          plain <span> which collapses adjacent tokens with no gap, and the
-          user saw "Democracy isasysteminwhich…" while the strip up top
-          appeared correctly spaced. */}
+      {/* OpenRouter strips leading BPE whitespace from many tokens (both
+          the chosen one via logprobs.content[0] AND message.content for
+          certain routes), so raw concatenation reads as "Democracy
+          isasystemthatensures…". The strip up top hides this because each
+          token has its own surprisal-coloured background tile producing
+          visible breaks; the transcript has no per-token backgrounds so
+          the tokens visually collide.
+          Pragmatic fix: render tokens separated by a thin visible space
+          so the prose is readable. Over-spaces BPE sub-word
+          continuations (e.g. "polit|ical" → "polit ical") but that's
+          already visible in the strip too. The raw token stream remains
+          faithful in the JSON bundle. */}
       <div className="font-mono text-[11px] bg-background/60 p-2 rounded-sm whitespace-pre-wrap break-words">
         <span className="text-muted-foreground">{prompt}</span>
-        {branch.steps.map(s => (
-          <span key={s.id} className="inline-block px-0.5">{s.chosenToken}</span>
+        {branch.steps.map((s, i) => (
+          <Fragment key={s.id}>
+            {/* Don't double-space if the token already carries leading
+                whitespace or if the previous emitted piece ends with one. */}
+            {i === 0
+              ? (/\s$/.test(prompt) || /^\s/.test(s.chosenToken) ? "" : " ")
+              : (/^\s/.test(s.chosenToken) ? "" : " ")}
+            <span>{s.chosenToken}</span>
+          </Fragment>
         ))}
+      </div>
+      <div className="text-[10px] text-muted-foreground/70 italic mt-0.5">
+        Display note: a thin space is inserted between tokens where the provider returned no leading whitespace, so the prose is legible. BPE sub-word continuations (e.g. <code className="font-mono">polit|ical</code>) therefore appear as separate words. The raw token stream is preserved verbatim in the JSON bundle.
       </div>
 
       {overrides.length > 0 && (
@@ -1007,13 +1023,22 @@ function TranscriptBlock({ label, prompt, branch }: {
                 <div className="font-mono text-[11px] bg-background/60 p-2 rounded-sm whitespace-pre-wrap break-words">
                   <span className="text-muted-foreground">{prompt}</span>
                   {preOverrideTokens.map((t, j) => (
-                    <span key={j} className="inline-block px-0.5">{t}</span>
+                    <Fragment key={j}>
+                      {j === 0
+                        ? (/\s$/.test(prompt) || /^\s/.test(t) ? "" : " ")
+                        : (/^\s/.test(t) ? "" : " ")}
+                      <span>{t}</span>
+                    </Fragment>
                   ))}
-                  <span className="inline-block px-0.5 bg-parchment/60 dark:bg-parchment/30 text-foreground rounded-sm">
+                  {/^\s/.test(o.from) ? "" : " "}
+                  <span className="bg-parchment/60 dark:bg-parchment/30 text-foreground rounded-sm px-0.5">
                     {o.from}
                   </span>
                   {o.tail.map((t, j) => (
-                    <span key={`tail-${j}`} className="inline-block px-0.5 text-muted-foreground">{t}</span>
+                    <Fragment key={`tail-${j}`}>
+                      {/^\s/.test(t) ? "" : " "}
+                      <span className="text-muted-foreground">{t}</span>
+                    </Fragment>
                   ))}
                 </div>
               </div>

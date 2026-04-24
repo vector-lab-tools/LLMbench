@@ -23,6 +23,11 @@ import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { ModelSelector, type PanelSelection } from "@/components/shared/ModelSelector";
 import { DeepDive } from "@/components/shared/DeepDive";
 import { GrammarDeepDive } from "@/components/operations/grammar/DeepDivePanels";
+import {
+  ForcedContinuationDeepDive,
+  PerturbationDeepDive,
+  TemperatureSweepDeepDive,
+} from "@/components/operations/grammar/PhaseDeepDives";
 import { fetchStreaming } from "@/lib/streaming";
 import {
   DEFAULT_PATTERNS,
@@ -453,7 +458,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       createdAt: now.toISOString(),
       source: {
         tool: "LLMbench",
-        version: "2.15.13",
+        version: "2.15.14",
         phase: dominantPhase,
         phases,
       },
@@ -1169,66 +1174,98 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
           )}
 
           {activePhase === "forced" && (
-            <ForcedContinuationPanel
-              pattern={pattern}
-              continuationResults={continuationResults}
-              forcedExpansions={forcedExpansions}
-              isForcedLoading={isForcedLoading}
-              forcedProgress={forcedProgress}
-              forcedError={forcedError}
-              forcedTopN={forcedTopN}
-              setForcedTopN={setForcedTopN}
-              handleRunForced={handleRunForced}
-              getSlotLabel={getSlotLabel}
-              panelSelection={panelSelection}
-            />
+            <>
+              <ForcedContinuationPanel
+                pattern={pattern}
+                continuationResults={continuationResults}
+                forcedExpansions={forcedExpansions}
+                isForcedLoading={isForcedLoading}
+                forcedProgress={forcedProgress}
+                forcedError={forcedError}
+                forcedTopN={forcedTopN}
+                setForcedTopN={setForcedTopN}
+                handleRunForced={handleRunForced}
+                getSlotLabel={getSlotLabel}
+                panelSelection={panelSelection}
+              />
+              {forcedExpansions.length > 0 && (
+                <div className="mt-3">
+                  <ForcedContinuationDeepDive
+                    expansions={forcedExpansions}
+                    pattern={pattern}
+                  />
+                </div>
+              )}
+            </>
           )}
 
           {activePhase === "perturbation" && (
-            <PerturbationPanel
-              pattern={pattern}
-              selectedPatterns={selectedPatterns}
-              selectedPrompts={selectedPrompts}
-              perturbationRuns={perturbationRuns}
-              isLoading={isPerturbationLoading}
-              progress={perturbationProgress}
-              error={perturbationError}
-              onRun={handleRunPerturbation}
-              patternId={patternId}
-              selectedPatternIds={selectedPatternIds}
-              togglePatternSelected={togglePatternSelected}
-              promotePatternToPrimary={promotePatternToPrimary}
-              panelSelection={panelSelection}
-              getSlotLabel={getSlotLabel}
-            />
+            <>
+              <PerturbationPanel
+                pattern={pattern}
+                selectedPatterns={selectedPatterns}
+                selectedPrompts={selectedPrompts}
+                perturbationRuns={perturbationRuns}
+                isLoading={isPerturbationLoading}
+                progress={perturbationProgress}
+                error={perturbationError}
+                onRun={handleRunPerturbation}
+                patternId={patternId}
+                selectedPatternIds={selectedPatternIds}
+                togglePatternSelected={togglePatternSelected}
+                promotePatternToPrimary={promotePatternToPrimary}
+                panelSelection={panelSelection}
+                getSlotLabel={getSlotLabel}
+              />
+              {perturbationRuns.length > 0 && (
+                <div className="mt-3">
+                  <PerturbationDeepDive
+                    runs={perturbationRuns}
+                    pattern={pattern}
+                    selectedPrompts={selectedPrompts}
+                  />
+                </div>
+              )}
+            </>
           )}
 
           {activePhase === "temperature" && (
-            <TemperatureSweepPanel
-              pattern={pattern}
-              patternId={patternId}
-              setPatternId={setPatternId}
-              selectedPatternIds={selectedPatternIds}
-              selectedPatterns={selectedPatterns}
-              togglePatternSelected={togglePatternSelected}
-              promotePatternToPrimary={promotePatternToPrimary}
-              suitePrompts={suite}
-              selectedPrompts={selectedPrompts}
-              selectedPromptIds={selectedPromptIds}
-              setSelectedPromptIds={setSelectedPromptIds}
-              panelSelection={panelSelection}
-              slots={slots}
-              getSlotLabel={getSlotLabel}
-              slotAConfigured={slotAConfigured}
-              slotBConfigured={slotBConfigured}
-              sweepRuns={sweepRuns}
-              isSweepLoading={isSweepLoading}
-              sweepProgress={sweepProgress}
-              sweepError={sweepError}
-              isSweepDone={isSweepDone}
-              onRun={handleRunSweep}
-              onReset={handleSweepReset}
-            />
+            <>
+              <TemperatureSweepPanel
+                pattern={pattern}
+                patternId={patternId}
+                setPatternId={setPatternId}
+                selectedPatternIds={selectedPatternIds}
+                selectedPatterns={selectedPatterns}
+                togglePatternSelected={togglePatternSelected}
+                promotePatternToPrimary={promotePatternToPrimary}
+                suitePrompts={suite}
+                selectedPrompts={selectedPrompts}
+                selectedPromptIds={selectedPromptIds}
+                setSelectedPromptIds={setSelectedPromptIds}
+                panelSelection={panelSelection}
+                slots={slots}
+                getSlotLabel={getSlotLabel}
+                slotAConfigured={slotAConfigured}
+                slotBConfigured={slotBConfigured}
+                sweepRuns={sweepRuns}
+                isSweepLoading={isSweepLoading}
+                sweepProgress={sweepProgress}
+                sweepError={sweepError}
+                isSweepDone={isSweepDone}
+                onRun={handleRunSweep}
+                onReset={handleSweepReset}
+              />
+              {sweepRuns.length > 0 && (
+                <div className="mt-3">
+                  <TemperatureSweepDeepDive
+                    sweepRuns={sweepRuns}
+                    selectedPatterns={selectedPatterns}
+                    sweepTemps={SWEEP_TEMPS}
+                  />
+                </div>
+              )}
+            </>
           )}
 
           {activePhase === "prevalence" && (
