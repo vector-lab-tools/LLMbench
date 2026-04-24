@@ -50,6 +50,8 @@ export interface SamplingBranch {
   steps: SamplingStep[];
   /** Display label for the branch (e.g. main / "but a …"). */
   label: string;
+  /** Audit trail of user-applied counterfactual overrides on this branch. */
+  overrides?: { stepIndex: number; from: string; to: string; at: string }[];
 }
 
 export interface SamplingTrace {

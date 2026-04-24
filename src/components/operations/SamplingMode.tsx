@@ -313,6 +313,10 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
           [branch.id]: {
             ...branch,
             steps: [...branch.steps.slice(0, stepIndex), overriddenStep],
+            overrides: [
+              ...(branch.overrides ?? []),
+              { stepIndex, from: step.chosenToken, to: newToken, at: new Date().toISOString() },
+            ],
           },
         },
       };
@@ -815,6 +819,49 @@ function BranchList({ trace, onSwitch }: { trace: SamplingTrace; onSwitch: (id: 
   );
 }
 
+// Render the prompt + every chosen token as separate spans so whatever BPE
+// whitespace the provider carries on each token is preserved verbatim. A
+// naive `{prompt}{tokens.join("")}` was producing runs like "Democracy
+// isasysteminwhich" because React collapsed the structure into a single text
+// node where leading spaces on boundary tokens either weren't present or got
+// normalised away. One-span-per-token also matches how the generation strip
+// up top renders the same sequence, so the two views can no longer disagree.
+// Below the text we print an override log when the user has swapped any
+// tokens on this branch — a compact audit trail of the counterfactual
+// decisions applied to this trace.
+function TranscriptBlock({ label, prompt, branch }: {
+  label: string;
+  prompt: string;
+  branch: SamplingBranch;
+}) {
+  const overrides = branch.overrides ?? [];
+  return (
+    <div>
+      <div className="font-semibold text-foreground mb-1">{label}</div>
+      <div className="font-mono text-[11px] bg-background/60 p-2 rounded-sm whitespace-pre-wrap break-words">
+        <span className="text-muted-foreground">{prompt}</span>
+        {branch.steps.map(s => (
+          <span key={s.id}>{s.chosenToken}</span>
+        ))}
+      </div>
+      {overrides.length > 0 && (
+        <div className="mt-1.5">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-0.5">
+            Counterfactual overrides on this branch ({overrides.length})
+          </div>
+          <ul className="text-caption text-muted-foreground list-disc pl-4 space-y-0.5">
+            {overrides.map((o, i) => (
+              <li key={i}>
+                step {o.stepIndex + 1}: model chose <span className="font-mono text-foreground">{JSON.stringify(o.from)}</span>, you picked <span className="font-mono text-burgundy">{JSON.stringify(o.to)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DeepDivePanels({ trace, traceB, dualPanel, getSlotLabel }: {
   trace: SamplingTrace;
   traceB: SamplingTrace | null;
@@ -915,20 +962,11 @@ function DeepDivePanels({ trace, traceB, dualPanel, getSlotLabel }: {
         </div>
       )}
 
-      <div>
-        <div className="font-semibold text-foreground mb-1">Full transcript — {getSlotLabel("A")}</div>
-        <div className="font-mono text-[11px] bg-background/60 p-2 rounded-sm whitespace-pre-wrap break-words">
-          {trace.prompt}{branch.steps.map(s => s.chosenToken).join("")}
-        </div>
-      </div>
-
-      {dualPanel && branchB && (
-        <div>
-          <div className="font-semibold text-foreground mb-1">Full transcript — {getSlotLabel("B")}</div>
-          <div className="font-mono text-[11px] bg-background/60 p-2 rounded-sm whitespace-pre-wrap break-words">
-            {traceB!.prompt}{branchB.steps.map(s => s.chosenToken).join("")}
-          </div>
-        </div>
+      <TranscriptBlock label={`Full transcript — ${getSlotLabel("A")}`}
+                       prompt={trace.prompt} branch={branch} />
+      {dualPanel && branchB && traceB && (
+        <TranscriptBlock label={`Full transcript — ${getSlotLabel("B")}`}
+                         prompt={traceB.prompt} branch={branchB} />
       )}
     </div>
   );
