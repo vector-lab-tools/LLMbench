@@ -41,6 +41,15 @@ export interface GrammarPattern {
    * Short methodological note explaining why this pattern is worth probing.
    */
   note: string;
+  /**
+   * Regex that, when applied to a scaffold, captures group 1 as the pattern's
+   * *X term* — the thing the construction denies / asserts against. Required
+   * for the Phase B geometric analysis (cosine of X vs top-K Y expansions).
+   *
+   * Patterns that do not have a well-defined X (hedging, tricolon, modal
+   * stacking) OMIT this field. The UI disables the scatter view for those.
+   */
+  xExtractor?: string;
 }
 
 export const DEFAULT_PATTERNS: GrammarPattern[] = [
@@ -61,15 +70,22 @@ export const DEFAULT_PATTERNS: GrammarPattern[] = [
     ],
     scaffolds: [
       "Democracy is not just a system of government, but a ",
-      "The central claim of the book is not ",
-      "What matters here is not ",
       "The question is not whether we can, but ",
-      "Artificial intelligence is not merely ",
-      "This is not a story about ",
+      "Artificial intelligence is not merely a tool, but ",
+      "This is not a story about defeat, but ",
+      "Education is not merely the transmission of knowledge, but ",
+      "The crisis we face is not economic, but ",
+      "What the city needs is not more highways, but ",
+      "Poetry is not an ornament of language, but ",
     ],
     suppressTokens: ["not", "just", "merely", "only", "simply"],
+    // Captures X (group 1) as the text between the negation marker and " but ".
+    // Tolerates optional intensifiers (just/merely/only/simply), optional
+    // articles, and a trailing comma before "but". Non-greedy to avoid
+    // swallowing downstream clauses.
+    xExtractor: "\\bnot\\s+(?:just\\s+|merely\\s+|only\\s+|simply\\s+)?([^,.;:!?]+?)\\s*,?\\s+but\\s+",
     note:
-      "Appears with striking regularity across LLM outputs, especially in explanatory and op-ed registers. The construction promises nuance while flattening toward a stable geometric direction in embedding space. Cross-reference Phase C results with Manifold Atlas to measure how close the Ys sit to their Xs.",
+      "Appears with striking regularity across LLM outputs, especially in explanatory and op-ed registers. The construction promises nuance while flattening toward a stable geometric direction in embedding space. Phase B's geometry view plots logprob rank against cosine(X, Y-phrase) to make this collapse visible in one chart.",
   },
   {
     id: "hedging-triplet",
