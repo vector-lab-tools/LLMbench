@@ -22,6 +22,7 @@ import {
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { ModelSelector, type PanelSelection } from "@/components/shared/ModelSelector";
 import { DeepDive } from "@/components/shared/DeepDive";
+import { GrammarDeepDive } from "@/components/operations/grammar/DeepDivePanels";
 import { fetchStreaming } from "@/lib/streaming";
 import {
   DEFAULT_PATTERNS,
@@ -1233,29 +1234,45 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
                 </div>
               )}
 
-              {/* Deep dive */}
+              {/* Deep dive — research-grade panels */}
               {isDone && runs.length > 0 && (
-                <DeepDive label="Deep Dive — run-by-run matches" defaultOpen={false}>
-                  <div className="space-y-2 text-caption">
-                    {scoredRuns
-                      .filter(r => r.matches.length > 0)
-                      .slice(0, 50)
-                      .map((r, i) => (
-                        <div key={i} className="border-l-2 border-burgundy/50 pl-2 py-1">
-                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
-                            {r.panel} · T{r.temperature.toFixed(1)} · {REGISTER_LABELS[(r.register as GrammarRegister) ?? "explain"]}
-                          </div>
-                          <div className="text-foreground text-[11px] mb-1 truncate" title={r.prompt}>{r.prompt}</div>
-                          <ul className="list-disc pl-4 text-muted-foreground">
-                            {r.matches.map((m, j) => (
-                              <li key={j}><span className="font-mono text-[11px]">“{m.text.trim()}”</span></li>
-                            ))}
-                          </ul>
-                        </div>
-                      ))}
-                    {scoredRuns.every(r => r.matches.length === 0) && (
-                      <div className="text-muted-foreground italic">No matches found in any run. Either the pattern is absent or the regex needs tightening.</div>
-                    )}
+                <DeepDive label="Deep Dive — research panels" defaultOpen={false}>
+                  <div className="space-y-3">
+                    <GrammarDeepDive
+                      runs={runs}
+                      sweepRuns={sweepRuns}
+                      selectedPatterns={selectedPatterns}
+                      activeSuiteIds={activeSuiteIds}
+                      prevalenceTemps={PREVALENCE_TEMPS}
+                      sweepTemps={SWEEP_TEMPS}
+                      getSlotLabel={getSlotLabel}
+                    />
+                    <details className="border border-parchment/60 rounded-sm bg-card/40">
+                      <summary className="px-2 py-1.5 border-b border-parchment/40 bg-cream/30 dark:bg-burgundy/10 text-caption font-semibold text-foreground cursor-pointer">
+                        Run-by-run matches (primary pattern)
+                      </summary>
+                      <div className="p-2 space-y-2 text-caption">
+                        {scoredRuns
+                          .filter(r => r.matches.length > 0)
+                          .slice(0, 50)
+                          .map((r, i) => (
+                            <div key={i} className="border-l-2 border-burgundy/50 pl-2 py-1">
+                              <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
+                                {r.panel} · T{r.temperature.toFixed(1)} · {REGISTER_LABELS[(r.register as GrammarRegister) ?? "explain"]}
+                              </div>
+                              <div className="text-foreground text-[11px] mb-1 truncate" title={r.prompt}>{r.prompt}</div>
+                              <ul className="list-disc pl-4 text-muted-foreground">
+                                {r.matches.map((m, j) => (
+                                  <li key={j}><span className="font-mono text-[11px]">“{m.text.trim()}”</span></li>
+                                ))}
+                              </ul>
+                            </div>
+                          ))}
+                        {scoredRuns.every(r => r.matches.length === 0) && (
+                          <div className="text-muted-foreground italic">No matches of the primary pattern in any run.</div>
+                        )}
+                      </div>
+                    </details>
                   </div>
                 </DeepDive>
               )}

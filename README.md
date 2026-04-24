@@ -17,7 +17,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.14.0
+**Version:** 2.14.1
 **Date:** 24 April 2026
 **Licence:** MIT
 
@@ -71,7 +71,7 @@ Grammar Probe is the generation-side companion to Manifold Atlas's *Grammar of V
 
 Five phases, each a distinct research question:
 
-- **A. Prevalence** *(available in v2.10.0)*. Batch-run a prompt suite across temperatures and models; regex-count pattern hits; aggregate by register, model, and temperature. Answers: how often does the pattern appear, and is it register-sensitive?
+- **A. Prevalence** *(available in v2.10.0; Deep Dive expanded in v2.14.1)*. Batch-run a prompt suite across temperatures and models; regex-count pattern hits; aggregate by register, model, and temperature. The Deep Dive opens six research panels, each computed across every selected construction (not just the primary pattern) with CSV export: (1) per-construction hit-rate bar chart faceted by model × temperature, (2) hits-per-run histogram exposing the long-tail shape, (3) register heatmap, (4) suite × construction stratification table, (5) pairwise co-occurrence matrix `P(j | i)` revealing which antithesis constructions ride together in the same run, and (6) Phase E small-multiples with a per-construction **elasticity** readout `rate(T=0) − mean rate(T>0)` so greedy-centre reflexes, register signals, and sampler-emergent constructions are separable at a glance. Answers: how often does the pattern appear, and is it register-sensitive?
 - **B. Continuation logprobs** *(available in v2.10.1)*. For each pattern scaffold, fetch the top-K next-token distribution (max_tokens=1 with logprobs). Tokens the construction typically relies on (*not*, *just*, *merely*, etc.) are highlighted, and per-card Shannon entropy is reported. Answers: is the pattern baked into the next-token distribution, or does it emerge downstream? Requires Gemini 2.0, OpenAI, OpenRouter, or Hugging Face.
 - **B. Scaffold concentration** *(new in v2.14.0, replaces the earlier Geometry view)*. For each scaffold the probe already fetched a top-K next-token distribution in the continuation phase, and three embedding-free concentration metrics are now computed from it: **top-1 p** (probability mass on the single most-likely token), **H** (Shannon entropy in bits over the returned top-K), and **cliché share** (summed probability of the pattern's expected slot fillers, e.g. *rather*, *merely*, *instead*, *also*). High top-1 combined with low entropy and high cliché share is the signature of a model parked in the construction's groove — producing the antithesis reflexively rather than choosing it. The earlier geometry view has been retired because LLMbench's chat-slot providers do not reliably expose embedding endpoints in the same slot; geometry is now a responsibility of **Manifold Atlas**, which imports the portable **Grammar data bundle** (`*.grammar.json`, spec: `vector-lab.grammar-probe.v1`) exported from this phase and computes cosine geometry against its own embedders. The bundle captures Phase A prevalence runs, Phase B top-K distributions, and Phase E sweep runs in a single analysable JSON.
 - **C. Forced continuation** *(planned)*. Cap scaffolds at `but a ` and harvest the top-20 Ys, with the X term extracted per probe. Result is the same **Grammar Probe Bundle** format as Phase B, handed off to Manifold Atlas for higher-volume geometric scrutiny. Canonical spec at `vector-lab-design/GRAMMAR-PROBE-BUNDLE.md`.
