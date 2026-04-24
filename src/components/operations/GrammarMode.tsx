@@ -70,10 +70,11 @@ const PHASES: { id: Phase; label: string; short: string; available: boolean; des
   { id: "continuation", label: "B. Continuation logprobs", short: "B",   available: true,  description: "For each pattern scaffold, inspect the top-K next-token distribution." },
   { id: "forced",       label: "C. Forced continuation",  short: "C",    available: false, description: "Cap scaffolds at 'but a ' and harvest top-20 Ys. Cross-link to Manifold Atlas." },
   { id: "perturbation", label: "D. Perturbation",         short: "D",    available: false, description: "Neutral vs anti-pattern vs pro-pattern framings. Measure compliance." },
-  { id: "temperature",  label: "E. Temperature sweep",    short: "E",    available: false, description: "Prevalence vs T ∈ {0, 0.3, 0.7, 1.0, 1.5}. Is the pattern at the greedy centre?" },
+  { id: "temperature",  label: "E. Temperature sweep",    short: "E",    available: true,  description: "Prevalence vs T ∈ {0, 0.3, 0.7, 1.0, 1.5}. Is the pattern at the greedy centre?" },
 ];
 
 const PREVALENCE_TEMPS = [0, 0.7];
+const SWEEP_TEMPS = [0, 0.3, 0.7, 1.0, 1.5];
 const CONTINUATION_TOP_K = 15;
 const CONTINUATION_PROVIDERS = new Set(["google", "openai", "openai-compatible", "openrouter", "huggingface"]);
 const EMBEDDING_PROVIDERS = new Set(["openai", "openai-compatible", "google"]);
@@ -157,6 +158,13 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
   const [geometryError, setGeometryError] = useState<string | null>(null);
   const [geometryProgress, setGeometryProgress] = useState<{ stage: string; done: number; total: number } | null>(null);
 
+  // ---- Phase E (temperature sweep) state ----
+  const [sweepRuns, setSweepRuns] = useState<RunRecord[]>([]);
+  const [isSweepLoading, setIsSweepLoading] = useState(false);
+  const [sweepProgress, setSweepProgress] = useState<{ done: number; total: number } | null>(null);
+  const [sweepError, setSweepError] = useState<string | null>(null);
+  const [isSweepDone, setIsSweepDone] = useState(false);
+
   const pattern = useMemo(
     () => DEFAULT_PATTERNS.find(p => p.id === patternId) || DEFAULT_PATTERNS[0],
     [patternId]
@@ -171,6 +179,10 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     setGeometryResults([]);
     setGeometryProgress(null);
     setGeometryError(null);
+    setSweepRuns([]);
+    setSweepProgress(null);
+    setSweepError(null);
+    setIsSweepDone(false);
   }, [pattern]);
 
   const selectedPrompts = useMemo(
@@ -581,6 +593,77 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     URL.revokeObjectURL(url);
   }, [geometryResults, pattern, slots]);
 
+  // ---- Phase E: Temperature sweep -----------------------------------------
+  const handleRunSweep = useCallback(async () => {
+    if (isSweepLoading || selectedPrompts.length === 0) return;
+    const usingBoth = panelSelection === "both" && slotBConfigured;
+    if (!slotAConfigured && !usingBoth) {
+      setSweepError("Configure at least one model in Settings before running.");
+      return;
+    }
+
+    setIsSweepLoading(true);
+    setSweepError(null);
+    setSweepRuns([]);
+    setIsSweepDone(false);
+    const totalExpected =
+      selectedPrompts.length *
+      SWEEP_TEMPS.length *
+      (usingBoth ? 2 : 1);
+    setSweepProgress({ done: 0, total: totalExpected });
+
+    try {
+      const slotA = panelSelection === "B" ? slots.B : slots.A;
+      const slotB = usingBoth ? slots.B : null;
+
+      await fetchStreaming<StreamEvent>(
+        "/api/investigate/grammar-prevalence",
+        {
+          prompts: selectedPrompts.map(p => ({ id: p.id, prompt: p.prompt, register: p.register })),
+          temperatures: SWEEP_TEMPS,
+          slotA,
+          slotB,
+          noMarkdown,
+        },
+        (event) => {
+          if (event.type === "meta") {
+            setSweepProgress({ done: 0, total: event.totalRuns });
+          } else if (event.type === "run") {
+            const r = event;
+            setSweepRuns(prev => [
+              ...prev,
+              {
+                runIndex: r.runIndex,
+                panel: r.panel,
+                promptId: r.promptId,
+                register: r.register,
+                prompt: r.prompt,
+                temperature: r.temperature,
+                text: r.result?.text,
+                error: r.result?.error,
+                provenance: r.result?.provenance,
+              },
+            ]);
+            setSweepProgress(p => p ? { ...p, done: p.done + 1 } : p);
+          } else if (event.type === "done") {
+            setIsSweepDone(true);
+          }
+        },
+      );
+    } catch (err) {
+      setSweepError(err instanceof Error ? err.message : "Sweep failed");
+    } finally {
+      setIsSweepLoading(false);
+    }
+  }, [isSweepLoading, selectedPrompts, panelSelection, slotAConfigured, slotBConfigured, slots, noMarkdown]);
+
+  const handleSweepReset = useCallback(() => {
+    setSweepRuns([]);
+    setSweepProgress(null);
+    setSweepError(null);
+    setIsSweepDone(false);
+  }, []);
+
   // ---- Derived prevalence stats (per pattern, per run) ----
   type ScoredRun = RunRecord & { hitCount: number; matches: ReturnType<typeof findMatchSpans> };
   const scoredRuns: ScoredRun[] = useMemo(() => {
@@ -760,7 +843,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="max-w-6xl mx-auto px-4 py-4">
 
-          {activePhase !== "prevalence" && activePhase !== "continuation" && (
+          {activePhase !== "prevalence" && activePhase !== "continuation" && activePhase !== "temperature" && (
             <div className="border border-parchment/60 rounded-sm p-4 bg-cream/20 text-body-sm text-muted-foreground">
               <strong className="text-foreground">Coming soon.</strong> {PHASES.find(p => p.id === activePhase)?.description}
             </div>
@@ -991,6 +1074,30 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
                 </div>
               )}
             </>
+          )}
+
+          {activePhase === "temperature" && (
+            <TemperatureSweepPanel
+              pattern={pattern}
+              patternId={patternId}
+              setPatternId={setPatternId}
+              suitePrompts={suite}
+              selectedPrompts={selectedPrompts}
+              selectedPromptIds={selectedPromptIds}
+              setSelectedPromptIds={setSelectedPromptIds}
+              panelSelection={panelSelection}
+              slots={slots}
+              getSlotLabel={getSlotLabel}
+              slotAConfigured={slotAConfigured}
+              slotBConfigured={slotBConfigured}
+              sweepRuns={sweepRuns}
+              isSweepLoading={isSweepLoading}
+              sweepProgress={sweepProgress}
+              sweepError={sweepError}
+              isSweepDone={isSweepDone}
+              onRun={handleRunSweep}
+              onReset={handleSweepReset}
+            />
           )}
 
           {activePhase === "prevalence" && (
@@ -1624,6 +1731,375 @@ function GeometryScatterCard({
           </div>
         </div>
       </DeepDive>
+    </div>
+  );
+}
+
+// ---- TemperatureSweepPanel (Phase E) ---------------------------------------
+// Prevalence (hit rate) as a function of decoding temperature. The headline is
+// the "greediness index": hitRate(T=0) − mean hitRate(T>0). Positive → the
+// construction lives at the argmax (reflex). Near-zero → register-driven.
+// Negative → the pattern emerges out of the sampler (rarer, more interesting).
+import type { ProviderSlots } from "@/types/ai-settings";
+import type { GrammarPattern } from "@/lib/grammar/patterns";
+
+function TemperatureSweepPanel(props: {
+  pattern: GrammarPattern;
+  patternId: string;
+  setPatternId: (id: string) => void;
+  suitePrompts: GrammarSuitePrompt[];
+  selectedPrompts: GrammarSuitePrompt[];
+  selectedPromptIds: Set<string>;
+  setSelectedPromptIds: (s: Set<string>) => void;
+  panelSelection: PanelSelection;
+  slots: ProviderSlots;
+  getSlotLabel: (panel: "A" | "B") => string;
+  slotAConfigured: boolean;
+  slotBConfigured: boolean;
+  sweepRuns: RunRecord[];
+  isSweepLoading: boolean;
+  sweepProgress: { done: number; total: number } | null;
+  sweepError: string | null;
+  isSweepDone: boolean;
+  onRun: () => void;
+  onReset: () => void;
+}) {
+  const {
+    pattern, patternId, setPatternId,
+    suitePrompts, selectedPrompts, selectedPromptIds, setSelectedPromptIds,
+    panelSelection, slots, getSlotLabel,
+    slotAConfigured, slotBConfigured,
+    sweepRuns, isSweepLoading, sweepProgress, sweepError, isSweepDone,
+    onRun, onReset,
+  } = props;
+
+  const usingBoth = panelSelection === "both" && slotBConfigured;
+  const effectivePanels: ("A" | "B")[] = (
+    usingBoth ? ["A", "B"] :
+    panelSelection === "B" ? ["B"] :
+    ["A"]
+  );
+
+  const togglePrompt = (id: string) => {
+    const next = new Set(selectedPromptIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    if (next.size > 0) setSelectedPromptIds(next);
+  };
+
+  // ---- aggregate: per-panel, per-T hit rate -------------------------------
+  interface Point { temperature: number; runs: number; runsWithHit: number; hitRate: number; hits: number }
+  const perPanelSeries: { panel: "A" | "B"; label: string; points: Point[]; greediness: number | null }[] =
+    effectivePanels.map(panel => {
+      const points: Point[] = SWEEP_TEMPS.map(t => {
+        const rs = sweepRuns.filter(r => r.panel === panel && r.temperature === t && r.text);
+        const runs = rs.length;
+        const withText = rs.filter(r => r.text);
+        const runsWithHit = withText.filter(r => countMatches(r.text!, pattern) > 0).length;
+        const hits = withText.reduce((s, r) => s + countMatches(r.text!, pattern), 0);
+        return { temperature: t, runs, runsWithHit, hits, hitRate: runs > 0 ? runsWithHit / runs : 0 };
+      });
+      const base = points.find(p => p.temperature === 0);
+      const warm = points.filter(p => p.temperature > 0 && p.runs > 0);
+      const meanWarm = warm.length > 0 ? warm.reduce((s, p) => s + p.hitRate, 0) / warm.length : null;
+      const greediness = base && base.runs > 0 && meanWarm !== null ? base.hitRate - meanWarm : null;
+      return { panel, label: getSlotLabel(panel), points, greediness };
+    });
+
+  const anyData = sweepRuns.length > 0;
+
+  return (
+    <>
+      {/* Pattern selector */}
+      <div className="mb-3">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-1.5">
+          Pattern
+        </div>
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {DEFAULT_PATTERNS.map(p => (
+            <button
+              key={p.id}
+              onClick={() => setPatternId(p.id)}
+              className={`px-2.5 py-1 text-caption rounded-sm border transition-colors ${
+                patternId === p.id
+                  ? "border-burgundy bg-burgundy/10 text-burgundy"
+                  : "border-parchment bg-card text-muted-foreground hover:text-foreground hover:bg-cream/50"
+              }`}
+              title={p.description}
+            >
+              {p.shortLabel}
+            </button>
+          ))}
+        </div>
+        <div className="text-caption text-muted-foreground leading-relaxed">
+          <strong className="text-foreground">{pattern.label}.</strong> {pattern.description}
+        </div>
+      </div>
+
+      {/* Capability note */}
+      <div className="mb-3 text-caption text-muted-foreground border-l-2 border-parchment/60 pl-2">
+        Runs the same prompt suite across <span className="font-mono">T ∈ {`{${SWEEP_TEMPS.join(", ")}}`}</span>.
+        The headline is the <em>greediness index</em>: <span className="font-mono">hitRate(T=0) − mean hitRate(T&gt;0)</span>.
+        Positive → the construction is a reflex of the argmax; near-zero → register-driven; negative → the pattern emerges out of the sampler.
+      </div>
+
+      {/* Prompt picker — compact list from the already-selected suite */}
+      <div className="mb-3 border border-parchment/60 rounded-sm bg-card">
+        <div className="px-3 py-2 border-b border-parchment/60 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold flex items-center justify-between">
+          <span>Prompts (from the currently active suite)</span>
+          <span className="text-muted-foreground/60 normal-case tracking-normal">
+            {selectedPromptIds.size} / {suitePrompts.length} selected
+          </span>
+        </div>
+        <div className="divide-y divide-parchment/30 max-h-48 overflow-y-auto">
+          {suitePrompts.map(p => (
+            <label key={p.id} className="flex items-start gap-2 px-3 py-1.5 text-caption hover:bg-cream/30 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selectedPromptIds.has(p.id)}
+                onChange={() => togglePrompt(p.id)}
+                className="mt-0.5 accent-burgundy"
+              />
+              <span className="font-mono text-[11px] text-foreground truncate flex-1">{p.prompt}</span>
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider shrink-0">{p.register}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Controls */}
+      <div className="mb-3 flex items-center gap-3 flex-wrap">
+        <div className="text-caption text-muted-foreground">
+          {selectedPrompts.length} prompts × {SWEEP_TEMPS.length} temperatures × {effectivePanels.length} model{effectivePanels.length > 1 ? "s" : ""}
+          {" = "}
+          <span className="font-mono">{selectedPrompts.length * SWEEP_TEMPS.length * effectivePanels.length}</span> runs expected
+        </div>
+        <div className="flex-1" />
+        <button
+          onClick={onReset}
+          disabled={isSweepLoading || sweepRuns.length === 0}
+          className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5 disabled:opacity-30"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          Reset
+        </button>
+        <button
+          onClick={onRun}
+          disabled={isSweepLoading || selectedPrompts.length === 0 || (!slotAConfigured && !usingBoth)}
+          className="px-3 py-1 text-caption font-medium rounded-sm bg-burgundy text-white hover:bg-burgundy/90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5"
+        >
+          <Play className="w-3.5 h-3.5" />
+          {isSweepLoading ? "Sweeping…" : "Run sweep"}
+        </button>
+      </div>
+
+      {/* Progress */}
+      {isSweepLoading && sweepProgress && (
+        <div className="mb-3">
+          <div className="flex items-center justify-between text-caption text-muted-foreground mb-1">
+            <span>Sweeping… {sweepProgress.done} / {sweepProgress.total}</span>
+            <span>{sweepProgress.total > 0 ? Math.round(100 * sweepProgress.done / sweepProgress.total) : 0}%</span>
+          </div>
+          <div className="h-1.5 bg-parchment/40 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-burgundy transition-all"
+              style={{ width: `${sweepProgress.total > 0 ? Math.round(100 * sweepProgress.done / sweepProgress.total) : 0}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {sweepError && (
+        <div className="mb-3 border border-red-400 bg-red-50 dark:bg-red-900/30 rounded-sm p-2 text-caption flex items-start gap-2 text-red-800 dark:text-red-200">
+          <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          <span>{sweepError}</span>
+        </div>
+      )}
+
+      {!anyData && !isSweepLoading && (
+        <div className="text-caption text-muted-foreground border border-dashed border-parchment/60 rounded-sm p-4 text-center">
+          Select prompts and press <strong>Run sweep</strong> to measure prevalence across the five temperatures.
+          Each run counts regex hits for <strong>{pattern.shortLabel}</strong>; the chart plots hit rate against T
+          with one line per model and a <em>greediness index</em> headline per model.
+        </div>
+      )}
+
+      {anyData && (
+        <SweepChart
+          series={perPanelSeries}
+          temps={SWEEP_TEMPS}
+          patternLabel={pattern.label}
+          isComplete={isSweepDone}
+        />
+      )}
+
+      {anyData && (
+        <DeepDive label={`Temperature × model hit table (${sweepRuns.length} runs)`}>
+          <div className="text-[11px] space-y-2">
+            {perPanelSeries.map(s => (
+              <div key={s.panel} className="border border-parchment/40 rounded-sm">
+                <div className="px-2 py-1 border-b border-parchment/40 font-semibold text-foreground flex items-center justify-between">
+                  <span>Panel {s.panel} · {s.label}</span>
+                  <span className="text-muted-foreground font-mono">
+                    greediness = {s.greediness === null ? "n/a" : s.greediness.toFixed(3)}
+                  </span>
+                </div>
+                <div className="grid grid-cols-[4rem_4rem_4rem_5rem_5rem] gap-2 px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold border-b border-parchment/40">
+                  <span>T</span>
+                  <span className="text-right">runs</span>
+                  <span className="text-right">hits</span>
+                  <span className="text-right">with-hit</span>
+                  <span className="text-right">hit rate</span>
+                </div>
+                {s.points.map(p => (
+                  <div key={p.temperature} className="grid grid-cols-[4rem_4rem_4rem_5rem_5rem] gap-2 px-2 py-0.5 font-mono tabular-nums">
+                    <span className="text-foreground">{p.temperature.toFixed(1)}</span>
+                    <span className="text-right text-muted-foreground">{p.runs}</span>
+                    <span className="text-right text-muted-foreground">{p.hits}</span>
+                    <span className="text-right text-muted-foreground">{p.runsWithHit}</span>
+                    <span className="text-right text-foreground">{(p.hitRate * 100).toFixed(0)}%</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </DeepDive>
+      )}
+
+      {/* Keep-in-scope note */}
+      <div className="mt-3 text-[10px] text-muted-foreground/70 italic">
+        Uses slots from Settings. Temperature is overridden for the sweep regardless of per-slot value.
+        Provider-level token caps still apply; if a provider silently clamps T&gt;1, that shows up as a flat tail on the right.
+      </div>
+      {/* mute unused-vars lint for slot params we may want later */}
+      <span className="hidden">{slots.A.provider}{slots.B.provider}</span>
+    </>
+  );
+}
+
+// ---- SweepChart -----------------------------------------------------------
+// One line per model, y = hit rate (0..1), x = temperature (linear from 0 to max).
+function SweepChart({
+  series,
+  temps,
+  patternLabel,
+  isComplete,
+}: {
+  series: { panel: "A" | "B"; label: string; points: { temperature: number; hitRate: number; runs: number }[]; greediness: number | null }[];
+  temps: number[];
+  patternLabel: string;
+  isComplete: boolean;
+}) {
+  const W = 640, H = 260;
+  const PAD = { l: 56, r: 140, t: 14, b: 40 };
+  const plotW = W - PAD.l - PAD.r;
+  const plotH = H - PAD.t - PAD.b;
+
+  const xMin = Math.min(...temps);
+  const xMax = Math.max(...temps);
+  const xScale = (t: number) => PAD.l + ((t - xMin) / (xMax - xMin || 1)) * plotW;
+  const yScale = (v: number) => PAD.t + (1 - v) * plotH;
+
+  // Model colours: A = burgundy, B = slate.
+  const colourFor = (panel: "A" | "B") => panel === "A" ? "#800020" : "#334155";
+
+  const yTicks = [0, 0.25, 0.5, 0.75, 1];
+
+  return (
+    <div className="border border-parchment/60 rounded-sm bg-card overflow-hidden">
+      <div className="px-3 py-2 border-b border-parchment/60 text-caption flex items-center gap-2 flex-wrap">
+        <BarChart3 className="w-3.5 h-3.5 text-burgundy shrink-0" />
+        <span className="font-semibold text-foreground truncate flex-1 min-w-[10rem]">
+          Prevalence × Temperature — {patternLabel}
+        </span>
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
+          {isComplete ? "complete" : "streaming"}
+        </span>
+      </div>
+      <div className="px-3 pb-3 overflow-x-auto">
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto max-w-full" role="img" aria-label="Line chart of pattern hit rate against temperature">
+          {/* plot frame */}
+          <rect x={PAD.l} y={PAD.t} width={plotW} height={plotH} fill="none" stroke="currentColor" strokeOpacity={0.1} />
+          {/* y gridlines + labels */}
+          {yTicks.map(v => (
+            <g key={`y${v}`}>
+              <line x1={PAD.l} x2={PAD.l + plotW} y1={yScale(v)} y2={yScale(v)} stroke="currentColor" strokeOpacity={0.06} />
+              <text x={PAD.l - 6} y={yScale(v) + 3} fontSize={9} textAnchor="end" fill="currentColor" fillOpacity={0.55}>
+                {Math.round(v * 100)}%
+              </text>
+            </g>
+          ))}
+          {/* x ticks */}
+          {temps.map(t => (
+            <g key={`x${t}`}>
+              <line x1={xScale(t)} x2={xScale(t)} y1={PAD.t + plotH} y2={PAD.t + plotH + 3} stroke="currentColor" strokeOpacity={0.3} />
+              <text x={xScale(t)} y={PAD.t + plotH + 14} fontSize={9} textAnchor="middle" fill="currentColor" fillOpacity={0.65}>
+                {t.toFixed(1)}
+              </text>
+            </g>
+          ))}
+          {/* axis titles */}
+          <text x={PAD.l + plotW / 2} y={H - 6} fontSize={10} textAnchor="middle" fill="currentColor" fillOpacity={0.7}>
+            temperature
+          </text>
+          <text
+            x={-PAD.t - plotH / 2}
+            y={14}
+            fontSize={10}
+            textAnchor="middle"
+            fill="currentColor"
+            fillOpacity={0.7}
+            transform="rotate(-90)"
+          >
+            hit rate (runs containing pattern)
+          </text>
+
+          {/* series */}
+          {series.map(s => {
+            const pts = s.points.filter(p => p.runs > 0);
+            if (pts.length === 0) return null;
+            const d = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${xScale(p.temperature).toFixed(2)} ${yScale(p.hitRate).toFixed(2)}`).join(" ");
+            const col = colourFor(s.panel);
+            return (
+              <g key={s.panel}>
+                <path d={d} fill="none" stroke={col} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                {pts.map(p => (
+                  <circle
+                    key={p.temperature}
+                    cx={xScale(p.temperature)}
+                    cy={yScale(p.hitRate)}
+                    r={p.temperature === 0 ? 5 : 3.5}
+                    fill={col}
+                    stroke="#fff"
+                    strokeWidth={1}
+                  >
+                    <title>{`Panel ${s.panel}  T=${p.temperature}  hit rate=${(p.hitRate * 100).toFixed(1)}%  (n=${p.runs})`}</title>
+                  </circle>
+                ))}
+              </g>
+            );
+          })}
+
+          {/* legend + greediness readout */}
+          <g>
+            {series.map((s, i) => {
+              const y = PAD.t + 8 + i * 36;
+              const col = colourFor(s.panel);
+              return (
+                <g key={s.panel}>
+                  <circle cx={PAD.l + plotW + 14} cy={y} r={4} fill={col} />
+                  <text x={PAD.l + plotW + 22} y={y + 3} fontSize={10} fill="currentColor" fillOpacity={0.85}>
+                    {s.panel} · {s.label.length > 14 ? s.label.slice(0, 13) + "…" : s.label}
+                  </text>
+                  <text x={PAD.l + plotW + 22} y={y + 16} fontSize={9} fill="currentColor" fillOpacity={0.65}>
+                    greediness: {s.greediness === null ? "n/a" : s.greediness.toFixed(3)}
+                  </text>
+                </g>
+              );
+            })}
+          </g>
+        </svg>
+      </div>
     </div>
   );
 }

@@ -17,7 +17,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.12.0
+**Version:** 2.13.0
 **Date:** 24 April 2026
 **Licence:** MIT
 
@@ -75,6 +75,9 @@ Five phases, each a distinct research question:
 - **B. Continuation logprobs** *(available in v2.10.1)*. For each pattern scaffold, fetch the top-K next-token distribution (max_tokens=1 with logprobs). Tokens the construction typically relies on (*not*, *just*, *merely*, etc.) are highlighted, and per-card Shannon entropy is reported. Answers: is the pattern baked into the next-token distribution, or does it emerge downstream? Requires Gemini 2.0, OpenAI, OpenRouter, or Hugging Face.
 - **B. Geometry view** *(new in v2.12.0)*. For patterns with an extractable X term (e.g. *Not X but Y*), each top-K token is expanded into a short Y-phrase, then X and every Y-phrase are embedded and plotted as a scatter of logprob × cosine(X, Y-phrase). The headline is the **Spearman rank correlation** between probability rank and cosine rank: near-zero or negative ρ means probability is not tracking semantic distance from X — evidence that the construction has collapsed toward a stable geometric direction rather than navigating a live semantic space. Results export as a portable **Grammar Probe Bundle** (`*.grammar.json`, spec: `vector-lab.grammar-probe.v1`) that Manifold Atlas can import. Requires an OpenAI, OpenAI-compatible, or Google slot for embeddings; geometric analysis is only defined for antithesis patterns (hedges, tricolon, and modal stacks keep the bar-chart view).
 - **C. Forced continuation** *(planned)*. Cap scaffolds at `but a ` and harvest the top-20 Ys, with the X term extracted per probe. Result is the same **Grammar Probe Bundle** format as Phase B, handed off to Manifold Atlas for higher-volume geometric scrutiny. Canonical spec at `vector-lab-design/GRAMMAR-PROBE-BUNDLE.md`.
+- **E. Temperature sweep** *(available in v2.13.0)*. Runs the selected prompt suite across **T ∈ {0, 0.3, 0.7, 1.0, 1.5}** and plots prevalence (hit rate) against T, one line per model. The headline is the **greediness index**: `hitRate(T=0) − mean hitRate(T>0)`. Positive → the construction lives at the argmax (reflex). Near-zero → register-driven, not greedy. Negative → the pattern emerges out of the sampler (rarer, more interesting). A sustained flat-line across T suggests the model is producing the construction as default rhetoric, not as a considered choice.
+
+**Pattern library aligned with Manifold Atlas (v2.13.0).** The antithesis family now ships with five constructions matching Atlas's `Grammar of Vectors` grammars — `not-x-but-y`, `not-just-x-but-y`, `it-is-not-x-it-is-y` (false correction), `while-x-y` (conciliation pivot), and `what-matters-is-not-x-but-y` (cleft emphasis) — so that a probe in LLMbench and the corresponding Atlas operation are testing the same rhetorical target. The three non-antithesis patterns (Hyland hedges, tricolon, modal stacking) remain LLMbench-specific research axes.
 - **D. Perturbation** *(planned)*. Neutral vs anti-pattern vs pro-pattern framings. Does the pattern persist under explicit negative instruction (structural) or flex (stylistic)?
 - **E. Temperature sweep** *(planned)*. Prevalence at T ∈ {0, 0.3, 0.7, 1.0, 1.5}. A pattern present at T=0 sits at the greedy centre of the distribution; not a sampling accident.
 
@@ -300,6 +303,8 @@ The architecture follows the Manifold Atlas pattern: a thin `page.tsx` manages m
 - [x] Investigate tier with Grammar Probe (Phase A: prevalence heatmap across pattern × prompt × temperature × model)
 - [x] Grammar Probe Phase B: continuation logprobs — top-K next-token distribution per scaffold with suppress-token highlighting and entropy
 - [x] Grammar Probe Phase B geometry upgrade — logprob × cosine(X, Y-phrase) scatter with Spearman ρ headline, plus Grammar Probe Bundle export (`vector-lab.grammar-probe.v1`)
+- [x] Grammar Probe Phase E — temperature sweep (T ∈ {0, 0.3, 0.7, 1.0, 1.5}) with per-model prevalence lines and "greediness index" headline
+- [x] Grammar Probe pattern library aligned with Manifold Atlas — five antithesis constructions (`not-x-but-y`, `not-just-x-but-y`, `it-is-not-x-it-is-y`, `while-x-y`, `what-matters-is-not-x-but-y`) plus the three LLMbench-specific patterns
 - [x] Grammar Probe suite library — four purpose suites (baseline / invitation / resistance / adversarial) and six domain suites (politics, technology, science, ethics, pedagogy, everyday), composable with per-suite stratification
 - [ ] Grammar Probe Phase C (forced-continuation with Manifold Atlas hand-off)
 - [ ] Grammar Probe Phases D (perturbation) and E (temperature sweep)

@@ -338,7 +338,7 @@ export default function Home() {
               <div>
                 <h3 className="font-semibold mb-1">Investigate: Grammar Probe</h3>
                 <p className="text-muted-foreground mb-2">
-                  A pattern-specific investigation of rhetorical constructions the model reaches for &mdash; <em>Not X but Y</em>, hedging triplets, tricolon, modal stacking. Four phases (A ships, B ships, C&ndash;E planned):
+                  A pattern-specific investigation of rhetorical constructions the model reaches for &mdash; five antithesis variants (<em>Not X but Y</em>, <em>Not just X but Y</em>, <em>It&rsquo;s not X, it&rsquo;s Y</em>, <em>While X, Y</em>, <em>What matters is not X but Y</em>), plus hedging triplets, tricolon, and modal stacking. Phases A, B, and E ship; C and D planned:
                 </p>
                 <div className="space-y-1.5 text-muted-foreground pl-3 border-l-2 border-parchment mb-2">
                   <p>
@@ -349,6 +349,9 @@ export default function Home() {
                   </p>
                   <p>
                     <strong className="text-foreground">B. Geometry view.</strong> For patterns with an extractable X (e.g. <em>Not X but Y</em>), each top-K token is expanded into a short Y-phrase, then X and every Y-phrase are embedded and plotted as logprob &times; cosine(X, Y-phrase). The headline is the <strong className="text-foreground">Spearman rank correlation</strong> between probability rank and cosine rank: a flat or negative &rho; means probability is <em>not</em> tracking semantic distance from X &mdash; evidence the construction has collapsed toward a stable geometric direction. Results export as a Grammar Probe Bundle (<code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">*.grammar.json</code>) that Manifold Atlas can import. Requires an OpenAI, OpenAI-compatible, or Google slot for embeddings.
+                  </p>
+                  <p>
+                    <strong className="text-foreground">E. Temperature sweep.</strong> Runs the selected suite across <span className="font-mono">T &isin; {`{0, 0.3, 0.7, 1.0, 1.5}`}</span> and plots prevalence against T, one line per model. The headline is the <strong className="text-foreground">greediness index</strong> &mdash; <span className="font-mono">hitRate(T=0) &minus; mean hitRate(T&gt;0)</span>. Positive means the construction is a reflex of the argmax; near-zero means register-driven, not greedy; negative means the pattern emerges out of the sampler.
                   </p>
                 </div>
                 <p className="text-muted-foreground mb-2">
