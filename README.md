@@ -77,7 +77,33 @@ Five phases, each a distinct research question:
 - **D. Perturbation** *(planned)*. Neutral vs anti-pattern vs pro-pattern framings. Does the pattern persist under explicit negative instruction (structural) or flex (stylistic)?
 - **E. Temperature sweep** *(planned)*. Prevalence at T ∈ {0, 0.3, 0.7, 1.0, 1.5}. A pattern present at T=0 sits at the greedy centre of the distribution; not a sampling accident.
 
-Ships with a four-preset pattern library (Not X but Y, Hyland hedging triplets, tricolon, modal stacking) and a **thematic suite library** that makes Phase A a research instrument rather than a demo. Ten suites on two axes: four *purpose* suites (**neutral baseline**, **invitation**, **resistance**, **adversarial**) that test whether the pattern appears unprovoked, under favourable framing, under explicit suppression, or when prompts merely surface the pattern's lexical cues; and six *domain* suites (politics, technology, science, ethics, pedagogy, everyday) for topic sensitivity. Suites are composable — tick any combination, and the heatmap stratifies results by suite while the verdict banner reports per-suite hit rates.
+Ships with a four-preset pattern library (Not X but Y, Hyland hedging triplets, tricolon, modal stacking) and a **thematic suite library** that makes Phase A a research instrument rather than a demo.
+
+#### Prompt suites
+
+Ten named prompt batteries on two composable axes. Tick any combination in the Phase A toolbar; the heatmap gains suite-coloured gutter badges and a per-suite stats tile reports hit rates per condition, so conditions read side by side.
+
+**Purpose axis** — four suites that answer "under what conditions does the pattern appear?"
+
+| Suite | Research question | Prompt style |
+|---|---|---|
+| **Baseline** | Does the pattern appear unprovoked? | Neutral prompts spread across six registers, not priming any construction. |
+| **Invitation** | What's the ceiling under favourable framing? | Prompts that genuinely invite contrast, hedging, or tricolon (e.g. "begin with *Artificial intelligence is not merely*…"). |
+| **Resistance** | What's the floor under explicit suppression? | Prompts that instruct the model to be direct and avoid the construction. Feeds into Phase D. |
+| **Adversarial** | Does the pattern fire on lexical cues rather than rhetorical need? | Prompts that surface the pattern's trigger words (*not*, *but*, *merely*, *only*) without inviting the construction. |
+
+**Domain axis** — six suites for cross-topic robustness.
+
+| Suite | Covers |
+|---|---|
+| **Politics** | Democracy, representation, diplomacy, parliamentary process. |
+| **Technology** | LLMs, software engineering, vector search, keynote rhetoric. |
+| **Science** | Physics, genomics, climate, statistics communication. |
+| **Ethics** | Climate duties, clinical decisions, consequentialist / deontological reasoning. |
+| **Pedagogy** | Teaching and learning, assessment, school policy, lecture openings. |
+| **Everyday** | Ordinary register: cafés, neighbours, toasts, small towns. |
+
+Suites are additive (union of prompts, deduplicated), and every prompt still carries its register tag so the existing by-register breakdown continues to work orthogonally. Add or replace suites by editing [`src/lib/grammar/prompt-suite.ts`](src/lib/grammar/prompt-suite.ts).
 
 ## Compare Mode (Dual Panel)
 
