@@ -17,7 +17,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.14.1
+**Version:** 2.15.0
 **Date:** 24 April 2026
 **Licence:** MIT
 
@@ -62,6 +62,7 @@ LLMbench is organised as a three-tier tab navigation: one **Compare** mode for c
 | Analyse | **Token Probabilities** | Deep single-response logprob analysis | Where was the model uncertain? |
 | Analyse | **Cross-Model Divergence** | Quantitative comparison of two outputs | What do the numbers say about difference? |
 | Investigate | **Grammar Probe** | Pattern-specific investigation of rhetorical constructions (Not X but Y, hedging, tricolon, modal stacking) | Does the model produce this construction, and why? |
+| Investigate | **Sampling Probe** | Autoregressive generation as data — per-token top-K logprobs, counterfactual branching, A/B divergence | How does the sampler arrive at the sequence, step by step? |
 
 All modes work with a single model (Panel A only) or two models (A + B), with streaming results and a collapsible Deep Dive for each.
 
@@ -108,6 +109,19 @@ Ten named prompt batteries on two composable axes. Tick any combination in the P
 | **Everyday** | Ordinary register: cafés, neighbours, toasts, small towns. |
 
 Suites are additive (union of prompts, deduplicated), and every prompt still carries its register tag so the existing by-register breakdown continues to work orthogonally. Add or replace suites by editing [`src/lib/grammar/prompt-suite.ts`](src/lib/grammar/prompt-suite.ts).
+
+### Sampling Probe (Investigate tier, new in v2.15.0)
+
+Where Grammar Probe asks *how often does this rhetorical shape appear across a corpus?*, **Sampling Probe** asks *how does the sampler arrive at any shape at all, step by step?* Autoregressive generation is unfolded into a data structure: one HTTP call per sampled token, each step stores its full top-K distribution, and the browser holds the sampler state machine so every knob is instant. Requires a logprobs-capable slot (Gemini 2.0, OpenAI, OpenRouter, or Hugging Face).
+
+- **Per-step data.** Top-K bar chart (K up to 50) showing real next-token probabilities, re-softmaxed client-side under your current **T** and **top-p** so sliders update the chart without a new API call. Each row shows rank, token, softmax probability (bar), and raw logprob. The chosen token is highlighted in burgundy.
+- **Generation strip.** The whole generated sequence rendered inline, each token shaded by its **surprisal** (−log₂p): green for low-surprisal (expected) tokens, amber for moderate, burgundy for high-surprisal (rare) choices. Click any token to rewind the inspector to that step.
+- **Trajectory chart.** Per-step entropy H (green line, bits over top-K) and chosen-token surprisal (burgundy bars). Click the bars to jump to any step. A summary row reports total surprisal and branch perplexity.
+- **Counterfactual branching.** Click any non-chosen token in the top-K inspector to **fork** a new branch from that step. Branches are tracked as a tree — switch between branches from the Branches row, and each branch's transcript and trajectory are independent. Because raw logprobs are cached, forking re-uses the existing distribution — no new API call until you advance.
+- **Dual-panel A/B lockstep.** Both slots generate against the same prefix. Top-K bar charts render side by side; the inspector footer reports **Jaccard(A,B)** (overlap of top-K token sets) and **KL(A‖B)** (bits). The Deep Dive shows a per-step divergence table with ● markers on steps where the two models chose different tokens.
+- **Exports.** A one-click **Bundle** button writes the full trace as `vector-lab.sampling-trace.v1` JSON (prompt, params, every branch's every step with raw top-K, provider/model, slot metadata). The Deep Dive ships a per-branch **Trajectory CSV** (step / chosen token / entropy / surprisal / rank / softmax p). Bundle files are fully replayable — re-softmax, branch comparisons, and new metrics can all be computed downstream without re-calling the provider.
+
+Research uses. Where does a chosen token sit in the distribution (rank histogram)? How does entropy rise and fall across a sentence (boilerplate → novelty → boilerplate)? Which sequence positions are high-stakes sampling decisions vs. near-deterministic transitions? When two models disagree, is it an early fork that propagates, or parallel choices that converge? Sampling Probe treats each of these as measurable.
 
 ## Compare Mode (Dual Panel)
 

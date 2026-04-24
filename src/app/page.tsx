@@ -13,6 +13,7 @@ import SensitivityMode from "@/components/operations/SensitivityMode";
 import LogprobsMode from "@/components/operations/LogprobsMode";
 import DivergenceMode from "@/components/operations/DivergenceMode";
 import GrammarMode from "@/components/operations/GrammarMode";
+import SamplingMode from "@/components/operations/SamplingMode";
 import { APP_VERSION } from "@/lib/version";
 import { Clippy } from "@/components/easter-eggs/Clippy";
 import { KillerRabbit } from "@/components/viz/KillerRabbit";
@@ -26,6 +27,7 @@ const MODE_LABELS: Record<TabId, string> = {
   logprobs: "Token Probabilities",
   divergence: "Cross-Model Divergence",
   grammar: "Grammar Probe",
+  sampling: "Sampling Probe",
 };
 
 export default function Home() {
@@ -182,6 +184,7 @@ export default function Home() {
         {activeTab === "logprobs" && <LogprobsMode isDark={isDark} pendingPrompt={pendingPrompt} />}
         {activeTab === "divergence" && <DivergenceMode isDark={isDark} pendingPrompt={pendingPrompt} />}
         {activeTab === "grammar" && <GrammarMode isDark={isDark} pendingPrompt={pendingPrompt} />}
+        {activeTab === "sampling" && <SamplingMode isDark={isDark} pendingPrompt={pendingPrompt} />}
       </div>
 
       {/* Status bar */}
@@ -360,6 +363,33 @@ export default function Home() {
                 <p className="text-muted-foreground">
                   <strong className="text-foreground">Coming in Phase C.</strong> Phase C will harvest top-20 Ys at the &ldquo;but a &rdquo; cut-point across a wider scaffold set and hand off to Manifold Atlas using the same Grammar Probe Bundle format introduced in Phase B.
                 </p>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-1">Investigate: Sampling Probe</h3>
+                <p className="text-muted-foreground mb-2">
+                  Autoregressive generation as data. One HTTP call per sampled token; each step&rsquo;s full top-K distribution is stored client-side so every knob is instant. Requires a logprobs-capable slot (Gemini 2.0, OpenAI, OpenRouter, or Hugging Face).
+                </p>
+                <div className="space-y-1.5 text-muted-foreground pl-3 border-l-2 border-parchment mb-2">
+                  <p>
+                    <strong className="text-foreground">Per-step top-K.</strong> Bar chart of the real next-token distribution, re-softmaxed client-side under your current <strong className="text-foreground">T</strong> and <strong className="text-foreground">top-p</strong> so the chart updates without a new API call. Rows show rank, token, softmax probability, raw logprob. Chosen token highlighted in burgundy.
+                  </p>
+                  <p>
+                    <strong className="text-foreground">Generation strip.</strong> The sequence rendered inline, each token shaded by <strong className="text-foreground">surprisal</strong> (&minus;log&#8322;p): green = expected, burgundy = rare. Click a token to rewind the inspector.
+                  </p>
+                  <p>
+                    <strong className="text-foreground">Trajectory.</strong> Per-step entropy H (line, bits) and chosen-token surprisal (bars). Click any bar to jump to that step. Branch summary shows total surprisal and perplexity.
+                  </p>
+                  <p>
+                    <strong className="text-foreground">Counterfactual branches.</strong> Click any non-chosen top-K token to fork a new branch from that step. Raw logprobs are cached, so forking reuses the existing distribution and consumes no new API call until you advance.
+                  </p>
+                  <p>
+                    <strong className="text-foreground">Dual-panel A/B.</strong> Both slots predict the next token against the same prefix; <strong className="text-foreground">Jaccard(A, B)</strong> and <strong className="text-foreground">KL(A&#8214;B)</strong> reported per step; the Deep Dive flags steps where the two models chose different tokens.
+                  </p>
+                  <p>
+                    <strong className="text-foreground">Export.</strong> <strong className="text-foreground">Bundle</strong> writes the full trace as <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">vector-lab.sampling-trace.v1</code> JSON (prompt, params, every branch&rsquo;s every step with raw top-K). Trajectory CSV per branch.
+                  </p>
+                </div>
               </div>
 
               <div>

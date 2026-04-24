@@ -7,7 +7,8 @@ export type TabId =
   | "temperature"
   | "logprobs"
   | "divergence"
-  | "grammar";
+  | "grammar"
+  | "sampling";
 
 export type GroupId = "compare" | "analyse" | "investigate";
 

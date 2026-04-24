@@ -36,6 +36,7 @@ const GROUPS: TabGroup[] = [
     icon: Microscope,
     tabs: [
       { id: "grammar", label: "Grammar", description: "Probe generation behaviour for rhetorical patterns (Not X but Y, hedging, parallelism…)" },
+      { id: "sampling", label: "Sampling", description: "Autoregressive generation as data — real logprobs, counterfactual forks, A/B divergence" },
     ],
   },
 ];

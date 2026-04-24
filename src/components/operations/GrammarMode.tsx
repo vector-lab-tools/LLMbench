@@ -1371,10 +1371,17 @@ function ContinuationCard({
 }
 
 // ---- PatternPicker (shared, multi-select) ---------------------------------
-// One chip per DEFAULT_PATTERNS entry. Click toggles selection. Clicking the
-// small "primary" badge (or alt/opt-clicking the chip) promotes a pattern to
-// primary — the one Phase B / Phase C single-pattern views operate on. The
-// primary is always guaranteed to be in the selection set.
+// Two explicit rows, because the picker expresses two independent decisions:
+//
+//   (1) Which constructions to count in every run (multi-select checkboxes).
+//       Feeds Phase A hit rates, Phase E sweeps, the Deep Dive matrices.
+//   (2) Which single construction is "primary" (radio select, chosen from the
+//       currently-selected set). Feeds Phase B scaffolds / continuations.
+//
+// Separating them kills the earlier ambiguity where one ★ icon did different
+// things depending on whether the chip was selected or not. In
+// `allowSingleSelectOnly` mode (Phase B standalone view) row (1) is hidden and
+// the primary picker acts as a plain radio row.
 function PatternPicker({
   selectedIds,
   primaryId,
@@ -1389,70 +1396,134 @@ function PatternPicker({
   allowSingleSelectOnly?: boolean;
 }) {
   const primary = DEFAULT_PATTERNS.find(p => p.id === primaryId) || DEFAULT_PATTERNS[0];
+  const selectedPatterns = DEFAULT_PATTERNS.filter(p => selectedIds.has(p.id));
+
   return (
-    <div className="mb-3">
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-1.5 flex items-center gap-2">
-        <span>Patterns {allowSingleSelectOnly ? "(pick one)" : `(${selectedIds.size} selected)`}</span>
-        {!allowSingleSelectOnly && (
-          <span className="text-muted-foreground/60 normal-case tracking-normal">
-            &middot; click a chip to toggle; <span className="text-burgundy">★</span> = primary (used by Phase B)
-          </span>
-        )}
-      </div>
-      <div className="flex flex-wrap gap-1.5 mb-2">
-        {DEFAULT_PATTERNS.map(p => {
-          const isSelected = selectedIds.has(p.id);
-          const isPrimary = p.id === primaryId;
-          return (
-            <div key={p.id} className="inline-flex items-stretch">
+    <div className="mb-3 space-y-2">
+      {/* Row 1: multi-select — what to count. Hidden in single-select mode. */}
+      {!allowSingleSelectOnly && (
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
+              Count these constructions
+              <span className="ml-2 text-muted-foreground/60 normal-case tracking-normal font-normal">
+                {selectedIds.size} of {DEFAULT_PATTERNS.length} selected &middot; applied to every run
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
               <button
-                onClick={(e) => {
-                  if (allowSingleSelectOnly) {
-                    onPromote(p.id);
-                  } else if (e.altKey || e.metaKey) {
-                    onPromote(p.id);
-                  } else {
-                    onToggle(p.id);
-                  }
-                }}
-                onContextMenu={(e) => { e.preventDefault(); onPromote(p.id); }}
-                className={`px-2.5 py-1 text-caption rounded-l-sm ${allowSingleSelectOnly ? "rounded-r-sm" : ""} border transition-colors ${
+                type="button"
+                onClick={() => DEFAULT_PATTERNS.forEach(p => { if (!selectedIds.has(p.id)) onToggle(p.id); })}
+                className="text-[10px] text-muted-foreground hover:text-burgundy px-1.5 py-0.5"
+              >
+                Select all
+              </button>
+              <span className="text-muted-foreground/30">·</span>
+              <button
+                type="button"
+                onClick={() => DEFAULT_PATTERNS.forEach(p => {
+                  // Never deselect the primary — selection must never drop below one.
+                  if (selectedIds.has(p.id) && p.id !== primaryId) onToggle(p.id);
+                })}
+                className="text-[10px] text-muted-foreground hover:text-burgundy px-1.5 py-0.5"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {DEFAULT_PATTERNS.map(p => {
+              const isSelected = selectedIds.has(p.id);
+              const isPrimary = p.id === primaryId;
+              // Prevent deselecting the primary — instead of silently failing,
+              // the button is greyed; user must promote a different pattern first.
+              const lockedByPrimary = isPrimary;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => { if (!lockedByPrimary) onToggle(p.id); }}
+                  disabled={lockedByPrimary}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 text-caption rounded-sm border transition-colors ${
+                    isSelected
+                      ? "border-burgundy bg-burgundy/10 text-burgundy"
+                      : "border-parchment bg-card text-muted-foreground hover:text-foreground hover:bg-cream/50"
+                  } ${lockedByPrimary ? "cursor-default opacity-90" : "cursor-pointer"}`}
+                  title={lockedByPrimary
+                    ? `${p.description}\n\nThis is the primary construction — promote another before deselecting it.`
+                    : p.description}
+                >
+                  <span
+                    aria-hidden
+                    className={`inline-flex items-center justify-center w-3 h-3 rounded-sm border ${
+                      isSelected ? "border-burgundy bg-burgundy text-white" : "border-muted-foreground/40 bg-transparent"
+                    }`}
+                  >
+                    {isSelected && (
+                      <svg viewBox="0 0 12 12" className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={2}>
+                        <path d="M2 6l3 3 5-6" />
+                      </svg>
+                    )}
+                  </span>
+                  <span>{p.shortLabel}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Row 2: primary radio — which one Phase B scaffolds run against. */}
+      <div>
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold mb-1.5">
+          {allowSingleSelectOnly
+            ? "Choose construction"
+            : "Primary construction"}
+          <span className="ml-2 text-muted-foreground/60 normal-case tracking-normal font-normal">
+            {allowSingleSelectOnly
+              ? "Phase B scaffolds will probe this one"
+              : "used by Phase B scaffolds; must be one of the selected constructions above"}
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Primary construction">
+          {(allowSingleSelectOnly ? DEFAULT_PATTERNS : selectedPatterns).map(p => {
+            const isPrimary = p.id === primaryId;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                role="radio"
+                aria-checked={isPrimary}
+                onClick={() => onPromote(p.id)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 text-caption rounded-sm border transition-colors ${
                   isPrimary
                     ? "border-burgundy bg-burgundy text-white"
-                    : isSelected
-                    ? "border-burgundy bg-burgundy/15 text-burgundy"
                     : "border-parchment bg-card text-muted-foreground hover:text-foreground hover:bg-cream/50"
                 }`}
-                title={`${p.description}\n\nClick: toggle. Alt/right-click: promote to primary.`}
+                title={p.description}
               >
-                {isPrimary && <span className="mr-1">★</span>}
-                {p.shortLabel}
+                <span
+                  aria-hidden
+                  className={`inline-flex items-center justify-center w-3 h-3 rounded-full border ${
+                    isPrimary ? "border-white bg-white" : "border-muted-foreground/40 bg-transparent"
+                  }`}
+                >
+                  {isPrimary && <span className="w-1.5 h-1.5 rounded-full bg-burgundy" />}
+                </span>
+                <span>{p.shortLabel}</span>
               </button>
-              {!allowSingleSelectOnly && !isPrimary && isSelected && (
-                <button
-                  onClick={() => onPromote(p.id)}
-                  className="px-1.5 py-1 text-caption rounded-r-sm border border-l-0 border-burgundy bg-burgundy/5 text-burgundy hover:bg-burgundy/15"
-                  title="Promote to primary"
-                  aria-label="Promote to primary"
-                >
-                  ★
-                </button>
-              )}
-              {!allowSingleSelectOnly && !isSelected && (
-                <button
-                  onClick={() => onPromote(p.id)}
-                  className="px-1.5 py-1 text-caption rounded-r-sm border border-l-0 border-parchment bg-card text-muted-foreground/60 hover:text-burgundy hover:bg-cream/50"
-                  title="Add as primary"
-                  aria-label="Add as primary"
-                >
-                  ★
-                </button>
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
+          {!allowSingleSelectOnly && selectedPatterns.length === 0 && (
+            <span className="text-caption text-muted-foreground italic px-1">
+              Select at least one construction above.
+            </span>
+          )}
+        </div>
       </div>
-      <div className="text-caption text-muted-foreground leading-relaxed">
+
+      {/* Description of the current primary */}
+      <div className="text-caption text-muted-foreground leading-relaxed pt-1 border-t border-parchment/40">
         <strong className="text-foreground">{primary.label}.</strong> {primary.description}
       </div>
     </div>
