@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { X, Eye, EyeOff, Moon, Sun } from "lucide-react";
+import { X, Eye, EyeOff, Moon, Sun, ChevronDown, ChevronRight, ExternalLink, HelpCircle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import {
@@ -86,12 +86,25 @@ function SlotEditor({
         <select
           value={slot.provider}
           onChange={(e) => {
-            const provider = e.target.value as AIProvider;
-            const config = getProviderConfigWithModels(provider);
+            const newProvider = e.target.value as AIProvider;
+            const config = getProviderConfigWithModels(newProvider);
+            // Persist API keys per provider in localStorage so switching
+            // providers doesn't wipe the user's key. Stash the current
+            // slot's key under its current provider, then restore (or
+            // leave blank for) the new provider.
+            try {
+              if (slot.apiKey) {
+                localStorage.setItem(`llmbench-apikey-${slot.provider}`, slot.apiKey);
+              }
+            } catch { /* localStorage may be unavailable */ }
+            let restored = "";
+            try {
+              restored = localStorage.getItem(`llmbench-apikey-${newProvider}`) ?? "";
+            } catch { /* ignore */ }
             onUpdate({
-              provider,
+              provider: newProvider,
               model: config.models[0]?.id || "custom",
-              apiKey: "",
+              apiKey: restored,
               baseUrl: config.defaultBaseUrl || "",
               customModelId: "",
             });
@@ -167,7 +180,16 @@ function SlotEditor({
             <input
               type={showKey ? "text" : "password"}
               value={slot.apiKey}
-              onChange={(e) => onUpdate({ apiKey: e.target.value })}
+              onChange={(e) => {
+                const v = e.target.value;
+                onUpdate({ apiKey: v });
+                // Mirror the key into the per-provider store so a later
+                // provider switch restores the same value.
+                try {
+                  if (v) localStorage.setItem(`llmbench-apikey-${slot.provider}`, v);
+                  else localStorage.removeItem(`llmbench-apikey-${slot.provider}`);
+                } catch { /* ignore */ }
+              }}
               placeholder={`Enter ${providerConfig.name} API key`}
               className="input-editorial w-full pr-10"
             />
@@ -311,6 +333,14 @@ export default function ProviderSettings({
           </div>
         </div>
 
+        {/* Onboarding guide — collapsible, helps first-time users get an
+            API key from any of the supported providers. Especially useful
+            for Hugging Face, which has free-tier model access but a less
+            obvious key-creation flow than OpenAI / Anthropic. */}
+        <div className="px-6 pb-6">
+          <OnboardingGuide />
+        </div>
+
         {/* Footer */}
         <div className="px-6 py-3 border-t border-border flex items-center justify-between">
           <span className="text-caption text-muted-foreground">
@@ -328,6 +358,186 @@ export default function ProviderSettings({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------- Onboarding guide ------------------------------------------------
+//
+// Per-provider, expandable instructions for getting an API key. The intent is
+// that a first-time user landing on Settings can find the relevant flow
+// without leaving the app, and that the Hugging Face path — which trips
+// people up because their key UI is buried — is just as discoverable as
+// OpenAI's. Each entry covers: where to sign up, where the key page lives,
+// what the key looks like, and any free-tier caveats. Links open in a new
+// tab.
+
+interface ProviderGuideEntry {
+  id: AIProvider;
+  name: string;
+  signupUrl: string;
+  keyUrl: string;
+  keyPrefix: string;
+  freeTier: string;
+  steps: string[];
+  notes?: string;
+}
+
+const PROVIDER_GUIDES: ProviderGuideEntry[] = [
+  {
+    id: "huggingface",
+    name: "Hugging Face",
+    signupUrl: "https://huggingface.co/join",
+    keyUrl: "https://huggingface.co/settings/tokens",
+    keyPrefix: "hf_…",
+    freeTier:
+      "Free Inference API access to many open-weight chat models. Rate-limited; needs a paid Pro / dedicated endpoint for heavy use.",
+    steps: [
+      "Sign up at huggingface.co (email or GitHub).",
+      "Open Settings → Access Tokens (the link below).",
+      "Click \"+ Create new token\". Choose Token type \"Read\". A name like \"llmbench\" is fine.",
+      "Copy the token (starts with hf_). Paste into the API Key field above.",
+      "In the Model dropdown choose any HF model — Llama 3 / Qwen / Mistral all work. Add a custom model ID if you need a specific repo.",
+    ],
+    notes:
+      "Logprobs work on the Hugging Face router for OpenAI-compatible chat models. If you see empty distributions, try a different model — not every HF-routed model exposes logprobs.",
+  },
+  {
+    id: "openai",
+    name: "OpenAI",
+    signupUrl: "https://platform.openai.com/signup",
+    keyUrl: "https://platform.openai.com/api-keys",
+    keyPrefix: "sk-…",
+    freeTier:
+      "No free tier. Pay-as-you-go after a small initial credit if you add a card.",
+    steps: [
+      "Sign up at platform.openai.com.",
+      "Add a payment method under Billing.",
+      "Open API Keys (the link below) and click \"Create new secret key\". Copy it once — it cannot be shown again.",
+      "Paste into the API Key field above. Pick a model (gpt-4o or gpt-4o-mini for logprobs work).",
+    ],
+    notes:
+      "The cleanest provider for Sampling Probe — direct API returns full top_logprobs without proxy stripping.",
+  },
+  {
+    id: "anthropic",
+    name: "Anthropic (Claude)",
+    signupUrl: "https://console.anthropic.com/",
+    keyUrl: "https://console.anthropic.com/settings/keys",
+    keyPrefix: "sk-ant-…",
+    freeTier: "Initial free credit on signup; pay-as-you-go after.",
+    steps: [
+      "Sign up at console.anthropic.com.",
+      "Open Settings → API Keys (link below) and click \"Create Key\".",
+      "Copy the key (starts with sk-ant-). Paste above.",
+    ],
+    notes:
+      "Claude does not expose logprobs through the public API, so Anthropic slots cannot be used with Sampling Probe or Grammar Probe Phase B/C. Compare and Analyse modes work fully.",
+  },
+  {
+    id: "google",
+    name: "Google (Gemini)",
+    signupUrl: "https://aistudio.google.com/",
+    keyUrl: "https://aistudio.google.com/app/apikey",
+    keyPrefix: "AIza…",
+    freeTier:
+      "Generous free tier on Gemini 2.0 Flash and 2.5 series via AI Studio.",
+    steps: [
+      "Open Google AI Studio (aistudio.google.com) and sign in with a Google account.",
+      "Click \"Get API key\" or visit the link below.",
+      "Create an API key in a new or existing Google Cloud project.",
+      "Copy and paste above. Pick gemini-2.0-flash if you want logprobs (2.5-series does not return them).",
+    ],
+  },
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    signupUrl: "https://openrouter.ai/",
+    keyUrl: "https://openrouter.ai/keys",
+    keyPrefix: "sk-or-…",
+    freeTier: "Pay-as-you-go across many models with one key. Some models have free tiers.",
+    steps: [
+      "Sign up at openrouter.ai.",
+      "Add credit (a few dollars covers a lot of LLMbench usage).",
+      "Open Keys (link below), create a key, copy it.",
+      "Paste above. The Model dropdown lists OpenRouter-compatible models; you can also use a custom model ID.",
+    ],
+    notes:
+      "Logprobs are reliably available on openai/* routes (gpt-4o, gpt-4o-mini). Other routes may return empty distributions; LLMbench will surface a clear error if so.",
+  },
+];
+
+function OnboardingGuide() {
+  const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState<AIProvider | null>(null);
+
+  return (
+    <div className="border border-parchment/60 rounded-sm bg-cream/30 dark:bg-burgundy/10">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-caption font-semibold text-foreground"
+      >
+        {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+        <HelpCircle className="w-3.5 h-3.5 text-burgundy" />
+        <span>Getting started — how to obtain an API key</span>
+        <span className="ml-auto text-[10px] text-muted-foreground/70 font-normal">
+          {open ? "" : "click to expand"}
+        </span>
+      </button>
+      {open && (
+        <div className="px-3 pb-3 space-y-2 text-caption">
+          <p className="text-muted-foreground leading-relaxed">
+            LLMbench runs entirely in your browser; API keys are stored locally and never sent anywhere except directly to the model provider. Pick a provider below for step-by-step setup. <strong className="text-foreground">Hugging Face</strong> is the easiest free-tier option for getting started.
+          </p>
+          <div className="space-y-1">
+            {PROVIDER_GUIDES.map(g => {
+              const isOpen = expanded === g.id;
+              return (
+                <div key={g.id} className="border border-parchment/60 rounded-sm bg-card/40">
+                  <button
+                    type="button"
+                    onClick={() => setExpanded(isOpen ? null : g.id)}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 text-left"
+                  >
+                    {isOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                    <span className="font-semibold text-foreground">{g.name}</span>
+                    <span className="text-[10px] font-mono text-muted-foreground">{g.keyPrefix}</span>
+                    <span className="ml-auto text-[10px] text-muted-foreground/70 truncate">{g.freeTier}</span>
+                  </button>
+                  {isOpen && (
+                    <div className="px-3 pb-3 space-y-2">
+                      <ol className="list-decimal list-outside pl-5 space-y-1 text-muted-foreground">
+                        {g.steps.map((s, i) => (
+                          <li key={i}>{s}</li>
+                        ))}
+                      </ol>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <a href={g.signupUrl} target="_blank" rel="noopener noreferrer"
+                          className="btn-editorial-ghost flex items-center gap-1 text-[10px] px-2 py-0.5">
+                          <ExternalLink className="w-3 h-3" /> Sign up
+                        </a>
+                        <a href={g.keyUrl} target="_blank" rel="noopener noreferrer"
+                          className="btn-editorial-ghost flex items-center gap-1 text-[10px] px-2 py-0.5">
+                          <ExternalLink className="w-3 h-3" /> Get key
+                        </a>
+                      </div>
+                      {g.notes && (
+                        <p className="text-[10px] text-muted-foreground italic border-l-2 border-parchment/60 pl-2">
+                          {g.notes}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-muted-foreground/70 italic pt-1">
+            Switching providers no longer wipes your other keys — LLMbench remembers each provider&apos;s key per browser. Keys you&apos;ve previously entered come back when you switch back to that provider.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
