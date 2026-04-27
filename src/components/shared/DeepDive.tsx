@@ -34,7 +34,12 @@ export function DeepDive({ label = "Deep Dive", summary, children, defaultOpen =
         )}
       </button>
       {open && (
-        <div className="px-5 pb-5 space-y-4 pt-1">
+        // `deep-dive-compact` is a global CSS class (defined in
+        // globals.css) that shrinks the text size of every readable
+        // element inside the dive. Applied here at the shell so every
+        // Deep Dive across the app — Grammar A/C/D/E, Sampling Probe,
+        // Compare / Analyse modes — picks it up automatically.
+        <div className="deep-dive-compact px-5 pb-5 space-y-4 pt-1">
           {children}
         </div>
       )}
