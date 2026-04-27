@@ -309,6 +309,14 @@ export default function ProviderSettings({
           </div>
         </div>
 
+        {/* Onboarding guide — first thing the user sees. Collapsible so it
+            doesn't push the slot editors below the fold for returning users
+            who already have keys, but defaults to expanded for first-timers
+            (i.e. when neither slot has an apiKey yet). */}
+        <div className="px-6 pt-6">
+          <OnboardingGuide defaultOpen={!slots.A.apiKey && !slots.B.apiKey} />
+        </div>
+
         {/* Body: two slot editors side by side */}
         <div className="p-6 flex flex-col md:flex-row gap-6">
           <div className="flex-1">
@@ -331,14 +339,6 @@ export default function ProviderSettings({
               onUpdate={(updates) => updateSlot("B", updates)}
             />
           </div>
-        </div>
-
-        {/* Onboarding guide — collapsible, helps first-time users get an
-            API key from any of the supported providers. Especially useful
-            for Hugging Face, which has free-tier model access but a less
-            obvious key-creation flow than OpenAI / Anthropic. */}
-        <div className="px-6 pb-6">
-          <OnboardingGuide />
         </div>
 
         {/* Footer */}
@@ -467,8 +467,8 @@ const PROVIDER_GUIDES: ProviderGuideEntry[] = [
   },
 ];
 
-function OnboardingGuide() {
-  const [open, setOpen] = useState(false);
+function OnboardingGuide({ defaultOpen = false }: { defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
   const [expanded, setExpanded] = useState<AIProvider | null>(null);
 
   return (
