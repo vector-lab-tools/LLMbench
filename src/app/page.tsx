@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Settings, HelpCircle, Info, X, GraduationCap } from "lucide-react";
+import { Settings, HelpCircle, Info, X, GraduationCap, ChevronUp, ChevronDown } from "lucide-react";
 import Image from "next/image";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { TabNav, type TabId } from "@/components/layout/TabNav";
@@ -38,6 +38,31 @@ export default function Home() {
   const [showAbout, setShowAbout] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [pendingPrompt, setPendingPrompt] = useState<string | undefined>();
+  // Diffusion-Atlas-style "more screen" toggle: collapses the top header
+  // bar and the TabNav, leaving the active mode flush with the top of the
+  // viewport and the bottom status bar still pinned. Persisted in
+  // localStorage so the preference sticks across sessions. Toggle lives
+  // in the bottom status bar (always visible).
+  // Lazy initializer reads from localStorage on first client render — avoids
+  // a flash where the chrome is briefly visible before the effect kicks in
+  // and avoids the cascading-render lint that synchronous-setState-in-
+  // useEffect would trip.
+  const [chromeCollapsed, setChromeCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      const stored = localStorage.getItem("llmbench-chrome-collapsed");
+      return stored !== null ? JSON.parse(stored) : false;
+    } catch {
+      return false;
+    }
+  });
+  const toggleChrome = useCallback(() => {
+    setChromeCollapsed(prev => {
+      const next = !prev;
+      try { localStorage.setItem("llmbench-chrome-collapsed", JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
   const { setShowSettings, noMarkdown, setNoMarkdown } = useProviderSettings();
 
   // Easter egg state
@@ -91,7 +116,11 @@ export default function Home() {
 
   return (
     <div className="flex flex-col h-screen bg-background">
-      {/* Header */}
+      {/* Header — collapsible. When the user clicks the chevron in the
+          status bar, both the header and the TabNav fold away to give
+          the active mode the full viewport, leaving only the status bar
+          visible (with a "show toolbars" affordance). */}
+      {!chromeCollapsed && (
       <header className="px-4 py-2 border-b border-border bg-cream/30 flex items-center gap-3">
         {/* Vector Lab mark */}
         <a
@@ -171,9 +200,12 @@ export default function Home() {
           <span>Settings</span>
         </button>
       </header>
+      )}
 
-      {/* Tab navigation */}
-      <TabNav activeTab={activeTab} onTabChange={setActiveTab} />
+      {/* Tab navigation — also collapsed by the chrome toggle */}
+      {!chromeCollapsed && (
+        <TabNav activeTab={activeTab} onTabChange={setActiveTab} />
+      )}
 
       {/* Mode content */}
       <div className="flex-1 flex flex-col min-h-0">
@@ -187,9 +219,32 @@ export default function Home() {
         {activeTab === "sampling" && <SamplingMode isDark={isDark} pendingPrompt={pendingPrompt} />}
       </div>
 
-      {/* Status bar */}
-      <footer className="px-6 py-1.5 border-t border-border bg-card text-caption text-muted-foreground flex items-center justify-between">
+      {/* Status bar — always pinned at the bottom of the viewport. When
+          the top chrome is collapsed, this is the only persistent UI;
+          the chevron on the right toggles the chrome back. When the top
+          chrome is visible, the chevron points up to indicate "you can
+          fold this all away" — Diffusion-Atlas-style real-estate gain. */}
+      <footer className="px-6 py-1.5 border-t border-border bg-card text-caption text-muted-foreground flex items-center gap-3">
+        <button
+          type="button"
+          onClick={toggleChrome}
+          className="btn-editorial-ghost px-1.5 py-0.5 flex items-center gap-1 text-[10px]"
+          title={chromeCollapsed
+            ? "Show the top toolbar and tab navigation"
+            : "Hide the top toolbar and tab navigation for more screen space"}
+          aria-label={chromeCollapsed ? "Expand top toolbars" : "Collapse top toolbars"}
+        >
+          {chromeCollapsed ? (
+            <>
+              <ChevronDown className="w-3 h-3" />
+              <span>Show toolbars</span>
+            </>
+          ) : (
+            <ChevronUp className="w-3 h-3" />
+          )}
+        </button>
         <span>LLMbench v{APP_VERSION}</span>
+        <div className="flex-1" />
         <a
           href="https://vector-lab-tools.github.io"
           target="_blank"
