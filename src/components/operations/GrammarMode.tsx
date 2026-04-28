@@ -453,13 +453,57 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     // can use it directly.
     const dominantPhase = phases.includes("B") ? "B" : phases[0] ?? null;
 
+    // Extract X term from a scaffold using the pattern's xExtractor regex.
+    // Used to build the canonical `probes[].x` field per the v1 spec
+    // (vector-lab-design/GRAMMAR-PROBE-BUNDLE.md). Falls back to empty
+    // string on any error or no match — Atlas treats empty x defensively.
+    const extractXFromScaffold = (scaffold: string): string => {
+      if (!pattern.xExtractor) return "";
+      try {
+        const re = new RegExp(pattern.xExtractor);
+        const m = scaffold.match(re);
+        return m?.[1]?.trim() ?? "";
+      } catch {
+        return "";
+      }
+    };
+
+    // Canonical `probes[]` per Grammar Probe Bundle spec v1. Atlas's
+    // importer is shaped to this exact contract: a flat array of probes,
+    // each carrying its scaffold, the extracted X term, the chosen first
+    // token, and a ranked ys[] of top-K alternatives. We derive from
+    // continuationResults (Phase B) filtered to Panel A — the producing
+    // slot is single-model in spec terms, so we report Panel A's data
+    // and leave Panel B's continuation entries as an LLMbench-side
+    // extension (in `continuationProbes` below) for tools that can use
+    // the dual-panel data.
+    const canonicalProbes = continuationResults
+      .filter(c => c.panel === "A" && !c.error)
+      .map(c => ({
+        scaffoldId: c.scaffoldId,
+        scaffold: c.scaffold,
+        x: extractXFromScaffold(c.scaffold),
+        chosen: c.chosen,
+        ys: (c.distribution ?? []).map((d, i) => ({
+          token: d.token,
+          logprob: d.logprob,
+          rank: i + 1,
+        })),
+        provenance: c.provenance
+          ? { responseTimeMs: c.provenance.responseTimeMs }
+          : undefined,
+      }));
+
     const bundle = {
       format: "vector-lab.grammar-probe.v1",
       createdAt: now.toISOString(),
       source: {
         tool: "LLMbench",
-        version: "2.15.22",
+        version: "2.15.23",
+        // Spec field — singular, dominant phase (Atlas routes on this).
         phase: dominantPhase,
+        // LLMbench extension — full set when the bundle covers multiple
+        // phases. Spec consumers ignore unknown optional fields.
         phases,
       },
       pattern: {
@@ -468,6 +512,35 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
         category: pattern.category,
         note: pattern.note,
       },
+      // Canonical `model` field per spec v1 — flat single-model object
+      // describing the slot that produced `probes[]`. The producing slot
+      // for Phase B/C is Panel A; if the user runs both panels through
+      // continuation, the dual-panel data is preserved in the LLMbench
+      // extension `continuationProbes` below.
+      model: {
+        provider: slotA.provider,
+        name: slotA.customModelId || slotA.model,
+        displayName: getSlotLabel("A"),
+      },
+      // Canonical `parameters` per spec v1 — Phase B canonical values
+      // for the run that produced `probes[]`. (Phase A and Phase E
+      // sweep across multiple temperatures; the LLMbench extension
+      // `parametersAll` below carries those for tools that need the
+      // full sweep configuration.)
+      parameters: {
+        temperature: 0,
+        topK: CONTINUATION_TOP_K,
+        maxTokens: 1,
+        noMarkdown,
+      },
+      // Canonical `probes[]` per spec v1.
+      probes: canonicalProbes,
+      // ---- LLMbench extensions below ----
+      // The spec says consumers MUST ignore unknown optional fields, so
+      // the rich phase-specific data we collect (multi-pattern, dual-
+      // panel, sweep, perturbation) is preserved alongside the canonical
+      // fields. Atlas's importer reads only the canonical fields; tools
+      // that want the richer data can read these.
       selectedPatterns: selectedPatterns.map(p => ({
         id: p.id, label: p.label, category: p.category,
       })),
@@ -483,7 +556,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
           displayName: getSlotLabel("B"),
         },
       },
-      parameters: {
+      parametersAll: {
         prevalenceTemperatures: PREVALENCE_TEMPS,
         sweepTemperatures: SWEEP_TEMPS,
         continuationTopK: CONTINUATION_TOP_K,
@@ -574,7 +647,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [runs, continuationResults, sweepRuns, forcedExpansions, perturbationRuns, pattern, selectedPatterns, slots, getSlotLabel]);
+  }, [runs, continuationResults, sweepRuns, forcedExpansions, perturbationRuns, pattern, selectedPatterns, slots, getSlotLabel, noMarkdown]);
 
   // ---- Phase C: Forced continuation / Y-phrase expansion -------------------
   // For each scaffold already probed in Phase B, take the top-N highest
