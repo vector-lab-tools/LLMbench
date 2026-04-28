@@ -17,7 +17,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.15.21
+**Version:** 2.15.22
 **Date:** 24 April 2026
 **Licence:** MIT
 
@@ -48,6 +48,16 @@ A **chat model** (GPT-4o, Claude, Gemini, Llama) takes text in and produces text
 A **token probability** is a number attached to a single word or subword in a response. When a chat model generates the next token in its output, it produces a probability distribution over every possible next token, then samples from that distribution. The **logprob** is the logarithm of the chosen token's probability, and it tells you how confident the model was at that step. Low confidence is not a defect, it is a place where the model was balancing alternatives. Token probability data is only available from some providers (Google Gemini 2.0, OpenAI, Hugging Face via Fireworks or Together) and only for specific models.
 
 This matters for LLMbench because the tool offers two complementary reading surfaces. The text of a response is a hermeneutic object, readable as prose. The token probabilities are a geometric object, revealing where the model hesitated, branched, or converged. The Probs view in Compare mode and the standalone Token Probabilities mode are the two places these probabilities become visible: as heatmaps, entropy curves, pixel maps, and 3D skylines. A token-probability reading never replaces the close reading of the prose; it supplements it, showing where the surface calm hides underlying uncertainty.
+
+### Logprobs as a first-class layer (v2.15.20+)
+
+LLMbench treats token probabilities as a **central** data layer rather than a click-to-fetch overlay. Two design decisions follow from this:
+
+- **Auto-fetch by default.** When at least one active slot supports logprobs, LLMbench fetches the token probability data alongside the main generation on every submit. Toggling the **Probs** button is then a pure visual op — no extra API call, no waiting. A small indicator dot on the button shows the cache state (green = ready, amber pulse = fetching, none = not yet fetched). The behaviour is controlled by an app-wide **Auto-fetch logprobs** setting in the Settings header, on by default; power users can switch it off to revert to on-demand fetching.
+
+- **Slot-snapshot consistency.** The slot configuration used for a generation is snapshotted at submit time (`executedSlots`). All downstream views — the auto-fetch effect, the manual `Probs` button, the per-panel capability indicator, the retry button — read from this snapshot. So if you generate with Qwen, switch to GPT-4o in Settings, and then press **Probs**, the probability distribution is fetched against Qwen (the model that produced the displayed text). The compare view and the probs view always show data from the same model. To probe with a different model, re-submit; the snapshot updates.
+
+Together these mean the probs view is no longer a separate request waiting to happen; it is the second face of the response you already have. Compare and Probs always show the same text, with their data sourced from the same model snapshot. When a particular model can't return logprobs (Gemini 2.5 series, gpt-3.5-turbo, some Hugging Face routes), the empty state names the actual cause and recommends a working alternative — `gemini-2.0-flash`, `gpt-4o`/`gpt-4o-mini`, or an OpenRouter `openai/*` route — rather than implying a re-send will fix it.
 
 ## Operations at a Glance
 
