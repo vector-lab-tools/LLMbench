@@ -27,6 +27,11 @@ interface GenerateRequest {
   slotA: SlotPayload;
   slotB: SlotPayload;
   noMarkdown?: boolean;
+  // Optional: when retrying a single panel after a transient error
+  // (e.g. rate-limit on Panel B), the client passes the panel id so the
+  // route only dispatches that slot's call. Default "both" preserves
+  // existing behaviour for normal submissions.
+  panel?: "A" | "B" | "both";
 }
 
 export async function POST(request: NextRequest) {
@@ -41,7 +46,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { prompt, slotA, slotB, noMarkdown = false } = body;
+  const { prompt, slotA, slotB, noMarkdown = false, panel = "both" } = body;
 
   if (!prompt || !prompt.trim()) {
     return NextResponse.json(
@@ -81,25 +86,41 @@ export async function POST(request: NextRequest) {
 
   const now = new Date().toISOString();
 
-  // If only one is valid, still dispatch both (allSettled handles failures)
+  // When `panel` is "A" or "B", call only that slot's provider — used by
+  // the per-panel retry button to retry a single failing slot without
+  // re-running (and re-billing) the working one. "both" keeps the
+  // original fan-out behaviour for normal submissions.
+  const wantA = panel !== "B";
+  const wantB = panel !== "A";
+
   const result = await fanOutGenerate(configA, configB, {
     prompt,
     systemPromptA: buildSystemPrompt(slotA.systemPrompt || undefined, noMarkdown),
     systemPromptB: buildSystemPrompt(slotB.systemPrompt || undefined, noMarkdown),
     temperatureA: slotA.temperature,
     temperatureB: slotB.temperature,
+    skipA: !wantA,
+    skipB: !wantB,
   });
 
-  // Build response with provenance
-  const response = {
+  // Build response with provenance. Panels excluded by `panel` are
+  // omitted from the payload entirely so the client merges only the
+  // retried side back into state.
+  const response: {
+    prompt: string;
+    generatedAt: string;
+    panel: "A" | "B" | "both";
+    A?: unknown;
+    B?: unknown;
+  } = {
     prompt,
     generatedAt: now,
-    A: {
+    panel,
+  };
+  if (wantA) {
+    response.A = {
       ...("text" in result.A
-        ? {
-            text: result.A.text,
-            responseTimeMs: result.A.responseTimeMs,
-          }
+        ? { text: result.A.text, responseTimeMs: result.A.responseTimeMs }
         : { error: result.A.error }),
       provenance: {
         provider: slotA.provider,
@@ -111,13 +132,12 @@ export async function POST(request: NextRequest) {
         temperature: slotA.temperature,
         systemPrompt: slotA.systemPrompt,
       },
-    },
-    B: {
+    };
+  }
+  if (wantB) {
+    response.B = {
       ...("text" in result.B
-        ? {
-            text: result.B.text,
-            responseTimeMs: result.B.responseTimeMs,
-          }
+        ? { text: result.B.text, responseTimeMs: result.B.responseTimeMs }
         : { error: result.B.error }),
       provenance: {
         provider: slotB.provider,
@@ -129,8 +149,8 @@ export async function POST(request: NextRequest) {
         temperature: slotB.temperature,
         systemPrompt: slotB.systemPrompt,
       },
-    },
-  };
+    };
+  }
 
   return NextResponse.json(response);
 }

@@ -170,6 +170,7 @@ function AnnotatedPanelDisplay({
   logprobCapable,
   logprobError,
   onRetryLogprobs,
+  onRetryPanel,
 }: {
   panel: "A" | "B";
   result: PanelResult | null;
@@ -196,6 +197,7 @@ function AnnotatedPanelDisplay({
   logprobCapable?: boolean;
   logprobError?: string | null;
   onRetryLogprobs?: () => void;
+  onRetryPanel?: () => void;
 }) {
   const editCallbacks = useMemo(
     () => ({
@@ -307,6 +309,23 @@ function AnnotatedPanelDisplay({
           <div className="text-center text-red-500/80 max-w-md">
             <AlertCircle className="w-8 h-8 mx-auto mb-3 opacity-60" />
             <p className="text-body-sm">{errorText}</p>
+            {/* Per-panel retry. Useful when one slot returned a transient
+                error (rate limit, capability mismatch fixed in Settings)
+                and the other panel succeeded — the user can re-run just
+                this panel without losing the working one. The dispatch
+                hits /api/generate with `panel: "A"|"B"` so only the
+                failing slot's provider is re-billed. */}
+            {onRetryPanel && (
+              <button
+                type="button"
+                onClick={onRetryPanel}
+                className="btn-editorial-ghost mt-4 inline-flex items-center gap-1 text-[10px] px-2 py-1 text-foreground/80"
+                title={`Retry generation for Panel ${panel} only — does not re-run the other panel`}
+              >
+                <RotateCcw className="w-3 h-3" />
+                Retry Panel {panel}
+              </button>
+            )}
           </div>
         </div>
       ) : viewMode === "probs" && logprobTokens && logprobTokens.length > 0 ? (
@@ -355,15 +374,27 @@ function AnnotatedPanelDisplay({
               )}
             </div>
           ) : logprobCapable ? (
+            // The provider supports logprobs in general (Google / OpenAI /
+            // OpenRouter / HF) but no tokens came back. This is most often
+            // a model-level constraint: Gemini 2.5 Pro/Flash/Flash-Lite
+            // ignore the responseLogprobs flag, gpt-3.5-turbo silently
+            // returns no logprobs, some HF-routed chat models do the
+            // same. Word the empty-state honestly rather than implying a
+            // re-send will fix it.
             <div className="text-center text-muted-foreground max-w-xs">
               <AlertCircle className="w-5 h-5 mx-auto mb-2 opacity-50" />
               <p className="text-caption">
                 No token probabilities returned for Panel {panel}.
               </p>
               <p className="text-[10px] opacity-70 mt-1">
-                The model is logprob-capable, but this response came back without
-                token-level probability data. Try re-sending the prompt, or check
-                that the API key has logprobs enabled.
+                The provider exposes logprobs but this specific model did not
+                return any. Common cases: Gemini 2.5 (Pro/Flash/Flash-Lite),
+                gpt-3.5-turbo, and some HF-routed chat models do not return
+                logprobs even though their provider technically supports the
+                flag. Switch to <span className="font-mono">gemini-2.0-flash</span>,
+                <span className="font-mono"> gpt-4o</span> /
+                <span className="font-mono"> gpt-4o-mini</span>, or an
+                OpenRouter <span className="font-mono">openai/*</span> route.
               </p>
             </div>
           ) : (
@@ -445,8 +476,10 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
     resultB,
     error,
     dispatch,
+    retryPanel,
     reset,
     loadState,
+    executedSlots,
   } = usePromptDispatch();
 
   // Lifted annotation state (parent owns so we can save/load/export)
@@ -839,6 +872,16 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
     setLogprobsLoading(true);
     setLogprobErrorA(null);
     setLogprobErrorB(null);
+    // Use the slot configuration that actually produced the displayed
+    // compare text (snapshot taken at dispatch time), not the live slots.
+    // Without this lock, switching models in Settings between submit and
+    // pressing Probs would render Panel A's text from one model and the
+    // probability distribution from a different model — the bug David
+    // hit when toggling Qwen → GPT-4o between submit and probs click.
+    // Falls back to current slots only when no snapshot exists (e.g. a
+    // freshly loaded saved comparison from before this feature shipped).
+    const probSlotA = executedSlots?.A ?? slots.A;
+    const probSlotB = executedSlots?.B ?? slots.B;
     try {
       const res = await fetch("/api/analyse/logprobs", {
         method: "POST",
@@ -846,8 +889,8 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
         body: JSON.stringify({
           prompt: effectivePrompt,
           topK: 5,
-          slotA: slots.A,
-          slotB: isSlotConfigured("B") ? slots.B : null,
+          slotA: probSlotA,
+          slotB: isSlotConfigured("B") ? probSlotB : null,
           noMarkdown,
         }),
       });
@@ -885,8 +928,15 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
     if (!autoFetchLogprobs) return;
     if (loadingA || loadingB || logprobsLoading) return;
     if (!hasContent) return;
-    const aCap = isSlotConfigured("A") && isLogprobCapableProvider(slots.A.provider);
-    const bCap = isSlotConfigured("B") && isLogprobCapableProvider(slots.B.provider);
+    // Capability is checked against the slot that produced the displayed
+    // output (executedSlots), not the live slots. Prevents the case where
+    // a Qwen-generated response triggers an auto-fetch on the user's
+    // newly-selected GPT-4o slot — the probs would belong to a different
+    // model than the displayed text.
+    const probSlotA = executedSlots?.A ?? slots.A;
+    const probSlotB = executedSlots?.B ?? slots.B;
+    const aCap = isSlotConfigured("A") && isLogprobCapableProvider(probSlotA.provider);
+    const bCap = isSlotConfigured("B") && isLogprobCapableProvider(probSlotB.provider);
     if (!aCap && !bCap) return;
     if (logprobTokensA || logprobTokensB) return;
     if (logprobErrorA || logprobErrorB) return; // user saw an error; let them choose
@@ -1867,8 +1917,14 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
             "summon another model call" affordance. */}
         {(() => {
           const probsActive = viewMode === "probs";
-          const aCapable = isSlotConfigured("A") && isLogprobCapableProvider(slots.A.provider);
-          const bCapable = isSlotConfigured("B") && isLogprobCapableProvider(slots.B.provider);
+          // Capability reflects the slot that produced the displayed
+          // text (executedSlots) so the button's enabled state matches
+          // the data the user is actually looking at, not whatever is
+          // currently selected in Settings.
+          const probSlotA = executedSlots?.A ?? slots.A;
+          const probSlotB = executedSlots?.B ?? slots.B;
+          const aCapable = isSlotConfigured("A") && isLogprobCapableProvider(probSlotA.provider);
+          const bCapable = isSlotConfigured("B") && isLogprobCapableProvider(probSlotB.provider);
           const anyCapable = aCapable || bCapable;
           const cached = !!(logprobTokensA || logprobTokensB);
           return (
@@ -2143,9 +2199,13 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
       {/* Dual panels */}
       <div className="flex flex-col md:flex-row flex-1">
         {(() => {
-          const isLogprobCapable = (p: string) => p === "google" || p === "openai" || p === "openrouter" || p === "openai-compatible" || p === "huggingface";
-          const aCapable = isSlotConfigured("A") && isLogprobCapable(slots.A.provider);
-          const bCapable = isSlotConfigured("B") && isLogprobCapable(slots.B.provider);
+          // Same slot-snapshot lock as the toolbar probs button: the
+          // panel's "logprobCapable" indicator must reflect the slot that
+          // produced the displayed text, not the live one.
+          const probSlotA = executedSlots?.A ?? slots.A;
+          const probSlotB = executedSlots?.B ?? slots.B;
+          const aCapable = isSlotConfigured("A") && isLogprobCapableProvider(probSlotA.provider);
+          const bCapable = isSlotConfigured("B") && isLogprobCapableProvider(probSlotB.provider);
           return (
             <>
               <AnnotatedPanelDisplay
@@ -2174,6 +2234,7 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
                 logprobCapable={aCapable}
                 logprobError={logprobErrorA}
                 onRetryLogprobs={fetchLogprobs}
+                onRetryPanel={() => retryPanel("A", temperatureOverride ?? undefined)}
               />
               <div className="hidden md:block w-px bg-border" />
               <div className="md:hidden h-px bg-border" />
@@ -2203,6 +2264,7 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
                 logprobCapable={bCapable}
                 logprobError={logprobErrorB}
                 onRetryLogprobs={fetchLogprobs}
+                onRetryPanel={() => retryPanel("B", temperatureOverride ?? undefined)}
               />
             </>
           );

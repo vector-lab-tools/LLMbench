@@ -276,24 +276,34 @@ export async function fanOutGenerate(
     temperatureB?: number;
     maxTokensA?: number;
     maxTokensB?: number;
+    // Per-panel retry support: when set, the corresponding side is not
+    // dispatched (no provider call, no billing). The skipped side's
+    // result is a sentinel error that the route layer can ignore.
+    skipA?: boolean;
+    skipB?: boolean;
   }
 ): Promise<{
   A: { text: string; responseTimeMs: number } | { error: string };
   B: { text: string; responseTimeMs: number } | { error: string };
 }> {
+  const skippedSentinel = { error: "(panel skipped)" };
   const [resultA, resultB] = await Promise.allSettled([
-    generateAIResponse(configA, {
-      prompt: options.prompt,
-      systemPrompt: options.systemPromptA,
-      temperature: options.temperatureA,
-      maxTokens: options.maxTokensA,
-    }),
-    generateAIResponse(configB, {
-      prompt: options.prompt,
-      systemPrompt: options.systemPromptB,
-      temperature: options.temperatureB,
-      maxTokens: options.maxTokensB,
-    }),
+    options.skipA
+      ? Promise.resolve(skippedSentinel as never)
+      : generateAIResponse(configA, {
+          prompt: options.prompt,
+          systemPrompt: options.systemPromptA,
+          temperature: options.temperatureA,
+          maxTokens: options.maxTokensA,
+        }),
+    options.skipB
+      ? Promise.resolve(skippedSentinel as never)
+      : generateAIResponse(configB, {
+          prompt: options.prompt,
+          systemPrompt: options.systemPromptB,
+          temperature: options.temperatureB,
+          maxTokens: options.maxTokensB,
+        }),
   ]);
 
   return {
