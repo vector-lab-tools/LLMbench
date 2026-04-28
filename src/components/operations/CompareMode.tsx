@@ -103,6 +103,8 @@ import type {
   SavedComparison,
   ComparisonOutput,
 } from "@/types";
+import type { SavedSlotSnapshot } from "@/types/comparison";
+import type { ProviderSlot } from "@/types/ai-settings";
 
 // ---------- helpers ----------
 
@@ -823,6 +825,25 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
   const buildComparison = useCallback((): SavedComparison => {
     const now = new Date().toISOString();
     const id = comparisonId ?? crypto.randomUUID();
+    // Strip API keys from the slot snapshot before persisting. The
+    // snapshot exists for historical-record purposes (which model
+    // produced this output) — never as an auth carry-over.
+    const stripKey = (s: ProviderSlot): SavedSlotSnapshot => ({
+      provider: s.provider,
+      model: s.model,
+      customModelId: s.customModelId,
+      temperature: s.temperature,
+      systemPrompt: s.systemPrompt,
+      baseUrl: s.baseUrl,
+    });
+    // Use the executedAt baked into the run's provenance if we have it
+    // (set by /api/generate); fall back to the existing createdAt or now.
+    const provenanceA = resultA && "provenance" in resultA ? resultA.provenance : null;
+    const provenanceB = resultB && "provenance" in resultB ? resultB.provenance : null;
+    const execAt =
+      (provenanceA && (provenanceA as { generatedAt?: string }).generatedAt) ||
+      (provenanceB && (provenanceB as { generatedAt?: string }).generatedAt) ||
+      undefined;
     return {
       id,
       name: comparisonName,
@@ -834,8 +855,16 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
       crossPanelLinks: cpLinks.links,
       createdAt: comparisonCreatedAt ?? now,
       updatedAt: now,
+      // New in v2.15.26 — historical provenance fields. Optional on
+      // SavedComparison so older saves still typecheck.
+      executedAt: execAt,
+      executedSlots: executedSlots
+        ? { A: stripKey(executedSlots.A), B: stripKey(executedSlots.B) }
+        : undefined,
+      logprobsA: logprobTokensA ?? undefined,
+      logprobsB: logprobTokensB ?? undefined,
     };
-  }, [comparisonId, comparisonName, comparisonCreatedAt, prompt, resultA, resultB, annA.annotations, annB.annotations, cpLinks.links]);
+  }, [comparisonId, comparisonName, comparisonCreatedAt, prompt, resultA, resultB, annA.annotations, annB.annotations, cpLinks.links, executedSlots, logprobTokensA, logprobTokensB]);
 
   // ---- actions ----
 
@@ -1581,6 +1610,17 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
       annA.setAllAnnotations(comparison.annotationsA);
       annB.setAllAnnotations(comparison.annotationsB);
       cpLinks.setAllLinks(comparison.crossPanelLinks ?? []);
+      // Restore cached logprob tokens so the Probs view opens instantly
+      // with the same heatmap the user saw at save time — no fresh API
+      // call, no risk of fetching against a different model than the
+      // displayed text.
+      setLogprobTokensA(comparison.logprobsA ?? null);
+      setLogprobTokensB(comparison.logprobsB ?? null);
+      setLogprobErrorA(null);
+      setLogprobErrorB(null);
+      // Reset the cursor so the navigation strip lands on the first
+      // token of the restored heatmap.
+      setProbsNavIndex(comparison.logprobsA?.length || comparison.logprobsB?.length ? 0 : null);
       setShowHistory(false);
       setSaveStatus("idle");
     },
@@ -2024,11 +2064,25 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
                       onClick={() => handleLoad(c)}
                       className="flex-1 text-left min-w-0"
                     >
-                      <div className="text-body-sm font-medium text-foreground truncate">
+                      <div className="text-body-sm font-medium text-foreground truncate flex items-center gap-1.5">
                         {c.name}
+                        {/* Cached-probs marker — green dot when this
+                            saved record carries a logprob heatmap so the
+                            user can tell at a glance which records will
+                            open with probs ready vs. which will need a
+                            fresh fetch. */}
+                        {(c.logprobsA?.length || c.logprobsB?.length) ? (
+                          <span
+                            className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"
+                            title="Includes cached token probabilities"
+                          />
+                        ) : null}
                       </div>
                       <div className="text-caption text-muted-foreground truncate">
-                        {new Date(c.updatedAt).toLocaleDateString()} &middot;{" "}
+                        {/* Show the moment the model actually generated
+                            the output (executedAt) if recorded, falling
+                            back to updatedAt for older saves. */}
+                        {new Date(c.executedAt ?? c.updatedAt).toLocaleDateString()} &middot;{" "}
                         {c.prompt.slice(0, 50)}
                         {c.prompt.length > 50 ? "..." : ""}
                       </div>
