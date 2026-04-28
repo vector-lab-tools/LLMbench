@@ -38,6 +38,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Link2,
+  RotateCcw,
 } from "lucide-react";
 import { StructView } from "@/components/viz/StructView";
 import { ToneView } from "@/components/viz/ToneView";
@@ -168,6 +169,7 @@ function AnnotatedPanelDisplay({
   logprobsLoading,
   logprobCapable,
   logprobError,
+  onRetryLogprobs,
 }: {
   panel: "A" | "B";
   result: PanelResult | null;
@@ -193,6 +195,7 @@ function AnnotatedPanelDisplay({
   logprobsLoading?: boolean;
   logprobCapable?: boolean;
   logprobError?: string | null;
+  onRetryLogprobs?: () => void;
 }) {
   const editCallbacks = useMemo(
     () => ({
@@ -335,6 +338,21 @@ function AnnotatedPanelDisplay({
               <p className="text-[10px] opacity-80 mt-1 break-words whitespace-pre-wrap">
                 {logprobError}
               </p>
+              {/* Retry without re-sending the prompt — handy after the
+                  user has switched models in Settings (e.g. Gemini 2.5 →
+                  2.0 to enable logprobs) and wants to re-fetch the same
+                  response's token probabilities under the new slot. */}
+              {onRetryLogprobs && (
+                <button
+                  type="button"
+                  onClick={onRetryLogprobs}
+                  className="btn-editorial-ghost mt-3 inline-flex items-center gap-1 text-[10px] px-2 py-1 text-foreground/80"
+                  title="Re-fetch token probabilities with the current settings"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Retry with current settings
+                </button>
+              )}
             </div>
           ) : logprobCapable ? (
             <div className="text-center text-muted-foreground max-w-xs">
@@ -2100,6 +2118,7 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
                 logprobsLoading={logprobsLoading}
                 logprobCapable={aCapable}
                 logprobError={logprobErrorA}
+                onRetryLogprobs={fetchLogprobs}
               />
               <div className="hidden md:block w-px bg-border" />
               <div className="md:hidden h-px bg-border" />
@@ -2128,6 +2147,7 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
                 logprobsLoading={logprobsLoading}
                 logprobCapable={bCapable}
                 logprobError={logprobErrorB}
+                onRetryLogprobs={fetchLogprobs}
               />
             </>
           );

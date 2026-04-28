@@ -19,27 +19,26 @@ export function DeepDive({ label = "Deep Dive", summary, children, defaultOpen =
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          "w-full flex items-center gap-2 px-5 py-2.5 text-left",
-          "text-caption font-semibold",
+          "w-full flex items-center gap-2 px-5 py-1.5 text-left",
+          // Header is roughly half the previous size — the panel content
+          // below remains at its original sizing for readability. The
+          // collapsed-row was visually competing with the section content;
+          // shrinking it puts emphasis back on the data.
+          "text-[10px] uppercase tracking-wider font-semibold",
           "transition-colors",
           open
             ? "bg-burgundy/5 text-burgundy border-b border-parchment/50"
             : "bg-cream/40 text-muted-foreground hover:bg-cream/70 hover:text-foreground"
         )}
       >
-        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
         <span>{label}</span>
         {summary && (
-          <span className="ml-auto text-caption font-normal text-muted-foreground/70">{summary}</span>
+          <span className="ml-auto text-[10px] tracking-normal normal-case font-normal text-muted-foreground/70">{summary}</span>
         )}
       </button>
       {open && (
-        // `deep-dive-compact` is a global CSS class (defined in
-        // globals.css) that shrinks the text size of every readable
-        // element inside the dive. Applied here at the shell so every
-        // Deep Dive across the app — Grammar A/C/D/E, Sampling Probe,
-        // Compare / Analyse modes — picks it up automatically.
-        <div className="deep-dive-compact px-5 pb-5 space-y-4 pt-1">
+        <div className="px-5 pb-5 space-y-4 pt-1">
           {children}
         </div>
       )}

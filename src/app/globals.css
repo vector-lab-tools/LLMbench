@@ -179,34 +179,3 @@
 }
 
 
-/*
-  Deep Dive compact mode.
-  --------------------------------------------------------------------------
-  Every Deep Dive across the app (Grammar Phase A/C/D/E, Sampling Probe, the
-  Compare and Analyse modes) wraps its contents in an element carrying the
-  `.deep-dive-compact` class. Authors of those panels use heterogeneous
-  Tailwind utilities (text-caption, text-[11px], text-[10px], text-body-sm,
-  …) which makes per-component sizing fragile to coordinate.
-
-  Rather than rewrite every panel, this rule forces *all* readable text
-  inside a Deep Dive down to a single small size — roughly half the
-  surrounding body copy — so the dives become research-instrument dense
-  rather than brochure-spaced. The selector list explicitly excludes SVGs
-  (so icons keep their layout box) but includes the typical text-bearing
-  elements. `:where()` keeps the base specificity at 0 so authors can
-  still override with a more specific rule if a particular dive truly
-  needs a larger callout.
-*/
-.deep-dive-compact {
-  font-size: 9px;
-  line-height: 1.45;
-}
-.deep-dive-compact :where(p, span, div, li, td, th, button, label, h1, h2, h3, h4, h5, h6, strong, em, code, a, summary) {
-  font-size: 9px !important;
-  line-height: 1.45 !important;
-}
-/* Tables benefit from slightly tighter cell padding when text shrinks. */
-.deep-dive-compact :where(td, th) {
-  padding-top: 1px !important;
-  padding-bottom: 1px !important;
-}
