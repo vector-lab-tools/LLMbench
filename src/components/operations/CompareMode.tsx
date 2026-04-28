@@ -431,7 +431,7 @@ interface CompareModeProps {
 
 export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: CompareModeProps) {
   const [prompt, setPrompt] = useState("");
-  const { getSlotLabel, setShowSettings, slots, noMarkdown, isSlotConfigured } = useProviderSettings();
+  const { getSlotLabel, setShowSettings, slots, noMarkdown, isSlotConfigured, autoFetchLogprobs } = useProviderSettings();
 
   // Pre-fill prompt from tutorial card launch
   useEffect(() => {
@@ -513,6 +513,17 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
     isPanelOutput(resultA) &&
     resultB !== null &&
     isPanelOutput(resultB);
+
+  // App-wide first-class logprobs: when the user has the auto-fetch toggle
+  // on (default), kick off the logprobs request as soon as both panels have
+  // returned and at least one slot is logprobs-capable. Toggling the probs
+  // view button later then never has to re-call the model — the data is
+  // already in `logprobTokensA` / `logprobTokensB`. Single-fire guarded by
+  // the existing `logprobsLoading` flag and by the presence of cached
+  // tokens for whichever side is capable.
+  const isLogprobCapableProvider = useCallback((p: string) =>
+    p === "google" || p === "openai" || p === "openrouter" ||
+    p === "openai-compatible" || p === "huggingface", []);
 
   // Word diff computation
   const diffResult = useMemo(() => {
@@ -863,6 +874,25 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
       setLogprobsLoading(false);
     }
   };
+
+  // Auto-fetch logprobs once both panels have returned, if the user has
+  // the app-wide setting on and at least one active slot supports them.
+  // Single-fire guarded by `logprobsLoading` and by the presence of cached
+  // tokens — won't kick off a redundant call if probs view was opened
+  // manually before this effect ran. Effect runs on the leading edge of
+  // "both panels finished generating".
+  useEffect(() => {
+    if (!autoFetchLogprobs) return;
+    if (loadingA || loadingB || logprobsLoading) return;
+    if (!hasContent) return;
+    const aCap = isSlotConfigured("A") && isLogprobCapableProvider(slots.A.provider);
+    const bCap = isSlotConfigured("B") && isLogprobCapableProvider(slots.B.provider);
+    if (!aCap && !bCap) return;
+    if (logprobTokensA || logprobTokensB) return;
+    if (logprobErrorA || logprobErrorB) return; // user saw an error; let them choose
+    void fetchLogprobs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingA, loadingB, hasContent]);
 
   // ---- probs export helpers ----
 
@@ -1828,20 +1858,26 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
             </button>
           );
         })}
-        {/* Probs view button */}
+        {/* Probs view button — first-class logprobs surface. Adds a small
+            status indicator: green dot when logprobs are cached and ready
+            (toggling is instant), spinner when fetching, no dot when not
+            yet fetched. The auto-fetch app setting (default ON) means in
+            normal use the green dot appears as soon as both panels finish,
+            so the button behaves as a pure visual toggle rather than a
+            "summon another model call" affordance. */}
         {(() => {
           const probsActive = viewMode === "probs";
-          const logprobCapable = (p: string) => p === "google" || p === "openai" || p === "openrouter" || p === "openai-compatible" || p === "huggingface";
-          const aCapable = isSlotConfigured("A") && logprobCapable(slots.A.provider);
-          const bCapable = isSlotConfigured("B") && logprobCapable(slots.B.provider);
+          const aCapable = isSlotConfigured("A") && isLogprobCapableProvider(slots.A.provider);
+          const bCapable = isSlotConfigured("B") && isLogprobCapableProvider(slots.B.provider);
           const anyCapable = aCapable || bCapable;
+          const cached = !!(logprobTokensA || logprobTokensB);
           return (
             <button
               onClick={() => {
                 if (!anyCapable) { setShowLogprobsInfo(true); return; }
                 if (probsActive) { setViewMode(null); return; }
                 setViewMode("probs");
-                if (!logprobTokensA && !logprobTokensB) fetchLogprobs();
+                if (!cached && !logprobsLoading) fetchLogprobs();
               }}
               disabled={!hasContent && anyCapable}
               className={`px-2 py-1 text-caption flex items-center gap-1.5 rounded-sm transition-colors ${
@@ -1851,10 +1887,29 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
                   ? "bg-burgundy/90 text-white dark:bg-burgundy/80 border border-transparent"
                   : "btn-editorial-ghost"
               }`}
-              title={anyCapable ? "Token probability heatmap (Gemini / OpenAI)" : "Token probabilities require Gemini or OpenAI — click for details"}
+              title={
+                !anyCapable
+                  ? "Token probabilities require Gemini, OpenAI, OpenRouter or HF — click for details"
+                  : logprobsLoading
+                    ? "Fetching token probabilities…"
+                    : cached
+                      ? "Token probabilities ready (cached). Click to toggle the heatmap on/off."
+                      : autoFetchLogprobs
+                        ? "Token probabilities — will auto-fetch on next submit. Click now to fetch for the current response."
+                        : "Token probability heatmap. Auto-fetch is off in Settings; clicking will fetch on demand."
+              }
             >
               <BarChart2 className="w-3.5 h-3.5" />
-              <span>{probsActive ? "Probs On" : "Probs"}{logprobsLoading ? "…" : ""}</span>
+              <span>{probsActive ? "Probs On" : "Probs"}</span>
+              {/* Status indicator: spinner / ready-dot. Position-aware so
+                  layout doesn't shift when state changes. */}
+              {anyCapable && hasContent && (
+                logprobsLoading ? (
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" aria-label="fetching" />
+                ) : cached ? (
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${probsActive ? "bg-white/80" : "bg-emerald-500"}`} aria-label="ready" title="cached and ready" />
+                ) : null
+              )}
             </button>
           );
         })()}

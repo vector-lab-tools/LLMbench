@@ -13,6 +13,11 @@ import { getModelDisplayName } from "@/lib/ai/config";
 
 const STORAGE_KEY = "llmbench-provider-settings";
 const NO_MARKDOWN_KEY = "llmbench-no-markdown";
+// App-wide opt-in: when true, Compare auto-fetches logprobs alongside the
+// main generation if both active slots are logprobs-capable. Avoids the
+// "switch to probs view → second API request" round-trip and lets users
+// keep diff and probs views in sync from a single submit.
+const AUTO_LOGPROBS_KEY = "llmbench-auto-fetch-logprobs";
 
 interface ProviderSettingsContextValue {
   slots: ProviderSlots;
@@ -23,6 +28,8 @@ interface ProviderSettingsContextValue {
   setShowSettings: (show: boolean) => void;
   noMarkdown: boolean;
   setNoMarkdown: (value: boolean) => void;
+  autoFetchLogprobs: boolean;
+  setAutoFetchLogprobs: (value: boolean) => void;
 }
 
 const ProviderSettingsContext =
@@ -66,10 +73,20 @@ export function ProviderSettingsProvider({
   const [showSettings, setShowSettings] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [noMarkdown, setNoMarkdownState] = useState(true); // default: on
+  // Logprobs are a first-class capability of LLMbench — defaulting auto-fetch
+  // ON means that whenever both active slots support it, the probs view
+  // opens with data already loaded rather than triggering a second model
+  // request. Power users can still turn this off in Settings.
+  const [autoFetchLogprobs, setAutoFetchLogprobsState] = useState(true);
 
   const setNoMarkdown = useCallback((value: boolean) => {
     setNoMarkdownState(value);
     try { localStorage.setItem(NO_MARKDOWN_KEY, JSON.stringify(value)); } catch { /* ignore */ }
+  }, []);
+
+  const setAutoFetchLogprobs = useCallback((value: boolean) => {
+    setAutoFetchLogprobsState(value);
+    try { localStorage.setItem(AUTO_LOGPROBS_KEY, JSON.stringify(value)); } catch { /* ignore */ }
   }, []);
 
   // Load from localStorage on mount
@@ -78,6 +95,10 @@ export function ProviderSettingsProvider({
     try {
       const stored = localStorage.getItem(NO_MARKDOWN_KEY);
       if (stored !== null) setNoMarkdownState(JSON.parse(stored));
+    } catch { /* ignore */ }
+    try {
+      const stored = localStorage.getItem(AUTO_LOGPROBS_KEY);
+      if (stored !== null) setAutoFetchLogprobsState(JSON.parse(stored));
     } catch { /* ignore */ }
     setLoaded(true);
   }, []);
@@ -128,6 +149,8 @@ export function ProviderSettingsProvider({
         setShowSettings,
         noMarkdown,
         setNoMarkdown,
+        autoFetchLogprobs,
+        setAutoFetchLogprobs,
       }}
     >
       {children}

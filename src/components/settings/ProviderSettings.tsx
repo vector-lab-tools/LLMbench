@@ -270,7 +270,7 @@ export default function ProviderSettings({
   isDark?: boolean;
   onToggleDark?: () => void;
 }) {
-  const { slots, updateSlot, showSettings, setShowSettings } =
+  const { slots, updateSlot, showSettings, setShowSettings, autoFetchLogprobs, setAutoFetchLogprobs } =
     useProviderSettings();
 
   // Load dynamic models from /models.md on mount
@@ -291,6 +291,9 @@ export default function ProviderSettings({
             Provider Settings
           </h2>
           <div className="flex items-center gap-4">
+            {/* Restrict the provider/model dropdowns to entries that
+                support logprobs. Display-only — does not affect runtime
+                behaviour beyond what is selectable. */}
             <label className="flex items-center gap-2 text-caption text-muted-foreground cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -299,6 +302,23 @@ export default function ProviderSettings({
                 className="rounded"
               />
               Logprobs-compatible only
+            </label>
+            {/* App-wide auto-fetch: when on, Compare mode fetches
+                logprobs alongside the main generation if both active
+                slots are logprobs-capable, so toggling the probs view
+                later never triggers a second model request. Persisted
+                in localStorage. */}
+            <label
+              className="flex items-center gap-2 text-caption text-muted-foreground cursor-pointer select-none"
+              title="When on: Compare always fetches token probabilities at submit time so toggling the probs view never re-runs the model. Requires both active slots to support logprobs."
+            >
+              <input
+                type="checkbox"
+                checked={autoFetchLogprobs}
+                onChange={(e) => setAutoFetchLogprobs(e.target.checked)}
+                className="rounded"
+              />
+              Auto-fetch logprobs
             </label>
             <button
               onClick={() => setShowSettings(false)}
