@@ -49,10 +49,12 @@ export function exportAsMarkdown(comparison: SavedComparison): string {
   lines.push(comparison.prompt);
   lines.push("");
 
-  // Panel A
+  // Model 1 (the PDF/Markdown is a publishable artefact, so we use
+  // "Model 1/Model 2" in headers rather than the in-app "Panel A/Panel B"
+  // affordance terminology).
   lines.push("---");
   lines.push("");
-  lines.push("## Panel A");
+  lines.push("## Model 1");
   if (comparison.outputA?.provenance) {
     const p = comparison.outputA.provenance;
     lines.push("");
@@ -71,7 +73,7 @@ export function exportAsMarkdown(comparison: SavedComparison): string {
 
   // Panel A annotations
   if (comparison.annotationsA.length > 0) {
-    lines.push("### Annotations (Panel A)");
+    lines.push("### Annotations (Model 1)");
     lines.push("");
     for (const ann of comparison.annotationsA) {
       const lineRef = ann.endLineNumber
@@ -84,10 +86,10 @@ export function exportAsMarkdown(comparison: SavedComparison): string {
     lines.push("");
   }
 
-  // Panel B
+  // Model 2
   lines.push("---");
   lines.push("");
-  lines.push("## Panel B");
+  lines.push("## Model 2");
   if (comparison.outputB?.provenance) {
     const p = comparison.outputB.provenance;
     lines.push("");
@@ -106,7 +108,7 @@ export function exportAsMarkdown(comparison: SavedComparison): string {
 
   // Panel B annotations
   if (comparison.annotationsB.length > 0) {
-    lines.push("### Annotations (Panel B)");
+    lines.push("### Annotations (Model 2)");
     lines.push("");
     for (const ann of comparison.annotationsB) {
       const lineRef = ann.endLineNumber
@@ -168,15 +170,15 @@ export function exportAsText(comparison: SavedComparison): string {
   lines.push(`Prompt: ${comparison.prompt}`);
   lines.push("");
 
-  // Panel A
+  // Model 1 (publication terminology \u2014 see Markdown export above)
   if (comparison.outputA?.provenance) {
     const p = comparison.outputA.provenance;
     const wc = wordCount(comparison.outputA?.text);
     lines.push(
-      `PANEL A \u2014 ${p.modelDisplayName} (t=${p.temperature}, ${(p.responseTimeMs / 1000).toFixed(1)}s, ${wc.toLocaleString()} words)`
+      `MODEL 1 \u2014 ${p.modelDisplayName} (t=${p.temperature}, ${(p.responseTimeMs / 1000).toFixed(1)}s, ${wc.toLocaleString()} words)`
     );
   } else {
-    lines.push("PANEL A");
+    lines.push("MODEL 1");
   }
   lines.push(dash);
   if (comparison.outputA?.text) {
@@ -187,15 +189,15 @@ export function exportAsText(comparison: SavedComparison): string {
   lines.push(formatAnnotationsText(comparison.annotationsA));
   lines.push("");
 
-  // Panel B
+  // Model 2
   if (comparison.outputB?.provenance) {
     const p = comparison.outputB.provenance;
     const wc = wordCount(comparison.outputB?.text);
     lines.push(
-      `PANEL B \u2014 ${p.modelDisplayName} (t=${p.temperature}, ${(p.responseTimeMs / 1000).toFixed(1)}s, ${wc.toLocaleString()} words)`
+      `MODEL 2 \u2014 ${p.modelDisplayName} (t=${p.temperature}, ${(p.responseTimeMs / 1000).toFixed(1)}s, ${wc.toLocaleString()} words)`
     );
   } else {
-    lines.push("PANEL B");
+    lines.push("MODEL 2");
   }
   lines.push(dash);
   if (comparison.outputB?.text) {
@@ -388,10 +390,15 @@ export async function exportAsPDF(
     }
   }
 
+  // The exported PDF is a publishable artefact, not an internal screen.
+  // "Panel A / Panel B" are LLMbench-app affordances; in the PDF use
+  // "Model 1 / Model 2" so a cold reader of the document — reviewer,
+  // co-author, citation context — sees what each column is on its own
+  // terms. The model display names follow on the same header line.
   const headerY = y;
-  renderColumnHeader(colAx, "Panel A", comparison.outputA, [235, 240, 255]);
+  renderColumnHeader(colAx, "Model 1", comparison.outputA, [235, 240, 255]);
   y = headerY;
-  renderColumnHeader(colBx, "Panel B", comparison.outputB, [255, 248, 235]);
+  renderColumnHeader(colBx, "Model 2", comparison.outputB, [255, 248, 235]);
   y += 8;
 
   // ---- Render text in columns ----
@@ -664,8 +671,8 @@ export async function exportAsPDF(
     y += 3;
   }
 
-  renderAnnotations("Panel A", comparison.annotationsA, colAx, colWidth);
-  renderAnnotations("Panel B", comparison.annotationsB, colBx, colWidth);
+  renderAnnotations("Model 1", comparison.annotationsA, colAx, colWidth);
+  renderAnnotations("Model 2", comparison.annotationsB, colBx, colWidth);
 
   // Footer
   checkPage(8);
