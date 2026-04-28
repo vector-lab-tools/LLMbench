@@ -6,6 +6,7 @@
 import type { SavedComparison } from "@/types";
 import type { LineAnnotation } from "@/types";
 import type { DiffSegment } from "@/lib/diff/word-diff";
+import type { TokenLogprob } from "@/types/analysis";
 
 /** Count words in a string */
 function wordCount(text: string | undefined): number {
@@ -235,14 +236,57 @@ export interface PdfDiffData {
   segmentsB: DiffSegment[];
 }
 
+export interface PdfLogprobsData {
+  tokensA: TokenLogprob[] | null;
+  tokensB: TokenLogprob[] | null;
+}
+
+/**
+ * Convert a per-token logprob to a [bg, fg] RGB pair matching the in-app
+ * Compare heatmap palette. The shape mirrors `probsColorLight` in
+ * CompareMode: tokens above 70% probability get a near-white background,
+ * uncertainty glides from pale yellow through orange to deep red as
+ * probability drops. The palette is HSL in the UI; we convert to RGB
+ * here because jsPDF's `setFillColor` only takes RGB.
+ */
+function probColorRgb(logprob: number): { bg: [number, number, number]; fg: [number, number, number] } {
+  const prob = Math.exp(logprob);
+  const THRESHOLD = 0.7;
+  if (prob >= THRESHOLD) return { bg: [248, 250, 252], fg: [51, 65, 85] }; // near-white
+  const t = Math.pow(1 - prob / THRESHOLD, 0.75);
+  const hue = 52 - 47 * t;
+  const sat = (88 + 7 * t) / 100;
+  const lit = (92 - 50 * t) / 100;
+  // HSL → RGB (per CSS Color Module 4). t=0 yields pale yellow, t=1 deep red.
+  const a = sat * Math.min(lit, 1 - lit);
+  const f = (n: number) => {
+    const k = (n + hue / 30) % 12;
+    return lit - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+  };
+  // Blend toward parchment by alpha so highlights aren't oversaturated;
+  // alpha matches the in-app gradient of 0.18..1.0.
+  const alpha = 0.18 + 0.82 * t;
+  const PARCHMENT: [number, number, number] = [248, 245, 235];
+  const r = Math.round((f(0) * 255) * alpha + PARCHMENT[0] * (1 - alpha));
+  const g = Math.round((f(8) * 255) * alpha + PARCHMENT[1] * (1 - alpha));
+  const b = Math.round((f(4) * 255) * alpha + PARCHMENT[2] * (1 - alpha));
+  return { bg: [r, g, b], fg: t > 0.6 ? [26, 10, 10] : [51, 65, 85] };
+}
+
 /**
  * Export comparison as PDF document with side-by-side panels.
  * Uses landscape A4 for adequate column width.
- * If diffData is provided, highlights unique words per panel.
+ * Renders, in priority order: heatmap (when logprobs present) > diff
+ * (when diff data present) > plain text. Heatmap and diff are
+ * fundamentally different per-token colourings; rather than overlay them
+ * (which compresses the signal of both), we pick the dominant view —
+ * heatmap is the richer research artefact and takes priority. Annotations
+ * always render below the columns regardless of view.
  */
 export async function exportAsPDF(
   comparison: SavedComparison,
-  diffData?: PdfDiffData
+  diffData?: PdfDiffData,
+  logprobsData?: PdfLogprobsData
 ): Promise<void> {
   const { default: jsPDF } = await import("jspdf");
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
@@ -280,9 +324,13 @@ export async function exportAsPDF(
   doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(120, 120, 120);
+  // View-mode tag: probs takes precedence over diff in the rendering
+  // priority above, so it should also be the label here.
+  const hasProbs = !!(logprobsData && (logprobsData.tokensA?.length || logprobsData.tokensB?.length));
+  const viewLabel = hasProbs ? "  \u2022  Probs (token probability heatmap)"
+    : diffData ? "  \u2022  Diff mode" : "";
   doc.text(
-    `Created: ${new Date(comparison.createdAt).toLocaleString()}` +
-      (diffData ? "  \u2022  Diff mode" : ""),
+    `Created: ${new Date(comparison.createdAt).toLocaleString()}${viewLabel}`,
     margin,
     y
   );
@@ -443,13 +491,80 @@ export async function exportAsPDF(
     return cy + lineH;
   }
 
-  // Render both columns in parallel, tracking y per column
+  /**
+   * Render a token-probability heatmap in a column. Each token gets a
+   * background fill matching its softmax probability (high-confidence
+   * tokens parchment-pale, low-confidence tokens deep burgundy/red), so
+   * the same heatmap that lives in the in-app Probs view appears in the
+   * exported document. Wraps token-by-token, preserving whitespace; the
+   * raw token strings are joined directly so the rendered text matches
+   * the model's response verbatim (no synthetic spacing).
+   */
+  function renderHeatmapColumn(
+    x: number,
+    startY: number,
+    tokens: TokenLogprob[]
+  ): number {
+    const colLeft = x + 2;
+    const colRight = x + colWidth - 2;
+    let cx = colLeft;
+    let cy = startY;
+    const cellPad = 0.3;
+
+    for (const tok of tokens) {
+      // Newlines: don't draw a fill for them, just advance the cursor.
+      if (/\n/.test(tok.token)) {
+        const nlCount = (tok.token.match(/\n/g) || []).length;
+        for (let n = 0; n < nlCount; n++) {
+          cy += lineH;
+          cx = colLeft;
+          if (cy > pageHeight - bottomMargin) { newPage(); cy = y; }
+        }
+        // Render any remainder after the trailing newline as text.
+        const rest = tok.token.replace(/\n/g, "");
+        if (rest.length === 0) continue;
+        const tw = doc.getTextWidth(rest);
+        const { bg, fg } = probColorRgb(tok.logprob);
+        doc.setFillColor(bg[0], bg[1], bg[2]);
+        doc.rect(cx - cellPad, cy - 3, tw + cellPad * 2, lineH + 0.2, "F");
+        doc.setTextColor(fg[0], fg[1], fg[2]);
+        doc.text(rest, cx, cy);
+        cx += tw;
+        continue;
+      }
+
+      const tw = doc.getTextWidth(tok.token);
+      // Wrap if needed (skip pure-whitespace fills at the start of a new line).
+      if (cx + tw > colRight && tok.token.trim().length > 0) {
+        cy += lineH;
+        cx = colLeft;
+        if (cy > pageHeight - bottomMargin) { newPage(); cy = y; }
+      }
+      const { bg, fg } = probColorRgb(tok.logprob);
+      // Only draw the fill for non-whitespace tokens — a coloured bar of
+      // pure whitespace looks like a missing-image artefact rather than
+      // a confidence cue.
+      if (tok.token.trim().length > 0) {
+        doc.setFillColor(bg[0], bg[1], bg[2]);
+        doc.rect(cx - cellPad, cy - 3, tw + cellPad * 2, lineH + 0.2, "F");
+      }
+      doc.setTextColor(fg[0], fg[1], fg[2]);
+      doc.text(tok.token, cx, cy);
+      cx += tw;
+    }
+    return cy + lineH;
+  }
+
+  // Render both columns in parallel, tracking y per column. Priority:
+  // heatmap (when probs available for that side) → diff → plain text.
   const textStartY = y;
   let yA = textStartY;
   let yB = textStartY;
 
   if (comparison.outputA?.text) {
-    if (diffData) {
+    if (logprobsData?.tokensA?.length) {
+      yA = renderHeatmapColumn(colAx, textStartY, logprobsData.tokensA);
+    } else if (diffData) {
       yA = renderDiffColumn(colAx, textStartY, diffData.segmentsA, "removed");
     } else {
       yA = renderPlainColumn(colAx, textStartY, comparison.outputA.text);
@@ -461,7 +576,9 @@ export async function exportAsPDF(
   }
 
   if (comparison.outputB?.text) {
-    if (diffData) {
+    if (logprobsData?.tokensB?.length) {
+      yB = renderHeatmapColumn(colBx, textStartY, logprobsData.tokensB);
+    } else if (diffData) {
       yB = renderDiffColumn(colBx, textStartY, diffData.segmentsB, "added");
     } else {
       yB = renderPlainColumn(colBx, textStartY, comparison.outputB.text);
@@ -473,6 +590,36 @@ export async function exportAsPDF(
   }
 
   y = Math.max(yA, yB) + 5;
+
+  // Heatmap legend — a small horizontal gradient so anyone reading the
+  // PDF cold knows what the colours mean. Renders only when at least one
+  // panel has probs data; takes one short row above the annotations.
+  if (hasProbs) {
+    checkPage(8);
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(80, 80, 80);
+    doc.text("Heatmap: ", margin, y + 3);
+    const labelW = doc.getTextWidth("Heatmap: ");
+    const barX = margin + labelW + 1;
+    const barW = 60;
+    const barH = 3;
+    const steps = 60;
+    for (let i = 0; i < steps; i++) {
+      // Sample logprob across the THRESHOLD-based gradient so the legend
+      // matches the in-app palette.
+      const prob = 0.005 + ((1 - 0.005) * (steps - 1 - i)) / (steps - 1);
+      const { bg } = probColorRgb(Math.log(prob));
+      doc.setFillColor(bg[0], bg[1], bg[2]);
+      doc.rect(barX + (i * barW) / steps, y, barW / steps + 0.05, barH, "F");
+    }
+    doc.setTextColor(120, 120, 120);
+    doc.text("high confidence", barX + barW + 2, y + 3);
+    const highW = doc.getTextWidth("high confidence");
+    doc.text("→", barX + barW + 2 + highW + 1, y + 3);
+    doc.text("low confidence", barX + barW + 2 + highW + 6, y + 3);
+    y += 7;
+  }
 
   // ---- Annotations (below both columns, full width per panel) ----
   function renderAnnotations(

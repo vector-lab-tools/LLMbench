@@ -1638,9 +1638,18 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
     const pdfDiff: PdfDiffData | undefined = diffResult
       ? { segmentsA: diffResult.segmentsA, segmentsB: diffResult.segmentsB }
       : undefined;
-    exportAsPDF(comparison, pdfDiff);
+    // Carry logprobs through to the PDF when they're cached. The export
+    // function will render the heatmap as token-by-token coloured runs
+    // when this is present, taking priority over the diff overlay (the
+    // two are different per-token colourings; heatmap is the richer
+    // research artefact). Falls back to diff or plain text per panel
+    // depending on what data is available.
+    const pdfLogprobs = (logprobTokensA || logprobTokensB)
+      ? { tokensA: logprobTokensA, tokensB: logprobTokensB }
+      : undefined;
+    exportAsPDF(comparison, pdfDiff, pdfLogprobs);
     setShowExportModal(false);
-  }, [buildComparison, diffResult]);
+  }, [buildComparison, diffResult, logprobTokensA, logprobTokensB]);
 
   const handleDeleteSaved = useCallback(
     (id: string) => {
@@ -2660,7 +2669,14 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
                   <FileType className="w-5 h-5 text-red-500 shrink-0" />
                   <div>
                     <div className="text-body-sm font-medium text-foreground">PDF</div>
-                    <div className="text-caption text-muted-foreground">Printable document with coloured annotation badges</div>
+                    <div className="text-caption text-muted-foreground">
+                      Side-by-side panels with annotations
+                      {(logprobTokensA || logprobTokensB)
+                        ? <> &middot; <span className="text-burgundy">heatmap rendered when Probs cached</span></>
+                        : diffResult
+                          ? <> &middot; diff highlighting</>
+                          : null}
+                    </div>
                   </div>
                 </div>
               </button>
