@@ -15,9 +15,9 @@
  * different patterns without re-running the model.
  */
 
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import {
-  AlertCircle, Microscope, Play, RotateCcw, Settings2, FileText, BarChart3, Download, Sigma,
+  AlertCircle, Microscope, Play, RotateCcw, Settings2, FileText, BarChart3, Download, Sigma, Square,
 } from "lucide-react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import { ModelSelector, type PanelSelection } from "@/components/shared/ModelSelector";
@@ -261,6 +261,24 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
   const slotAConfigured = isSlotConfigured("A");
   const slotBConfigured = isSlotConfigured("B");
 
+  // Single shared AbortController across phases — only one phase runs at
+  // a time (the buttons that start the others are disabled while loading),
+  // so a single ref suffices. Each handleRunXxx replaces the controller
+  // at the start of its run; handleStop calls abort() on whichever is
+  // active. The streaming layer (fetchStreaming) cancels the underlying
+  // fetch and the read loop, so Stop is immediate.
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const isAnyPhaseLoading = isLoading || isContinuationLoading || isForcedLoading || isPerturbationLoading || isSweepLoading;
+  const handleStop = useCallback(() => {
+    abortControllerRef.current?.abort();
+  }, []);
+  // Distinguish "the run threw because the user pressed Stop" from a real
+  // error — the standard fetch abort surfaces as an AbortError or as a
+  // DOMException with name "AbortError". When that happens we suppress
+  // the error message but still flip the loading flags off.
+  const isAbortError = (err: unknown): boolean =>
+    err instanceof Error && (err.name === "AbortError" || /aborted/i.test(err.message));
+
   const handleRun = useCallback(async () => {
     if (isLoading || selectedPrompts.length === 0) return;
     const usingBoth = panelSelection === "both" && slotBConfigured;
@@ -279,6 +297,8 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       (usingBoth ? 2 : 1);
     setProgress({ done: 0, total: totalExpected });
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     try {
       const slotA = panelSelection === "B" ? slots.B : slots.A;
       const slotB = usingBoth ? slots.B : null;
@@ -316,11 +336,15 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
             setIsDone(true);
           }
         },
+        controller.signal,
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Run failed");
+      if (!isAbortError(err)) {
+        setError(err instanceof Error ? err.message : "Run failed");
+      }
     } finally {
       setIsLoading(false);
+      if (abortControllerRef.current === controller) abortControllerRef.current = null;
     }
   }, [isLoading, selectedPrompts, panelSelection, slotAConfigured, slotBConfigured, slots, noMarkdown]);
 
@@ -371,6 +395,8 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     const total = selectedScaffolds.length * (usingBoth ? 2 : 1);
     setContinuationProgress({ done: 0, total });
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     try {
       const slotA = panelSelection === "B" ? slots.B : slots.A;
       const slotB = usingBoth ? slots.B : null;
@@ -403,11 +429,15 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
             setContinuationProgress(p => p ? { ...p, done: p.done + 1 } : p);
           }
         },
+        controller.signal,
       );
     } catch (err) {
-      setContinuationError(err instanceof Error ? err.message : "Continuation run failed");
+      if (!isAbortError(err)) {
+        setContinuationError(err instanceof Error ? err.message : "Continuation run failed");
+      }
     } finally {
       setIsContinuationLoading(false);
+      if (abortControllerRef.current === controller) abortControllerRef.current = null;
     }
   }, [
     isContinuationLoading, selectedScaffolds, panelSelection,
@@ -499,7 +529,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       createdAt: now.toISOString(),
       source: {
         tool: "LLMbench",
-        version: "2.15.29",
+        version: "2.15.30",
         // Spec field — singular, dominant phase (Atlas routes on this).
         phase: dominantPhase,
         // LLMbench extension — full set when the bundle covers multiple
@@ -698,6 +728,8 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     setForcedExpansions([]);
     setForcedProgress({ done: 0, total: pairs.length });
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     try {
       await fetchStreaming<StreamEvent>(
         "/api/investigate/grammar-expand",
@@ -727,12 +759,16 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
             });
             setForcedProgress(p => p ? { ...p, done: p.done + 1 } : p);
           }
-        }
+        },
+        controller.signal,
       );
     } catch (err) {
-      setForcedError(err instanceof Error ? err.message : "Phase C expansion failed");
+      if (!isAbortError(err)) {
+        setForcedError(err instanceof Error ? err.message : "Phase C expansion failed");
+      }
     } finally {
       setIsForcedLoading(false);
+      if (abortControllerRef.current === controller) abortControllerRef.current = null;
     }
   }, [isForcedLoading, continuationResults, slots, panelSelection, slotBConfigured,
       isSlotConfigured, forcedTopN]);
@@ -781,6 +817,8 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     const total = expandedPrompts.length * (usingBoth ? 2 : 1);
     setPerturbationProgress({ done: 0, total });
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     try {
       const slotAConfigForRun = panelSelection === "B" ? slots.B : slots.A;
       const slotBForRun = usingBoth ? slots.B : null;
@@ -819,12 +857,16 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
             ]);
             setPerturbationProgress(p => p ? { ...p, done: p.done + 1 } : p);
           }
-        }
+        },
+        controller.signal,
       );
     } catch (err) {
-      setPerturbationError(err instanceof Error ? err.message : "Perturbation run failed");
+      if (!isAbortError(err)) {
+        setPerturbationError(err instanceof Error ? err.message : "Perturbation run failed");
+      }
     } finally {
       setIsPerturbationLoading(false);
+      if (abortControllerRef.current === controller) abortControllerRef.current = null;
     }
   }, [isPerturbationLoading, selectedPrompts, panelSelection, slotAConfigured,
       slotBConfigured, slots, noMarkdown, pattern]);
@@ -848,6 +890,8 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       (usingBoth ? 2 : 1);
     setSweepProgress({ done: 0, total: totalExpected });
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     try {
       const slotA = panelSelection === "B" ? slots.B : slots.A;
       const slotB = usingBoth ? slots.B : null;
@@ -885,11 +929,15 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
             setIsSweepDone(true);
           }
         },
+        controller.signal,
       );
     } catch (err) {
-      setSweepError(err instanceof Error ? err.message : "Sweep failed");
+      if (!isAbortError(err)) {
+        setSweepError(err instanceof Error ? err.message : "Sweep failed");
+      }
     } finally {
       setIsSweepLoading(false);
+      if (abortControllerRef.current === controller) abortControllerRef.current = null;
     }
   }, [isSweepLoading, selectedPrompts, panelSelection, slotAConfigured, slotBConfigured, slots, noMarkdown]);
 
@@ -1049,7 +1097,23 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
           — generation-side investigation of rhetorical patterns
         </span>
         <div className="flex-1" />
-        <ModelSelector value={panelSelection} onChange={setPanelSelection} disabled={isLoading} />
+        {/* Global Stop button — only visible while any phase (A/B/C/D/E)
+            is mid-stream. One AbortController is shared across phases
+            since only one runs at a time, and aborting it tears down
+            both the fetch and the read loop in fetchStreaming so the
+            stop is immediate. */}
+        {isAnyPhaseLoading && (
+          <button
+            type="button"
+            onClick={handleStop}
+            className="btn-editorial-ghost flex items-center gap-1 text-caption px-2 py-1 text-burgundy"
+            title="Cancel the running phase. Already-arrived results are kept."
+          >
+            <Square className="w-3 h-3 fill-current" />
+            <span>Stop</span>
+          </button>
+        )}
+        <ModelSelector value={panelSelection} onChange={setPanelSelection} disabled={isAnyPhaseLoading} />
       </div>
 
       {/* Phase tabs */}
