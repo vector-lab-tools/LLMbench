@@ -529,7 +529,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       createdAt: now.toISOString(),
       source: {
         tool: "LLMbench",
-        version: "2.15.30",
+        version: "2.15.31",
         // Spec field — singular, dominant phase (Atlas routes on this).
         phase: dominantPhase,
         // LLMbench extension — full set when the bundle covers multiple
@@ -1097,22 +1097,6 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
           — generation-side investigation of rhetorical patterns
         </span>
         <div className="flex-1" />
-        {/* Global Stop button — only visible while any phase (A/B/C/D/E)
-            is mid-stream. One AbortController is shared across phases
-            since only one runs at a time, and aborting it tears down
-            both the fetch and the read loop in fetchStreaming so the
-            stop is immediate. */}
-        {isAnyPhaseLoading && (
-          <button
-            type="button"
-            onClick={handleStop}
-            className="btn-editorial-ghost flex items-center gap-1 text-caption px-2 py-1 text-burgundy"
-            title="Cancel the running phase. Already-arrived results are kept."
-          >
-            <Square className="w-3 h-3 fill-current" />
-            <span>Stop</span>
-          </button>
-        )}
         <ModelSelector value={panelSelection} onChange={setPanelSelection} disabled={isAnyPhaseLoading} />
       </div>
 
@@ -1197,21 +1181,32 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
                 </div>
                 <div className="flex-1" />
                 <button
-                  onClick={handleContinuationReset}
-                  disabled={isContinuationLoading || continuationResults.length === 0}
-                  className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5 disabled:opacity-30"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  Reset
-                </button>
-                <button
                   onClick={handleRunContinuation}
                   disabled={isContinuationLoading || selectedScaffolds.length === 0 || (!slotAConfigured && !slotBConfigured)}
-                  className="px-3 py-1 text-caption font-medium rounded-sm bg-burgundy text-white hover:bg-burgundy/90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5"
+                  className="px-3 py-1.5 text-caption font-medium rounded-sm bg-burgundy text-white hover:bg-burgundy/90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 min-w-[120px]"
                 >
                   <Play className="w-3.5 h-3.5" />
                   {isContinuationLoading ? "Probing…" : "Run continuation"}
                 </button>
+                {isContinuationLoading ? (
+                  <button
+                    onClick={handleStop}
+                    className="px-3 py-1.5 text-caption font-medium rounded-sm border border-burgundy/40 text-burgundy hover:bg-burgundy/5 flex items-center justify-center gap-1.5 min-w-[120px]"
+                    title="Cancel the running probe. Already-arrived results are kept."
+                  >
+                    <Square className="w-3.5 h-3.5 fill-current" />
+                    Stop
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleContinuationReset}
+                    disabled={continuationResults.length === 0}
+                    className="px-3 py-1.5 text-caption font-medium rounded-sm border border-parchment text-foreground hover:bg-cream/50 disabled:opacity-30 flex items-center justify-center gap-1.5 min-w-[120px]"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Reset
+                  </button>
+                )}
               </div>
 
               {/* Progress */}
@@ -1322,6 +1317,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
                 forcedTopN={forcedTopN}
                 setForcedTopN={setForcedTopN}
                 handleRunForced={handleRunForced}
+                onStop={handleStop}
                 getSlotLabel={getSlotLabel}
                 panelSelection={panelSelection}
               />
@@ -1347,6 +1343,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
                 progress={perturbationProgress}
                 error={perturbationError}
                 onRun={handleRunPerturbation}
+                onStop={handleStop}
                 patternId={patternId}
                 selectedPatternIds={selectedPatternIds}
                 togglePatternSelected={togglePatternSelected}
@@ -1392,6 +1389,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
                 isSweepDone={isSweepDone}
                 onRun={handleRunSweep}
                 onReset={handleSweepReset}
+                onStop={handleStop}
               />
               {sweepRuns.length > 0 && (
                 <div className="mt-3">
@@ -1481,22 +1479,40 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
                   {selectedPrompts.length * PREVALENCE_TEMPS.length * panelsShown.length} runs expected
                 </div>
                 <div className="flex-1" />
-                <button
-                  onClick={handleReset}
-                  disabled={isLoading || runs.length === 0}
-                  className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5 disabled:opacity-30"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  Reset
-                </button>
+                {/* Run / Stop / Reset triplet — uniform sizing across
+                    all three buttons (same min-width, same padding, same
+                    icon size). Stop replaces Reset's slot while a phase
+                    is running and is bound to the global abort handler;
+                    after the phase finishes Reset returns. The cluster
+                    keeps the Stop affordance directly adjacent to the
+                    button that started the run. */}
                 <button
                   onClick={handleRun}
                   disabled={isLoading || selectedPrompts.length === 0 || (!slotAConfigured && !slotBConfigured)}
-                  className="px-3 py-1 text-caption font-medium rounded-sm bg-burgundy text-white hover:bg-burgundy/90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5"
+                  className="px-3 py-1.5 text-caption font-medium rounded-sm bg-burgundy text-white hover:bg-burgundy/90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 min-w-[120px]"
                 >
                   <Play className="w-3.5 h-3.5" />
                   {isLoading ? "Running…" : "Run prevalence"}
                 </button>
+                {isLoading ? (
+                  <button
+                    onClick={handleStop}
+                    className="px-3 py-1.5 text-caption font-medium rounded-sm border border-burgundy/40 text-burgundy hover:bg-burgundy/5 flex items-center justify-center gap-1.5 min-w-[120px]"
+                    title="Cancel the running phase. Already-arrived results are kept."
+                  >
+                    <Square className="w-3.5 h-3.5 fill-current" />
+                    Stop
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleReset}
+                    disabled={runs.length === 0}
+                    className="px-3 py-1.5 text-caption font-medium rounded-sm border border-parchment text-foreground hover:bg-cream/50 disabled:opacity-30 flex items-center justify-center gap-1.5 min-w-[120px]"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Reset
+                  </button>
+                )}
               </div>
 
               {showSuiteEditor && (
@@ -2143,6 +2159,7 @@ function ForcedContinuationPanel({
   forcedTopN,
   setForcedTopN,
   handleRunForced,
+  onStop,
   getSlotLabel,
   panelSelection,
 }: {
@@ -2159,6 +2176,7 @@ function ForcedContinuationPanel({
   forcedTopN: number;
   setForcedTopN: (n: number) => void;
   handleRunForced: () => void;
+  onStop: () => void;
   getSlotLabel: (panel: "A" | "B") => string;
   panelSelection: PanelSelection;
 }) {
@@ -2193,16 +2211,21 @@ function ForcedContinuationPanel({
           type="button"
           onClick={handleRunForced}
           disabled={isForcedLoading || continuationResults.length === 0}
-          className="btn-editorial flex items-center gap-1 text-caption disabled:opacity-50"
+          className="px-3 py-1.5 text-caption font-medium rounded-sm bg-burgundy text-white hover:bg-burgundy/90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 min-w-[120px]"
           title={continuationResults.length === 0 ? "Run Phase B first to populate candidate Y tokens" : "Expand top-N Y tokens per scaffold into phrases"}
         >
-          <Play className="w-3 h-3" /> Run Phase C
+          <Play className="w-3.5 h-3.5" /> Run Phase C
         </button>
-        <button
-          type="button"
-          onClick={() => { /* reset */ void setForcedTopN(forcedTopN); }}
-          className="hidden"
-        />
+        {isForcedLoading && (
+          <button
+            type="button"
+            onClick={onStop}
+            className="px-3 py-1.5 text-caption font-medium rounded-sm border border-burgundy/40 text-burgundy hover:bg-burgundy/5 flex items-center justify-center gap-1.5 min-w-[120px]"
+            title="Cancel the running expansion. Already-arrived results are kept."
+          >
+            <Square className="w-3.5 h-3.5 fill-current" /> Stop
+          </button>
+        )}
         <label className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground">
           top-N
           <input
@@ -2305,7 +2328,7 @@ function ForcedContinuationPanel({
 //   Δpro > 0.3   → "invitable" (the model reaches for it when permitted)
 function PerturbationPanel({
   pattern, selectedPatterns, selectedPrompts,
-  perturbationRuns, isLoading, progress, error, onRun,
+  perturbationRuns, isLoading, progress, error, onRun, onStop,
   patternId, selectedPatternIds, togglePatternSelected, promotePatternToPrimary,
   panelSelection, getSlotLabel,
 }: {
@@ -2317,6 +2340,7 @@ function PerturbationPanel({
   progress: { done: number; total: number } | null;
   error: string | null;
   onRun: () => void;
+  onStop: () => void;
   patternId: string;
   selectedPatternIds: Set<string>;
   togglePatternSelected: (id: string) => void;
@@ -2391,10 +2415,20 @@ function PerturbationPanel({
           type="button"
           onClick={onRun}
           disabled={isLoading || selectedPrompts.length === 0}
-          className="btn-editorial flex items-center gap-1 text-caption disabled:opacity-50"
+          className="px-3 py-1.5 text-caption font-medium rounded-sm bg-burgundy text-white hover:bg-burgundy/90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 min-w-[120px]"
         >
-          <Play className="w-3 h-3" /> Run Phase D
+          <Play className="w-3.5 h-3.5" /> Run Phase D
         </button>
+        {isLoading && (
+          <button
+            type="button"
+            onClick={onStop}
+            className="px-3 py-1.5 text-caption font-medium rounded-sm border border-burgundy/40 text-burgundy hover:bg-burgundy/5 flex items-center justify-center gap-1.5 min-w-[120px]"
+            title="Cancel the running perturbation. Already-arrived results are kept."
+          >
+            <Square className="w-3.5 h-3.5 fill-current" /> Stop
+          </button>
+        )}
         <span className="text-muted-foreground">
           Runs <strong className="text-foreground">{selectedPrompts.length}</strong> prompts × 3 framings × {panelSelection === "both" ? "2 panels" : `1 panel (${getSlotLabel(activePanel)})`} @ T=0.7. Anti/pro directives are keyed to the primary pattern &ldquo;<strong className="text-foreground">{pattern.shortLabel}</strong>&rdquo;.
         </span>
@@ -2496,6 +2530,7 @@ function TemperatureSweepPanel(props: {
   isSweepDone: boolean;
   onRun: () => void;
   onReset: () => void;
+  onStop: () => void;
 }) {
   const {
     pattern, patternId,
@@ -2504,7 +2539,7 @@ function TemperatureSweepPanel(props: {
     panelSelection, slots, getSlotLabel,
     slotAConfigured, slotBConfigured,
     sweepRuns, isSweepLoading, sweepProgress, sweepError, isSweepDone,
-    onRun, onReset,
+    onRun, onReset, onStop,
   } = props;
 
   const usingBoth = panelSelection === "both" && slotBConfigured;
@@ -2594,21 +2629,32 @@ function TemperatureSweepPanel(props: {
         </div>
         <div className="flex-1" />
         <button
-          onClick={onReset}
-          disabled={isSweepLoading || sweepRuns.length === 0}
-          className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5 disabled:opacity-30"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          Reset
-        </button>
-        <button
           onClick={onRun}
           disabled={isSweepLoading || selectedPrompts.length === 0 || (!slotAConfigured && !usingBoth)}
-          className="px-3 py-1 text-caption font-medium rounded-sm bg-burgundy text-white hover:bg-burgundy/90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5"
+          className="px-3 py-1.5 text-caption font-medium rounded-sm bg-burgundy text-white hover:bg-burgundy/90 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 min-w-[120px]"
         >
           <Play className="w-3.5 h-3.5" />
           {isSweepLoading ? "Sweeping…" : "Run sweep"}
         </button>
+        {isSweepLoading ? (
+          <button
+            onClick={onStop}
+            className="px-3 py-1.5 text-caption font-medium rounded-sm border border-burgundy/40 text-burgundy hover:bg-burgundy/5 flex items-center justify-center gap-1.5 min-w-[120px]"
+            title="Cancel the running sweep. Already-arrived results are kept."
+          >
+            <Square className="w-3.5 h-3.5 fill-current" />
+            Stop
+          </button>
+        ) : (
+          <button
+            onClick={onReset}
+            disabled={sweepRuns.length === 0}
+            className="px-3 py-1.5 text-caption font-medium rounded-sm border border-parchment text-foreground hover:bg-cream/50 disabled:opacity-30 flex items-center justify-center gap-1.5 min-w-[120px]"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Reset
+          </button>
+        )}
       </div>
 
       {/* Progress */}
