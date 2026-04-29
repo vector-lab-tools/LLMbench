@@ -499,7 +499,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       createdAt: now.toISOString(),
       source: {
         tool: "LLMbench",
-        version: "2.15.28",
+        version: "2.15.29",
         // Spec field — singular, dominant phase (Atlas routes on this).
         phase: dominantPhase,
         // LLMbench extension — full set when the bundle covers multiple

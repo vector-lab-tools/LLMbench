@@ -675,7 +675,6 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
                 branchPerplexity={branchPerplexity}
                 inspectedStepIndex={inspectedStepIndex}
                 onSelectStep={setSelectedStepIndex}
-                onDownloadCsv={() => trace && downloadTrajectoryCsv(trace, activeBranch.id)}
                 tokenCount={activeBranch.steps.length}
               />
               {dualPanel && traceB && activeBranchB && (
@@ -688,7 +687,6 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
                   branchPerplexity={branchPerplexityB}
                   inspectedStepIndex={inspectedStepIndex}
                   onSelectStep={setSelectedStepIndex}
-                  onDownloadCsv={() => traceB && downloadTrajectoryCsv(traceB, activeBranchB.id)}
                   tokenCount={activeBranchB.steps.length}
                 />
               )}
@@ -725,7 +723,13 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
             {/* Deep Dive */}
             <DeepDive label="Deep Dive — trajectory, rank histogram, full transcripts" defaultOpen={false}>
               <DeepDivePanels trace={trace} traceB={traceB} dualPanel={dualPanel}
-                              getSlotLabel={getSlotLabel} />
+                              getSlotLabel={getSlotLabel}
+                              metricsA={stepMetrics} metricsB={stepMetricsB}
+                              inspectedStepIndex={inspectedStepIndex}
+                              onSelectStep={setSelectedStepIndex}
+                              onDownloadCsvA={() => trace && activeBranch && downloadTrajectoryCsv(trace, activeBranch.id)}
+                              onDownloadCsvB={() => traceB && activeBranchB && downloadTrajectoryCsv(traceB, activeBranchB.id)}
+              />
             </DeepDive>
           </>
         )}
@@ -764,7 +768,7 @@ function Slider({ label, value, onChange, min, max, step, integer = false }: {
 
 function PanelOutputColumn({
   title, promptText, branchLabel, metrics, totalSurprisal, branchPerplexity,
-  inspectedStepIndex, onSelectStep, onDownloadCsv, tokenCount,
+  inspectedStepIndex, onSelectStep, tokenCount,
 }: {
   title: string;
   promptText: string;
@@ -774,7 +778,6 @@ function PanelOutputColumn({
   branchPerplexity: number;
   inspectedStepIndex: number | null;
   onSelectStep: (i: number) => void;
-  onDownloadCsv: () => void;
   tokenCount: number;
 }) {
   return (
@@ -801,25 +804,12 @@ function PanelOutputColumn({
           >{m.step.chosenToken}</button>
         ))}
       </div>
-      <div>
-        <TrajectoryChart
-          metrics={metrics}
-          onSelectStep={onSelectStep}
-          selectedIndex={inspectedStepIndex}
-        />
-        <div className="flex items-center gap-2 mt-1">
-          <button
-            type="button"
-            onClick={onDownloadCsv}
-            className="btn-editorial-ghost flex items-center gap-1 text-[10px] px-2 py-0.5"
-          >
-            <Download className="w-3 h-3" /> Trajectory CSV
-          </button>
-          <span className="text-[10px] text-muted-foreground italic">
-            Green line: entropy H (bits). Burgundy bars: chosen-token surprisal.
-          </span>
-        </div>
-      </div>
+      {/* Trajectory chart (entropy + surprisal) lives in the Deep Dive
+          rather than the main panel — at the main-panel size it
+          dominated the viewport with low information density. The
+          surprisal data is already encoded in the per-token shading
+          of the generation strip above; the Deep Dive carries the
+          chart for cases where the user wants to scan trends. */}
     </div>
   );
 }
@@ -883,7 +873,12 @@ function TrajectoryChart({ metrics, onSelectStep, selectedIndex }: {
   selectedIndex: number | null;
 }) {
   if (metrics.length === 0) return null;
-  const w = 640, h = 120, pad = 20;
+  // Compact viewBox tuned for the Deep Dive context (small chart with
+  // labelled axes and tick marks). Total visual height is bounded by
+  // the SVG's intrinsic aspect ratio plus the wrapper's max-h-32.
+  const w = 480, h = 90, padL = 30, padR = 8, padT = 8, padB = 16;
+  const innerW = w - padL - padR;
+  const innerH = h - padT - padB;
   const maxBits = Math.max(
     4,
     ...metrics.map(m => Math.max(
@@ -891,32 +886,58 @@ function TrajectoryChart({ metrics, onSelectStep, selectedIndex }: {
       Number.isFinite(m.surprisal) ? m.surprisal : 0,
     ))
   );
-  const xStep = (w - 2 * pad) / Math.max(1, metrics.length - 1);
-  const y = (bits: number) => h - pad - (Number.isFinite(bits) ? (bits / maxBits) * (h - 2 * pad) : 0);
+  const xStep = innerW / Math.max(1, metrics.length - 1);
+  const y = (bits: number) => padT + innerH - (Number.isFinite(bits) ? (bits / maxBits) * innerH : 0);
+  const entropyPath = metrics.map((m, i) => `${i === 0 ? "M" : "L"}${padL + i * xStep},${y(m.entropy)}`).join(" ");
 
-  const entropyPath = metrics.map((m, i) => `${i === 0 ? "M" : "L"}${pad + i * xStep},${y(m.entropy)}`).join(" ");
+  // Y-axis ticks at 0, midpoint, and max. Keeps the label count small
+  // so the chart reads at a glance even at this size.
+  const ticks = [0, maxBits / 2, maxBits];
 
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-auto" preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-auto max-h-32" preserveAspectRatio="xMidYMid meet">
+      {/* Y axis label, rotated. Combined "entropy / surprisal (bits)" so
+          the reader knows both series share the same axis. */}
+      <text
+        x={6} y={padT + innerH / 2} fontSize={7}
+        textAnchor="middle"
+        transform={`rotate(-90 6 ${padT + innerH / 2})`}
+        className="fill-muted-foreground"
+      >entropy / surprisal (bits)</text>
+
+      {/* Y tick lines + labels */}
+      {ticks.map((t, i) => (
+        <g key={i}>
+          <line x1={padL} y1={y(t)} x2={w - padR} y2={y(t)}
+                className="stroke-muted-foreground/15" strokeWidth={0.4} />
+          <text x={padL - 2} y={y(t) + 2} fontSize={6} textAnchor="end"
+                className="fill-muted-foreground">{t.toFixed(1)}</text>
+        </g>
+      ))}
+
       {/* Surprisal bars */}
       {metrics.map((m, i) => {
-        const x = pad + i * xStep - 2;
-        const barH = h - pad - y(m.surprisal);
+        const x = padL + i * xStep - 1;
+        const barH = padT + innerH - y(m.surprisal);
         return (
-          <g key={i} onClick={() => onSelectStep(i)} style={{ cursor: "pointer" }}>
-            <rect
-              x={x} y={y(m.surprisal)} width={4} height={Math.max(0, barH)}
-              className={selectedIndex === i ? "fill-burgundy" : "fill-burgundy/60"}
-            />
-          </g>
+          <rect key={i}
+            x={x} y={y(m.surprisal)} width={2} height={Math.max(0, barH)}
+            onClick={() => onSelectStep(i)}
+            style={{ cursor: "pointer" }}
+            className={selectedIndex === i ? "fill-burgundy" : "fill-burgundy/60"}
+          />
         );
       })}
       {/* Entropy line */}
-      <path d={entropyPath} fill="none" className="stroke-emerald-600 dark:stroke-emerald-400" strokeWidth={1.5} />
+      <path d={entropyPath} fill="none" className="stroke-emerald-600 dark:stroke-emerald-400" strokeWidth={1} />
       {/* Axes */}
-      <line x1={pad} y1={h - pad} x2={w - pad} y2={h - pad} className="stroke-muted-foreground/40" strokeWidth={0.5} />
-      <line x1={pad} y1={pad} x2={pad} y2={h - pad} className="stroke-muted-foreground/40" strokeWidth={0.5} />
-      <text x={pad + 2} y={pad + 8} fontSize={9} className="fill-muted-foreground">{maxBits.toFixed(1)} bits</text>
+      <line x1={padL} y1={padT + innerH} x2={w - padR} y2={padT + innerH}
+            className="stroke-muted-foreground/40" strokeWidth={0.5} />
+      <line x1={padL} y1={padT} x2={padL} y2={padT + innerH}
+            className="stroke-muted-foreground/40" strokeWidth={0.5} />
+      {/* X axis label */}
+      <text x={padL + innerW / 2} y={h - 3} fontSize={7} textAnchor="middle"
+            className="fill-muted-foreground">token position (1–{metrics.length})</text>
     </svg>
   );
 }
@@ -1055,11 +1076,21 @@ function TranscriptBlock({ label, prompt, branch }: {
   );
 }
 
-function DeepDivePanels({ trace, traceB, dualPanel, getSlotLabel }: {
+function DeepDivePanels({
+  trace, traceB, dualPanel, getSlotLabel,
+  metricsA, metricsB, inspectedStepIndex, onSelectStep,
+  onDownloadCsvA, onDownloadCsvB,
+}: {
   trace: SamplingTrace;
   traceB: SamplingTrace | null;
   dualPanel: boolean;
   getSlotLabel: (panel: "A" | "B") => string;
+  metricsA: { entropy: number; surprisal: number; p: number; rank: number; step: SamplingStep }[];
+  metricsB: { entropy: number; surprisal: number; p: number; rank: number; step: SamplingStep }[];
+  inspectedStepIndex: number | null;
+  onSelectStep: (i: number) => void;
+  onDownloadCsvA: () => void;
+  onDownloadCsvB: () => void;
 }) {
   const branch = trace.branches[trace.activeBranchId];
   const branchB = dualPanel && traceB ? traceB.branches[traceB.activeBranchId] : null;
@@ -1103,6 +1134,40 @@ function DeepDivePanels({ trace, traceB, dualPanel, getSlotLabel }: {
 
   return (
     <div className="space-y-3 text-caption">
+      {/* Trajectory chart — moved here from the main panel in v2.15.29.
+          Per-step entropy (green line) and chosen-token surprisal
+          (burgundy bars) across the sequence. Click a bar to focus that
+          step in the inspector above. Tells you where the model was
+          confident (low surprisal) versus where the sampler had real
+          choice (high entropy and/or high surprisal). */}
+      {metricsA.length > 0 && (
+        <div>
+          <div className="font-semibold text-foreground mb-0.5">
+            Trajectory — {getSlotLabel(branch.panel)}
+          </div>
+          <div className="text-muted-foreground mb-1.5">
+            Per-step view of the sampler&apos;s uncertainty. The <span className="text-emerald-700 dark:text-emerald-400 font-semibold">green line</span> is Shannon entropy <em>H</em> over the returned top-K (in bits, higher = more diffuse next-token distribution). The <span className="text-burgundy font-semibold">burgundy bars</span> are the chosen token&apos;s surprisal &minus;log&#8322;<em>p</em> (higher = the chosen token was less probable). Spikes mark moments where the sampler had real freedom or surprised itself; flatlines mark deterministic prose. Click a bar to focus that step in the inspector above.
+          </div>
+          <TrajectoryChart metrics={metricsA} onSelectStep={onSelectStep} selectedIndex={inspectedStepIndex} />
+          <button type="button" onClick={onDownloadCsvA}
+                  className="btn-editorial-ghost flex items-center gap-1 text-[10px] px-2 py-0.5 mt-1">
+            <Download className="w-3 h-3" /> Trajectory CSV
+          </button>
+        </div>
+      )}
+      {dualPanel && metricsB.length > 0 && branchB && (
+        <div>
+          <div className="font-semibold text-foreground mb-0.5">
+            Trajectory — {getSlotLabel("B")}
+          </div>
+          <TrajectoryChart metrics={metricsB} onSelectStep={onSelectStep} selectedIndex={inspectedStepIndex} />
+          <button type="button" onClick={onDownloadCsvB}
+                  className="btn-editorial-ghost flex items-center gap-1 text-[10px] px-2 py-0.5 mt-1">
+            <Download className="w-3 h-3" /> Trajectory CSV
+          </button>
+        </div>
+      )}
+
       <div>
         <div className="font-semibold text-foreground mb-1">Rank-of-chosen histogram — {getSlotLabel("A")}</div>
         <div className="text-muted-foreground mb-1">Where does the chosen token sit in the distribution at each step?</div>
