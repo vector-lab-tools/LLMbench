@@ -111,21 +111,35 @@ function SlotEditor({
           }}
           className="input-editorial w-full"
         >
-          {providers
-            .filter((p) => p.id !== "ollama" || isLocal)
-            .map((p) => {
-              const disabled = logprobsFilter && !p.supportsLogprobs;
-              return (
-                <option key={p.id} value={p.id} disabled={disabled}>
-                  {p.name}{disabled ? " (no logprobs)" : ""}
-                </option>
-              );
-            })}
+          {/* Ollama used to be filtered out unless the page was served
+              from localhost. That was too aggressive: a user can run
+              Ollama with `OLLAMA_ORIGINS="*"` (or a specific domain)
+              and reach it from a deployed origin too. Now always
+              listed; the inline note below explains the constraints. */}
+          {providers.map((p) => {
+            const disabled = logprobsFilter && !p.supportsLogprobs;
+            return (
+              <option key={p.id} value={p.id} disabled={disabled}>
+                {p.name}{disabled ? " (no logprobs)" : ""}
+              </option>
+            );
+          })}
         </select>
 
-        {slot.provider === "ollama" && !isLocal && (
-          <p className="mt-1 text-caption text-red-500">
-            Ollama requires a local server. Run LLMbench locally with npm run dev to use Ollama.
+        {slot.provider === "ollama" && (
+          <p className="mt-1 text-caption text-muted-foreground">
+            Ollama runs on your own machine — install from{" "}
+            <a href="https://ollama.com/download" target="_blank" rel="noopener noreferrer"
+               className="text-burgundy hover:underline">ollama.com/download</a>,
+            pull a model (<code className="font-mono">ollama pull llama3.2</code>),
+            and start the server (<code className="font-mono">ollama serve</code>).
+            {!isLocal && (
+              <> {" "}You&apos;re viewing LLMbench from{" "}
+                <span className="font-mono">{typeof window !== "undefined" ? window.location.hostname : "a deployed origin"}</span>;
+                start Ollama with{" "}
+                <code className="font-mono">OLLAMA_ORIGINS=&quot;*&quot; ollama serve</code>{" "}
+                so the browser can call it from this origin.</>
+            )}
           </p>
         )}
       </div>
@@ -484,6 +498,24 @@ const PROVIDER_GUIDES: ProviderGuideEntry[] = [
     ],
     notes:
       "Logprobs are reliably available on openai/* routes (gpt-4o, gpt-4o-mini). Other routes may return empty distributions; LLMbench will surface a clear error if so.",
+  },
+  {
+    id: "ollama",
+    name: "Ollama (local, no API key)",
+    signupUrl: "https://ollama.com/download",
+    keyUrl: "https://ollama.com/library",
+    keyPrefix: "(no key)",
+    freeTier:
+      "Free. All inference happens on your own machine — no calls leave your laptop, no per-token cost.",
+    steps: [
+      "Install Ollama from ollama.com/download (macOS, Linux, Windows).",
+      "Pull a model: in a terminal, run e.g. `ollama pull llama3.2` or `ollama pull qwen2.5:7b`. The model library link below lists what's available.",
+      "Start the server: `ollama serve` (or just open the Ollama app). It listens on http://127.0.0.1:11434 by default.",
+      "In LLMbench Settings, choose Ollama, leave the API key blank, and either pick a model from the list or enter the exact model ID you pulled (e.g. llama3.2:latest).",
+      "If you're using LLMbench on a deployed URL rather than localhost, Ollama needs to be reachable from that origin. Run with OLLAMA_ORIGINS=\"*\" ollama serve (or restrict to your deployed domain) so the browser can call it.",
+    ],
+    notes:
+      "Ollama exposes an OpenAI-compatible endpoint, so it plugs into LLMbench through the same chat-completions path as OpenAI. Logprobs are not currently exposed by Ollama, so the Probs view, Grammar Probe Phase B/C, and Sampling Probe will not work against an Ollama slot — Compare and the rest of Analyse are fully usable. No data leaves your machine.",
   },
 ];
 
