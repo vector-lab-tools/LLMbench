@@ -3,6 +3,9 @@
 import { useState, useCallback } from "react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import type { OutputProvenance, ProviderSlot } from "@/types/ai-settings";
+import { generateOllamaFromBrowser } from "@/lib/ai/ollama-browser";
+import { getModelDisplayName } from "@/lib/ai/config";
+import { buildSystemPrompt } from "@/lib/ai/system-prompts";
 
 export interface PanelOutput {
   text: string;
@@ -77,46 +80,105 @@ export function usePromptDispatch() {
         executedSlots: { A: slotA, B: slotB },
       });
 
-      try {
-        const response = await fetch("/api/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            prompt,
-            slotA,
-            slotB,
-            noMarkdown,
-          }),
-        });
+      // Routing decision: Ollama slots run from the browser directly
+      // (so a deployed LLMbench can reach a local Ollama once the
+      // user has set OLLAMA_ORIGINS=*); other providers go through
+      // the server-side /api/generate route as before. The
+      // server-side route accepts a `panel: "A"|"B"|"both"` field
+      // (added in v2.15.21) that skips one slot, so when one side
+      // is Ollama we can ask the server to handle the other side
+      // only and run Ollama in parallel from the browser.
+      const isOllama = (s: ProviderSlot) => s.provider === "ollama";
+      const aOllama = isOllama(slotA);
+      const bOllama = isOllama(slotB);
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => null);
-          throw new Error(
-            errorData?.error || `Server error: ${response.status}`
-          );
+      const buildResult = (panel: { error?: string; text?: string; provenance?: Record<string, unknown>; responseTimeMs?: number } | undefined): PanelResult | null => {
+        if (!panel) return null;
+        const generatedAt = (panel.provenance as { generatedAt?: string } | undefined)?.generatedAt
+          || new Date().toISOString();
+        const provenance = { ...(panel.provenance ?? {}), generatedAt };
+        if (panel.error) {
+          return { error: panel.error, provenance: { ...provenance, responseTimeMs: 0 } } as PanelResult;
+        }
+        return { text: panel.text ?? "", provenance: { ...provenance, responseTimeMs: panel.responseTimeMs ?? 0 } } as PanelResult;
+      };
+
+      // Browser-direct Ollama call wrapped to match the panel-payload
+      // shape so buildResult can consume it identically to the API
+      // route's response.
+      const callOllama = async (slot: ProviderSlot) => {
+        const modelName = slot.customModelId || slot.model;
+        const provenanceBase = {
+          provider: slot.provider,
+          model: modelName,
+          modelDisplayName: getModelDisplayName(slot.provider, modelName),
+          temperature: slot.temperature,
+          systemPrompt: slot.systemPrompt,
+        };
+        try {
+          const out = await generateOllamaFromBrowser({
+            baseUrl: slot.baseUrl || "http://127.0.0.1:11434",
+            model: modelName,
+            prompt,
+            systemPrompt: buildSystemPrompt(slot.systemPrompt || undefined, noMarkdown),
+            temperature: slot.temperature,
+          });
+          return { text: out.text, responseTimeMs: out.responseTimeMs, provenance: provenanceBase };
+        } catch (err) {
+          return {
+            error: err instanceof Error ? err.message : "Ollama call failed",
+            provenance: provenanceBase,
+          };
+        }
+      };
+
+      try {
+        // Fan out: Ollama slots → browser-direct, others → /api/generate
+        // (with the panel field set to skip the Ollama side, or "both"
+        // if neither is Ollama). All in parallel via Promise.all.
+        const wantServer = !aOllama || !bOllama;
+        const serverPanel: "A" | "B" | "both" =
+          aOllama && bOllama ? "both" /* unused */ :
+          aOllama ? "B" :
+          bOllama ? "A" :
+          "both";
+
+        const serverPromise: Promise<Response | null> = wantServer
+          ? fetch("/api/generate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ prompt, slotA, slotB, noMarkdown, panel: serverPanel }),
+            })
+          : Promise.resolve(null);
+
+        const ollamaPromiseA = aOllama ? callOllama(slotA) : Promise.resolve(null);
+        const ollamaPromiseB = bOllama ? callOllama(slotB) : Promise.resolve(null);
+
+        const [serverResp, ollamaA, ollamaB] = await Promise.all([
+          serverPromise, ollamaPromiseA, ollamaPromiseB,
+        ]);
+
+        let serverData: { A?: unknown; B?: unknown; generatedAt?: string } = {};
+        if (serverResp) {
+          if (!serverResp.ok) {
+            const errorData = await serverResp.json().catch(() => null);
+            throw new Error(errorData?.error || `Server error: ${serverResp.status}`);
+          }
+          serverData = await serverResp.json();
         }
 
-        const data = await response.json();
-        const now = data.generatedAt || new Date().toISOString();
-
-        // Build each panel result independently so one panel's failure
-        // cannot prevent the other panel from displaying.
-        const buildResult = (panel: { error?: string; text?: string; provenance?: Record<string, unknown>; responseTimeMs?: number } | undefined): PanelResult | null => {
-          if (!panel) return null;
-          const provenance = { ...(panel.provenance ?? {}), generatedAt: now };
-          if (panel.error) {
-            return { error: panel.error, provenance: { ...provenance, responseTimeMs: 0 } } as PanelResult;
-          }
-          return { text: panel.text ?? "", provenance: { ...provenance, responseTimeMs: panel.responseTimeMs ?? 0 } } as PanelResult;
-        };
+        // Merge: Ollama-side result wins if Ollama; otherwise take the
+        // server's payload for that side.
+        const panelA = aOllama ? ollamaA! : (serverData as { A?: Parameters<typeof buildResult>[0] }).A;
+        const panelB = bOllama ? ollamaB! : (serverData as { B?: Parameters<typeof buildResult>[0] }).B;
 
         setState({
           isLoading: false,
           loadingA: false,
           loadingB: false,
           prompt,
-          resultA: buildResult(data.A),
-          resultB: buildResult(data.B),
+          resultA: buildResult(panelA as Parameters<typeof buildResult>[0]),
+          resultB: buildResult(panelB as Parameters<typeof buildResult>[0]),
           error: null,
           executedSlots: { A: slotA, B: slotB },
         });

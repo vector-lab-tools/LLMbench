@@ -1,6 +1,6 @@
 {
   "name": "llmbench",
-  "version": "2.15.33",
+  "version": "2.15.34",
   "private": true,
   "scripts": {
     "dev": "next dev",
