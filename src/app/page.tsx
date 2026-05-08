@@ -266,12 +266,22 @@ export default function Home() {
             <div className="space-y-4 text-body-sm text-foreground">
               <div>
                 <h3 className="font-semibold mb-1">Getting Started</h3>
-                <p className="text-muted-foreground">
+                <p className="text-muted-foreground mb-2">
                   Click <strong>Settings</strong> to configure one or two LLM providers with API keys.
-                  You can use Google Gemini, OpenAI, Anthropic, OpenRouter, Hugging Face, Ollama, or any OpenAI-compatible provider.
+                  You can use Google Gemini, OpenAI, Anthropic, OpenRouter, Hugging Face, Ollama (local), or any OpenAI-compatible provider.
                   Each mode works with one or two models; use the <strong>A / B / Both</strong> selector
                   in analysis modes to choose. If you send an empty prompt, a curated example is chosen automatically &mdash;
                   or pick one from the <strong>Try:</strong> chips below the input.
+                </p>
+                <p className="text-muted-foreground">
+                  <strong className="text-foreground">Ollama (Local).</strong> No API key &mdash; the model runs on your own machine.
+                  LLMbench calls Ollama directly from the browser, so it works from both
+                  a local dev build and the deployed app. Install from{" "}
+                  <a href="https://ollama.com/download" target="_blank" rel="noopener noreferrer" className="text-burgundy hover:underline">ollama.com/download</a>,
+                  pull a model (<code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">ollama pull llama3.2</code>),
+                  and start the server. From a deployed LLMbench, start Ollama with
+                  <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">OLLAMA_ORIGINS=&quot;*&quot; ollama serve</code> so its CORS policy lets this page call it.
+                  Logprobs are not exposed by Ollama, so the Probs view and logprob-dependent modes (Grammar Probe Phase B/C, Sampling Probe) won&apos;t apply &mdash; Compare and the rest of Analyse are fully usable.
                 </p>
               </div>
 
