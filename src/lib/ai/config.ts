@@ -89,7 +89,8 @@ const PROVIDER_META: Record<AIProvider, Omit<ProviderConfig, "models">> = {
   ollama: {
     id: "ollama",
     name: "Ollama (Local)",
-    description: "Run models locally with Ollama",
+    description:
+      "Run models on your own machine with Ollama. Requires LLMbench itself to be running locally — browsers block HTTPS-deployed pages from reaching local HTTP Ollama. For deployed LLMbench, use Ollama's hosted offering through the OpenAI-compatible provider instead.",
     requiresApiKey: false,
     baseUrlConfigurable: true,
     defaultBaseUrl: "http://localhost:11434",

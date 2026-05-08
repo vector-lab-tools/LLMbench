@@ -111,36 +111,64 @@ function SlotEditor({
           }}
           className="input-editorial w-full"
         >
-          {/* Ollama used to be filtered out unless the page was served
-              from localhost. That was too aggressive: a user can run
-              Ollama with `OLLAMA_ORIGINS="*"` (or a specific domain)
-              and reach it from a deployed origin too. Now always
-              listed; the inline note below explains the constraints. */}
+          {/* Ollama is always listed in the dropdown — it's grey/disabled
+              when the page isn't on localhost so the option is visible
+              (so users see Ollama exists at all) but unselectable, with
+              an explanation below the select. Hiding it would be
+              invisible discovery; greying it conveys "you could have
+              this, here's why you don't right now." */}
           {providers.map((p) => {
-            const disabled = logprobsFilter && !p.supportsLogprobs;
+            const noLogprobs = logprobsFilter && !p.supportsLogprobs;
+            const ollamaUnavailable = p.id === "ollama" && !isLocal;
+            const disabled = noLogprobs || ollamaUnavailable;
+            const suffix = noLogprobs
+              ? " (no logprobs)"
+              : ollamaUnavailable
+                ? " (requires localhost)"
+                : "";
             return (
               <option key={p.id} value={p.id} disabled={disabled}>
-                {p.name}{disabled ? " (no logprobs)" : ""}
+                {p.name}{suffix}
               </option>
             );
           })}
         </select>
 
         {slot.provider === "ollama" && (
-          <p className="mt-1 text-caption text-muted-foreground">
-            Ollama runs on your own machine — install from{" "}
-            <a href="https://ollama.com/download" target="_blank" rel="noopener noreferrer"
-               className="text-burgundy hover:underline">ollama.com/download</a>,
-            pull a model (<code className="font-mono">ollama pull llama3.2</code>),
-            and start the server (<code className="font-mono">ollama serve</code>).
+          <div className="mt-1 text-caption text-muted-foreground space-y-1">
+            <p>
+              <strong className="text-foreground">Ollama (Local)</strong> runs the model on
+              your own machine. <strong className="text-foreground">It only works when LLMbench
+              itself is running locally in the browser</strong> (e.g. <code className="font-mono">npm run dev</code>{" "}
+              on <code className="font-mono">localhost:3000</code>). Browsers block
+              HTTPS-deployed pages from talking to a local <code className="font-mono">http://</code>{" "}
+              Ollama for security reasons (mixed content + private-network access),
+              and <code className="font-mono">OLLAMA_ORIGINS</code> can&apos;t override
+              that — it controls CORS, not the browser&apos;s mixed-content block.
+            </p>
             {!isLocal && (
-              <> {" "}You&apos;re viewing LLMbench from{" "}
-                <span className="font-mono">{typeof window !== "undefined" ? window.location.hostname : "a deployed origin"}</span>;
-                start Ollama with{" "}
-                <code className="font-mono">OLLAMA_ORIGINS=&quot;*&quot; ollama serve</code>{" "}
-                so the browser can call it from this origin.</>
+              <p>
+                You&apos;re viewing LLMbench from{" "}
+                <span className="font-mono">
+                  {typeof window !== "undefined" ? window.location.hostname : "a deployed origin"}
+                </span>
+                . To use Ollama, either (a) clone LLMbench and run it locally, or
+                (b) use Ollama&apos;s hosted offering — point the{" "}
+                <strong className="text-foreground">OpenAI-compatible</strong> provider at
+                Ollama&apos;s cloud endpoint with your API key. That call is HTTPS-to-HTTPS
+                and works from a deployed LLMbench.
+              </p>
             )}
-          </p>
+            {isLocal && (
+              <p>
+                Setup: install from{" "}
+                <a href="https://ollama.com/download" target="_blank" rel="noopener noreferrer"
+                   className="text-burgundy hover:underline">ollama.com/download</a>,
+                pull a model (<code className="font-mono">ollama pull llama3.2</code>),
+                and start the server (<code className="font-mono">ollama serve</code>).
+              </p>
+            )}
+          </div>
         )}
       </div>
 
@@ -501,21 +529,21 @@ const PROVIDER_GUIDES: ProviderGuideEntry[] = [
   },
   {
     id: "ollama",
-    name: "Ollama (local, no API key)",
+    name: "Ollama (Local, no API key)",
     signupUrl: "https://ollama.com/download",
     keyUrl: "https://ollama.com/library",
     keyPrefix: "(no key)",
     freeTier:
-      "Free. All inference happens on your own machine — no calls leave your laptop, no per-token cost.",
+      "Free. All inference happens on your own machine — no calls leave your laptop, no per-token cost. Requires LLMbench to be running locally in your browser.",
     steps: [
+      "This path requires LLMbench itself to be running locally (e.g. `npm run dev` on localhost:3000) — a deployed HTTPS LLMbench cannot reach a local HTTP Ollama because browsers block mixed-content + private-network requests.",
       "Install Ollama from ollama.com/download (macOS, Linux, Windows).",
       "Pull a model: in a terminal, run e.g. `ollama pull llama3.2` or `ollama pull qwen2.5:7b`. The model library link below lists what's available.",
       "Start the server: `ollama serve` (or just open the Ollama app). It listens on http://127.0.0.1:11434 by default.",
-      "In LLMbench Settings, choose Ollama, leave the API key blank, and either pick a model from the list or enter the exact model ID you pulled (e.g. llama3.2:latest).",
-      "If you're using LLMbench on a deployed URL rather than localhost, Ollama needs to be reachable from that origin. Run with OLLAMA_ORIGINS=\"*\" ollama serve (or restrict to your deployed domain) so the browser can call it.",
+      "In your LOCAL LLMbench Settings, choose Ollama, leave the API key blank, and either pick a model from the list or enter the exact model ID you pulled (e.g. llama3.2:latest).",
     ],
     notes:
-      "Ollama exposes an OpenAI-compatible endpoint, so it plugs into LLMbench through the same chat-completions path as OpenAI. Logprobs are not currently exposed by Ollama, so the Probs view, Grammar Probe Phase B/C, and Sampling Probe will not work against an Ollama slot — Compare and the rest of Analyse are fully usable. No data leaves your machine.",
+      "Ollama exposes an OpenAI-compatible endpoint, so it plugs into LLMbench through the same chat-completions path as OpenAI. Logprobs are not currently exposed by Ollama, so the Probs view, Grammar Probe Phase B/C, and Sampling Probe will not work against an Ollama slot — Compare and the rest of Analyse are fully usable. To use Ollama from a deployed LLMbench, use Ollama's hosted/cloud offering via the OpenAI-compatible provider instead — that's HTTPS-to-HTTPS, so the browser allows it. No local data leaves your machine when you use the Local path.",
   },
 ];
 
