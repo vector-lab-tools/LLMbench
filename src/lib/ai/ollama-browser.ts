@@ -102,8 +102,93 @@ export async function generateOllamaFromBrowser(
     );
   }
   const data = await res.json();
-  const text: string = data?.choices?.[0]?.message?.content ?? "";
-  return { text, responseTimeMs: Date.now() - startedAt };
+  const rawText: string = data?.choices?.[0]?.message?.content ?? "";
+  return { text: stripHarmonyChannels(rawText), responseTimeMs: Date.now() - startedAt };
+}
+
+// ---------------------------------------------------------------------------
+// Harmony-format channel stripping
+//
+// A growing number of open-weight reasoning models (OpenAI's gpt-oss family,
+// some Gemma-derived community tags, certain Qwen "thinking" variants) emit
+// their output structured as harmony channels:
+//
+//   <|channel|>thought<|message|>...hidden reasoning...<|end|>
+//   <|channel|>commentary<|message|>...meta notes...<|end|>
+//   <|channel|>final<|message|>...the actual answer...<|return|>
+//
+// The OpenAI Chat Completions API normally hides everything but the `final`
+// channel content. Ollama's `/v1/chat/completions` compat layer currently
+// passes the raw token stream through, which leaves users staring at the
+// model's internal planning + a constraint-checklist self-audit instead of
+// the answer. We strip these client-side so close-reading isn't polluted
+// by structural tokens — but we strip in `ollama-browser.ts` rather than in
+// the renderer because the same cleaned string is what gets saved to a
+// comparison, exported as a bundle, and indexed by annotations.
+//
+// Strategy:
+//   1. If a `<|channel|>final` segment is present, keep only its content.
+//   2. Otherwise, strip all `<|...|>` special-token markers in place. This
+//      leaves the planning prose intact (better than dropping the response
+//      entirely) but removes the bracket-pipe noise.
+//
+// Tokens (the logprobs path) are stripped in parallel using the same logic
+// so the Probs heatmap stays aligned with the visible prose. See
+// `stripHarmonyChannelsFromTokens` below.
+// ---------------------------------------------------------------------------
+
+const HARMONY_FINAL_RE =
+  /<\|channel\|>\s*final\s*(?:<\|message\|>)?([\s\S]*?)(?:<\|end\|>|<\|return\|>|<\|channel\|>|$)/;
+
+const HARMONY_MARKER_RE = /<\|[^|>]*\|>/g;
+
+function stripHarmonyChannels(text: string): string {
+  if (!text || !text.includes("<|")) return text;
+  const finalMatch = text.match(HARMONY_FINAL_RE);
+  if (finalMatch && finalMatch[1].trim().length > 0) {
+    return finalMatch[1].trim();
+  }
+  // No `final` channel found — fall back to stripping markers in place.
+  // Also collapse the "<|channel|>name" pattern (no closing marker yet)
+  // that appears when a model opens a channel without ending the previous
+  // one, e.g. "<|channel|>thought" at the start of an unfenced output.
+  return text
+    .replace(/<\|channel\|>\s*\w+\s*(?:<\|message\|>)?/g, "")
+    .replace(HARMONY_MARKER_RE, "")
+    .trim();
+}
+
+/**
+ * Token-level companion to `stripHarmonyChannels`. Slices the OllamaToken
+ * array so its concatenated text matches the cleaned prose: drops every
+ * token whose decoded form is a harmony special-token (`<|...|>`), and if
+ * a `<|channel|>final` boundary exists, slices from there. Keeps the
+ * Probs heatmap aligned with the visible text — without this, position 1
+ * in the heatmap would still be `<|channel|>` even though the user can
+ * no longer see it.
+ */
+function stripHarmonyChannelsFromTokens(
+  tokens: OllamaTokenLogprob[]
+): OllamaTokenLogprob[] {
+  if (tokens.length === 0) return tokens;
+  const isMarker = (t: string) => /^<\|[^|>]*\|>$/.test(t.trim());
+
+  // Look for a `<|channel|>` followed by a `final`-bearing token. If we
+  // find one, slice from just after it (skipping any trailing marker
+  // tokens like <|message|>).
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const tok = tokens[i].token.trim();
+    if (tok === "<|channel|>" || tok.endsWith("channel|>")) {
+      const next = tokens[i + 1].token.trim().toLowerCase();
+      if (next === "final" || next.startsWith("final")) {
+        let j = i + 2;
+        while (j < tokens.length && isMarker(tokens[j].token)) j++;
+        return tokens.slice(j).filter(t => !isMarker(t.token));
+      }
+    }
+  }
+  // No final-channel boundary — just filter out the marker tokens.
+  return tokens.filter(t => !isMarker(t.token));
 }
 
 // ---------------------------------------------------------------------------
@@ -249,9 +334,9 @@ export async function generateOllamaLogprobs(params: {
   });
 
   const choice = data.choices?.[0];
-  const text = choice?.message?.content ?? "";
+  const rawText = choice?.message?.content ?? "";
   const content: OllamaLogprobEntry[] = choice?.logprobs?.content ?? [];
-  const tokens: OllamaTokenLogprob[] = content.map((entry) => ({
+  const rawTokens: OllamaTokenLogprob[] = content.map((entry) => ({
     token: decodeTokenBytes(entry),
     logprob: entry.logprob ?? 0,
     topAlternatives: (entry.top_logprobs ?? [])
@@ -260,7 +345,14 @@ export async function generateOllamaLogprobs(params: {
       .map((t) => ({ token: decodeTokenBytes(t), logprob: t.logprob })),
   }));
 
-  return { text, tokens, responseTimeMs: Date.now() - startedAt };
+  // Strip harmony channel markers from both views in parallel so the
+  // visible prose and the per-token heatmap stay aligned. See the doc
+  // block above `stripHarmonyChannels`.
+  return {
+    text: stripHarmonyChannels(rawText),
+    tokens: stripHarmonyChannelsFromTokens(rawTokens),
+    responseTimeMs: Date.now() - startedAt,
+  };
 }
 
 // ---------- 2. Single-step distribution (sampling + grammar continuation) ----------
