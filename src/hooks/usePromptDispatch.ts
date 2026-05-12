@@ -88,7 +88,19 @@ export function usePromptDispatch() {
       // (added in v2.15.21) that skips one slot, so when one side
       // is Ollama we can ask the server to handle the other side
       // only and run Ollama in parallel from the browser.
-      const isOllama = (s: ProviderSlot) => s.provider === "ollama";
+      //
+      // Comparison is case-insensitive and trimmed because David hit
+      // a real-world case (v2.15.36) where slot A landed on the
+      // server-side ollama path while slot B took the browser-direct
+      // path, despite both being configured as Ollama in the UI —
+      // most likely cause was a non-canonical provider string (older
+      // localStorage migration, accidental whitespace) that failed
+      // the strict `=== "ollama"` check on the client but matched
+      // the server's equivalent. Defensive normalisation prevents
+      // the fork from skewing again.
+      const isOllama = (s: ProviderSlot) =>
+        typeof s?.provider === "string" &&
+        s.provider.trim().toLowerCase() === "ollama";
       const aOllama = isOllama(slotA);
       const bOllama = isOllama(slotB);
 
@@ -247,7 +259,12 @@ export function usePromptDispatch() {
         // Vercel and surface the server-side "Cannot connect to Ollama"
         // error — exactly the v2.15.36-shipped bug David spotted.
         let panelData: Parameters<typeof buildResult>[0];
-        if (retrySlot.provider === "ollama") {
+        // Same case-insensitive provider check as dispatch — see comment
+        // there for the rationale.
+        const retryIsOllama =
+          typeof retrySlot?.provider === "string" &&
+          retrySlot.provider.trim().toLowerCase() === "ollama";
+        if (retryIsOllama) {
           const modelName = retrySlot.customModelId || retrySlot.model;
           const provenanceBase = {
             provider: retrySlot.provider,

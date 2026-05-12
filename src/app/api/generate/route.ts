@@ -93,6 +93,40 @@ export async function POST(request: NextRequest) {
   const wantA = panel !== "B";
   const wantB = panel !== "A";
 
+  // Ollama slots should never reach this route — the client routes
+  // them through the browser-direct path (src/lib/ai/ollama-browser.ts)
+  // because the Vercel server can't reach the user's local Ollama
+  // (it'd try its own localhost). Surface a clear routing-bug error
+  // instead of the generic "Cannot connect to Ollama" the AI client
+  // would otherwise throw — the latter falsely suggests the user's
+  // Ollama is down when the real fault is on our side.
+  const isOllamaProvider = (p: string) =>
+    typeof p === "string" && p.trim().toLowerCase() === "ollama";
+  if (wantA && isOllamaProvider(slotA.provider as string)) {
+    return NextResponse.json(
+      {
+        error:
+          "Routing bug: Ollama slot reached the server route. Ollama runs " +
+          "directly from the browser; the client should have bypassed " +
+          "/api/generate for this panel. Please reload the page; if the " +
+          "issue persists, this is a bug in LLMbench's routing layer.",
+      },
+      { status: 400 }
+    );
+  }
+  if (wantB && isOllamaProvider(slotB.provider as string)) {
+    return NextResponse.json(
+      {
+        error:
+          "Routing bug: Ollama slot reached the server route. Ollama runs " +
+          "directly from the browser; the client should have bypassed " +
+          "/api/generate for this panel. Please reload the page; if the " +
+          "issue persists, this is a bug in LLMbench's routing layer.",
+      },
+      { status: 400 }
+    );
+  }
+
   const result = await fanOutGenerate(configA, configB, {
     prompt,
     systemPromptA: buildSystemPrompt(slotA.systemPrompt || undefined, noMarkdown),
