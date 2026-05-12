@@ -160,7 +160,13 @@ function panelResultToOutput(
 ): ComparisonOutput | null {
   if (!result) return null;
   if (isPanelOutput(result)) {
-    return { text: result.text, provenance: result.provenance };
+    return {
+      text: result.text,
+      provenance: result.provenance,
+      ...(result.hiddenChannels && result.hiddenChannels.length > 0
+        ? { hiddenChannels: result.hiddenChannels }
+        : {}),
+    };
   }
   return { text: "", provenance: result.provenance, error: result.error };
 }
@@ -172,10 +178,68 @@ function outputToPanelResult(
   if (output.error) {
     return { error: output.error, provenance: output.provenance };
   }
-  return { text: output.text, provenance: output.provenance };
+  return {
+    text: output.text,
+    provenance: output.provenance,
+    ...(output.hiddenChannels && output.hiddenChannels.length > 0
+      ? { hiddenChannels: output.hiddenChannels }
+      : {}),
+  };
 }
 
 // ---------- panel display ----------
+
+/**
+ * Chevron-collapsible ribbon shown between the panel header and the prose
+ * body when the model emitted harmony channels beyond `final` — typically
+ * Gemma 4's `thought` channel, occasionally `commentary` from gpt-oss-class
+ * models. Channels are collapsed by default (they crowd the answer) but a
+ * single click reveals them in a muted block above the visible prose. The
+ * hidden tokens are excluded from every analytical path upstream, so this
+ * ribbon is a pure display affordance, not an analysis switch.
+ */
+function HiddenChannelsRibbon({ channels }: { channels: import("@/lib/ai/ollama-browser").HarmonyChannel[] }) {
+  // One open/closed state per channel, keyed by index. Default collapsed —
+  // the whole point is to keep the prose clean unless the researcher
+  // specifically wants to read the chain-of-thought.
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  return (
+    <div className="border-b border-border bg-muted/20">
+      {channels.map((channel, i) => {
+        const open = openIndex === i;
+        const wc = channel.content.trim().split(/\s+/).filter(Boolean).length;
+        return (
+          <div key={`${channel.name}-${i}`} className="border-b border-border/40 last:border-b-0">
+            <button
+              type="button"
+              onClick={() => setOpenIndex(open ? null : i)}
+              className="w-full flex items-center gap-2 px-4 py-1.5 text-left hover:bg-muted/30 transition-colors"
+              title={open ? `Hide ${channel.name} channel` : `Show ${channel.name} channel (${wc} words)`}
+            >
+              {open ? (
+                <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+              ) : (
+                <ChevronRight className="w-3 h-3 text-muted-foreground shrink-0" />
+              )}
+              <span className="text-caption text-muted-foreground">
+                <span className="italic">{channel.name}</span> channel
+                <span className="ml-1 opacity-60">({wc} {wc === 1 ? "word" : "words"})</span>
+                <span className="ml-2 opacity-50">— excluded from analysis</span>
+              </span>
+            </button>
+            {open && (
+              <div className="px-4 pb-3 pt-1">
+                <div className="text-body-sm text-muted-foreground whitespace-pre-wrap font-serif leading-relaxed border-l-2 border-burgundy/30 pl-3">
+                  {channel.content}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 type AnnotationState = ReturnType<typeof useAnnotations>;
 
@@ -344,6 +408,15 @@ function AnnotatedPanelDisplay({
           </div>
         )}
       </div>
+
+      {/* Hidden harmony channels (Gemma 4 thinking, gpt-oss reasoning, etc.).
+          Surfaced as a chevron-collapsible ribbon between the header and the
+          prose so researchers can choose to inspect the model's planning
+          without having it crowd the answer. Excluded from all analytical
+          paths — see ollama-browser.ts `partitionHarmonyTokens`. */}
+      {result && isPanelOutput(result) && result.hiddenChannels && result.hiddenChannels.length > 0 && (
+        <HiddenChannelsRibbon channels={result.hiddenChannels} />
+      )}
 
       {/* Body */}
       {isLoading ? (

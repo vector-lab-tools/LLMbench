@@ -39,7 +39,10 @@ export interface OllamaBrowserParams {
 }
 
 export interface OllamaBrowserResult {
+  /** Visible prose (final channel content if harmony format, else raw). */
   text: string;
+  /** Non-final harmony channels (thought, commentary, …) if any. */
+  hiddenChannels?: HarmonyChannel[];
   responseTimeMs: number;
 }
 
@@ -103,92 +106,180 @@ export async function generateOllamaFromBrowser(
   }
   const data = await res.json();
   const rawText: string = data?.choices?.[0]?.message?.content ?? "";
-  return { text: stripHarmonyChannels(rawText), responseTimeMs: Date.now() - startedAt };
+  const parsed = parseHarmonyOutput(rawText);
+  return {
+    text: parsed.visible,
+    hiddenChannels: parsed.hidden.length > 0 ? parsed.hidden : undefined,
+    responseTimeMs: Date.now() - startedAt,
+  };
 }
 
 // ---------------------------------------------------------------------------
-// Harmony-format channel stripping
+// Harmony-format channel parsing
 //
-// A growing number of open-weight reasoning models (OpenAI's gpt-oss family,
-// some Gemma-derived community tags, certain Qwen "thinking" variants) emit
-// their output structured as harmony channels:
+// Gemma 4 (Google) ships with a `thinking` capability — confirmed locally
+// against `ollama show gemma4`: capabilities include `thinking`, and the
+// model emits its output structured as harmony channels:
 //
 //   <|channel|>thought<|message|>...hidden reasoning...<|end|>
 //   <|channel|>commentary<|message|>...meta notes...<|end|>
-//   <|channel|>final<|message|>...the actual answer...<|return|>
+//   <|channel|>final<|message|>...the visible answer...<|return|>
 //
-// The OpenAI Chat Completions API normally hides everything but the `final`
-// channel content. Ollama's `/v1/chat/completions` compat layer currently
-// passes the raw token stream through, which leaves users staring at the
-// model's internal planning + a constraint-checklist self-audit instead of
-// the answer. We strip these client-side so close-reading isn't polluted
-// by structural tokens — but we strip in `ollama-browser.ts` rather than in
-// the renderer because the same cleaned string is what gets saved to a
-// comparison, exported as a bundle, and indexed by annotations.
+// The same format is used by OpenAI's gpt-oss family and a handful of
+// other "thinking" open-weight models. The OpenAI Chat Completions API
+// normally returns only the `final` channel; Ollama's `/v1/chat/completions`
+// compat layer passes the raw token stream through, which leaves users
+// staring at the model's planning + constraint-checklist self-audit
+// instead of the answer.
 //
-// Strategy:
-//   1. If a `<|channel|>final` segment is present, keep only its content.
-//   2. Otherwise, strip all `<|...|>` special-token markers in place. This
-//      leaves the planning prose intact (better than dropping the response
-//      entirely) but removes the bracket-pipe noise.
-//
-// Tokens (the logprobs path) are stripped in parallel using the same logic
-// so the Probs heatmap stays aligned with the visible prose. See
-// `stripHarmonyChannelsFromTokens` below.
+// We do NOT discard the hidden channels — David's point in v2.2.3 is
+// that the model's chain-of-thought is itself analytical data ("close-
+// reading the model's metacognition is a legitimate move"). Instead we
+// partition the output into a `visible` portion (rendered in the prose
+// panel and analysed in the Probs view) and a list of `hidden` channels
+// (collapsed behind a chevron above the prose, expandable on demand,
+// excluded from all analytical paths).
 // ---------------------------------------------------------------------------
 
-const HARMONY_FINAL_RE =
-  /<\|channel\|>\s*final\s*(?:<\|message\|>)?([\s\S]*?)(?:<\|end\|>|<\|return\|>|<\|channel\|>|$)/;
+export interface HarmonyChannel {
+  /** Canonical channel name as emitted by the model, lower-cased. */
+  name: string;
+  /** Channel content with any inner marker tokens stripped. */
+  content: string;
+}
+
+export interface HarmonyParseResult {
+  /** Final-channel content (or fallback prose if no proper channels). */
+  visible: string;
+  /** Non-final channels (thought, commentary, etc.), preserved verbatim. */
+  hidden: HarmonyChannel[];
+}
 
 const HARMONY_MARKER_RE = /<\|[^|>]*\|>/g;
 
-function stripHarmonyChannels(text: string): string {
-  if (!text || !text.includes("<|")) return text;
-  const finalMatch = text.match(HARMONY_FINAL_RE);
-  if (finalMatch && finalMatch[1].trim().length > 0) {
-    return finalMatch[1].trim();
+/**
+ * Parse a raw harmony-formatted response into `{visible, hidden}`.
+ *
+ * Strategy:
+ *   - Walk the text matching `<|channel|>NAME(<|message|>)?CONTENT` segments
+ *     until the next channel boundary or end-of-stream.
+ *   - The `final` channel's content becomes `visible`.
+ *   - Every other parsed channel goes into `hidden` (preserving order).
+ *   - If no parseable channel structure is found, fall back to stripping
+ *     all `<|...|>` markers in place and returning the result as visible
+ *     with no hidden channels — better to show planning prose than nothing.
+ */
+export function parseHarmonyOutput(text: string): HarmonyParseResult {
+  if (!text || !text.includes("<|channel|>")) {
+    return { visible: text ?? "", hidden: [] };
   }
-  // No `final` channel found — fall back to stripping markers in place.
-  // Also collapse the "<|channel|>name" pattern (no closing marker yet)
-  // that appears when a model opens a channel without ending the previous
-  // one, e.g. "<|channel|>thought" at the start of an unfenced output.
-  return text
-    .replace(/<\|channel\|>\s*\w+\s*(?:<\|message\|>)?/g, "")
-    .replace(HARMONY_MARKER_RE, "")
-    .trim();
+
+  const channelRe =
+    /<\|channel\|>\s*(\w+)\s*(?:<\|message\|>)?\s*([\s\S]*?)(?=<\|channel\|>|<\|end\|>|<\|return\|>|<\|start\|>|$)/g;
+  const channels: HarmonyChannel[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = channelRe.exec(text)) !== null) {
+    const name = match[1].toLowerCase();
+    const content = match[2].replace(HARMONY_MARKER_RE, "").trim();
+    if (content.length > 0) channels.push({ name, content });
+  }
+
+  if (channels.length === 0) {
+    return {
+      visible: text.replace(HARMONY_MARKER_RE, "").trim(),
+      hidden: [],
+    };
+  }
+
+  const finalIdx = channels.findIndex(c => c.name === "final");
+  if (finalIdx >= 0) {
+    return {
+      visible: channels[finalIdx].content,
+      hidden: channels.filter((_, i) => i !== finalIdx),
+    };
+  }
+
+  // No explicit `final` channel — treat the last parsed channel as the
+  // visible answer and hide everything before it. Matches the heuristic
+  // most reasoning models use when they emit only `thought` followed by
+  // their answer without an explicit final-channel marker.
+  const last = channels[channels.length - 1];
+  return {
+    visible: last.content,
+    hidden: channels.slice(0, -1),
+  };
 }
 
 /**
- * Token-level companion to `stripHarmonyChannels`. Slices the OllamaToken
- * array so its concatenated text matches the cleaned prose: drops every
- * token whose decoded form is a harmony special-token (`<|...|>`), and if
- * a `<|channel|>final` boundary exists, slices from there. Keeps the
- * Probs heatmap aligned with the visible text — without this, position 1
- * in the heatmap would still be `<|channel|>` even though the user can
- * no longer see it.
+ * Token-level companion to `parseHarmonyOutput`. Partitions the OllamaToken
+ * array into `{visible, hiddenByChannel}` so the Probs heatmap operates
+ * only on the tokens that correspond to the visible prose — and so the
+ * hidden-channel UI can show per-channel token-level data if it ever
+ * wants to (not used today, but the structure preserves it).
  */
-function stripHarmonyChannelsFromTokens(
-  tokens: OllamaTokenLogprob[]
-): OllamaTokenLogprob[] {
-  if (tokens.length === 0) return tokens;
-  const isMarker = (t: string) => /^<\|[^|>]*\|>$/.test(t.trim());
+export interface HarmonyTokenPartition {
+  visible: OllamaTokenLogprob[];
+  hiddenByChannel: Record<string, OllamaTokenLogprob[]>;
+}
 
-  // Look for a `<|channel|>` followed by a `final`-bearing token. If we
-  // find one, slice from just after it (skipping any trailing marker
-  // tokens like <|message|>).
-  for (let i = 0; i < tokens.length - 1; i++) {
-    const tok = tokens[i].token.trim();
-    if (tok === "<|channel|>" || tok.endsWith("channel|>")) {
-      const next = tokens[i + 1].token.trim().toLowerCase();
-      if (next === "final" || next.startsWith("final")) {
-        let j = i + 2;
-        while (j < tokens.length && isMarker(tokens[j].token)) j++;
-        return tokens.slice(j).filter(t => !isMarker(t.token));
-      }
+function isMarkerToken(t: string): boolean {
+  return /^<\|[^|>]*\|>$/.test(t.trim());
+}
+
+function isChannelOpenToken(t: string): boolean {
+  const s = t.trim();
+  return s === "<|channel|>" || s.endsWith("channel|>");
+}
+
+export function partitionHarmonyTokens(
+  tokens: OllamaTokenLogprob[]
+): HarmonyTokenPartition {
+  if (tokens.length === 0) return { visible: [], hiddenByChannel: {} };
+
+  // Default state: assume we're in the visible channel until a marker
+  // tells us otherwise. This handles non-harmony outputs cleanly — no
+  // markers means every token is visible.
+  let currentChannel: string = "final";
+  let pendingChannelName = false;
+  const visible: OllamaTokenLogprob[] = [];
+  const hiddenByChannel: Record<string, OllamaTokenLogprob[]> = {};
+
+  for (const tok of tokens) {
+    const raw = tok.token;
+    if (isChannelOpenToken(raw)) {
+      pendingChannelName = true;
+      continue;
+    }
+    if (pendingChannelName) {
+      // Channel name token, possibly with leading whitespace; normalise.
+      currentChannel = raw.trim().toLowerCase().replace(/[^a-z]/g, "") || currentChannel;
+      pendingChannelName = false;
+      continue;
+    }
+    if (isMarkerToken(raw)) continue; // <|message|>, <|end|>, <|return|>, etc.
+
+    if (currentChannel === "final") {
+      visible.push(tok);
+    } else {
+      if (!hiddenByChannel[currentChannel]) hiddenByChannel[currentChannel] = [];
+      hiddenByChannel[currentChannel].push(tok);
     }
   }
-  // No final-channel boundary — just filter out the marker tokens.
-  return tokens.filter(t => !isMarker(t.token));
+
+  // Fallback: if we never saw a `final` channel, the model probably
+  // emitted only `thought` followed by its answer without a closing
+  // boundary. In that case treat the LAST seen non-final channel's
+  // tokens as visible (matches parseHarmonyOutput's heuristic).
+  if (visible.length === 0) {
+    const keys = Object.keys(hiddenByChannel);
+    if (keys.length > 0) {
+      const lastKey = keys[keys.length - 1];
+      const promoted = hiddenByChannel[lastKey];
+      delete hiddenByChannel[lastKey];
+      return { visible: promoted, hiddenByChannel };
+    }
+  }
+  return { visible, hiddenByChannel };
 }
 
 // ---------------------------------------------------------------------------
@@ -297,8 +388,15 @@ export interface OllamaTokenLogprob {
 }
 
 export interface OllamaLogprobsResult {
+  /** Visible prose — final-channel content for harmony models, raw otherwise. */
   text: string;
+  /** Per-token logprobs corresponding to `text` only. Harmony-channel and
+   *  marker tokens are excluded so every analytical view (heatmap, pixel
+   *  map, 3D net, entropy curve) operates on the visible prose alone. */
   tokens: OllamaTokenLogprob[];
+  /** Non-final harmony channels (thought, commentary, …) as plain text.
+   *  Surfaced behind a chevron in the panel UI; never enters analysis. */
+  hiddenChannels?: HarmonyChannel[];
   responseTimeMs: number;
 }
 
@@ -345,12 +443,16 @@ export async function generateOllamaLogprobs(params: {
       .map((t) => ({ token: decodeTokenBytes(t), logprob: t.logprob })),
   }));
 
-  // Strip harmony channel markers from both views in parallel so the
-  // visible prose and the per-token heatmap stay aligned. See the doc
-  // block above `stripHarmonyChannels`.
+  // Partition both prose and tokens into visible + hidden channels so
+  // the heatmap operates on the visible prose alone, while the hidden
+  // channels remain accessible behind the chevron UI in CompareMode.
+  // See the doc block above `parseHarmonyOutput`.
+  const parsedText = parseHarmonyOutput(rawText);
+  const partitioned = partitionHarmonyTokens(rawTokens);
   return {
-    text: stripHarmonyChannels(rawText),
-    tokens: stripHarmonyChannelsFromTokens(rawTokens),
+    text: parsedText.visible,
+    tokens: partitioned.visible,
+    hiddenChannels: parsedText.hidden.length > 0 ? parsedText.hidden : undefined,
     responseTimeMs: Date.now() - startedAt,
   };
 }

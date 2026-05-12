@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import type { OutputProvenance, ProviderSlot } from "@/types/ai-settings";
-import { generateOllamaLogprobs } from "@/lib/ai/ollama-browser";
+import { generateOllamaLogprobs, type HarmonyChannel } from "@/lib/ai/ollama-browser";
 import { getModelDisplayName } from "@/lib/ai/config";
 import { buildSystemPrompt } from "@/lib/ai/system-prompts";
 import type { TokenLogprob } from "@/types/analysis";
@@ -31,6 +31,16 @@ export interface PanelOutput {
    * Ollama temperature is 0.7+.
    */
   tokens?: TokenLogprob[];
+  /**
+   * Harmony-format channels the model emitted before its visible answer
+   * (`thought`, `commentary`, …). Surfaced behind a chevron in the panel
+   * UI so the researcher can inspect the model's reasoning if they want
+   * to, but excluded from every analytical path (heatmap, pixel map,
+   * entropy curve, 3D net) so analysis describes the *visible* answer
+   * only. Currently populated by the Ollama browser-direct path; other
+   * providers don't expose channel-structured output through their APIs.
+   */
+  hiddenChannels?: HarmonyChannel[];
 }
 
 export interface PanelError {
@@ -125,7 +135,7 @@ export function usePromptDispatch() {
       const aOllama = isOllama(slotA);
       const bOllama = isOllama(slotB);
 
-      const buildResult = (panel: { error?: string; text?: string; provenance?: Record<string, unknown>; responseTimeMs?: number; tokens?: TokenLogprob[] } | undefined): PanelResult | null => {
+      const buildResult = (panel: { error?: string; text?: string; provenance?: Record<string, unknown>; responseTimeMs?: number; tokens?: TokenLogprob[]; hiddenChannels?: HarmonyChannel[] } | undefined): PanelResult | null => {
         if (!panel) return null;
         const generatedAt = (panel.provenance as { generatedAt?: string } | undefined)?.generatedAt
           || new Date().toISOString();
@@ -139,6 +149,8 @@ export function usePromptDispatch() {
           // Forward cached Ollama tokens (if any) so Compare's Probs view
           // can render them without a second generation. See PanelOutput.tokens.
           ...(panel.tokens && panel.tokens.length > 0 ? { tokens: panel.tokens } : {}),
+          // Hidden harmony channels for the chevron UI in CompareMode.
+          ...(panel.hiddenChannels && panel.hiddenChannels.length > 0 ? { hiddenChannels: panel.hiddenChannels } : {}),
         } as PanelResult;
       };
 
@@ -177,6 +189,7 @@ export function usePromptDispatch() {
             // Empty array → older Ollama or model that doesn't surface
             // logprobs; the Probs view will fall back to a re-fetch.
             tokens: out.tokens.length > 0 ? out.tokens : undefined,
+            hiddenChannels: out.hiddenChannels,
           };
         } catch (err) {
           return {
@@ -332,6 +345,7 @@ export function usePromptDispatch() {
               responseTimeMs: out.responseTimeMs,
               provenance: provenanceBase,
               ...(out.tokens.length > 0 ? { tokens: out.tokens } : {}),
+              ...(out.hiddenChannels ? { hiddenChannels: out.hiddenChannels } : {}),
             };
           } catch (err) {
             panelData = {

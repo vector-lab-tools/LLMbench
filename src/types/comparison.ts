@@ -8,6 +8,11 @@ export interface ComparisonOutput {
   text: string;
   provenance: OutputProvenance;
   error?: string;
+  /** Harmony channels the model emitted alongside the visible answer
+   *  (typically Gemma 4's `thought` channel). Stored on the saved
+   *  comparison so reloading restores the chevron UI's contents.
+   *  Older saves don't carry it. */
+  hiddenChannels?: Array<{ name: string; content: string }>;
 }
 
 /** Slim snapshot of a slot at execution time. Used to record provenance
