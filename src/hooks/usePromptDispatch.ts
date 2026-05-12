@@ -3,13 +3,34 @@
 import { useState, useCallback } from "react";
 import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import type { OutputProvenance, ProviderSlot } from "@/types/ai-settings";
-import { generateOllamaFromBrowser } from "@/lib/ai/ollama-browser";
+import { generateOllamaLogprobs } from "@/lib/ai/ollama-browser";
 import { getModelDisplayName } from "@/lib/ai/config";
 import { buildSystemPrompt } from "@/lib/ai/system-prompts";
+import type { TokenLogprob } from "@/types/analysis";
 
 export interface PanelOutput {
   text: string;
   provenance: OutputProvenance;
+  /**
+   * Optional cached logprob tokens captured at generation time.
+   *
+   * For Ollama, the browser-direct path requests `logprobs` and
+   * `top_logprobs` in the *same* /v1/chat/completions call that returns
+   * the text, so we get a token-aligned distribution effectively for
+   * free. Caching the tokens here means the Probs view can render them
+   * without a second generation — which, crucially, at temperature > 0
+   * would diverge from the displayed text, leaving the heatmap
+   * describing a sample that was never on screen.
+   *
+   * For other providers we still fetch logprobs on demand via
+   * `/api/analyse/logprobs` after the user opens Probs — those server
+   * routes can't piggyback on the original generation path without a
+   * bigger refactor — and the temperature-drift problem exists there
+   * too in principle. Worth following up on the other providers, but
+   * the Ollama case is where it's most visible because David's typical
+   * Ollama temperature is 0.7+.
+   */
+  tokens?: TokenLogprob[];
 }
 
 export interface PanelError {
@@ -104,7 +125,7 @@ export function usePromptDispatch() {
       const aOllama = isOllama(slotA);
       const bOllama = isOllama(slotB);
 
-      const buildResult = (panel: { error?: string; text?: string; provenance?: Record<string, unknown>; responseTimeMs?: number } | undefined): PanelResult | null => {
+      const buildResult = (panel: { error?: string; text?: string; provenance?: Record<string, unknown>; responseTimeMs?: number; tokens?: TokenLogprob[] } | undefined): PanelResult | null => {
         if (!panel) return null;
         const generatedAt = (panel.provenance as { generatedAt?: string } | undefined)?.generatedAt
           || new Date().toISOString();
@@ -112,7 +133,13 @@ export function usePromptDispatch() {
         if (panel.error) {
           return { error: panel.error, provenance: { ...provenance, responseTimeMs: 0 } } as PanelResult;
         }
-        return { text: panel.text ?? "", provenance: { ...provenance, responseTimeMs: panel.responseTimeMs ?? 0 } } as PanelResult;
+        return {
+          text: panel.text ?? "",
+          provenance: { ...provenance, responseTimeMs: panel.responseTimeMs ?? 0 },
+          // Forward cached Ollama tokens (if any) so Compare's Probs view
+          // can render them without a second generation. See PanelOutput.tokens.
+          ...(panel.tokens && panel.tokens.length > 0 ? { tokens: panel.tokens } : {}),
+        } as PanelResult;
       };
 
       // Browser-direct Ollama call wrapped to match the panel-payload
@@ -128,14 +155,29 @@ export function usePromptDispatch() {
           systemPrompt: slot.systemPrompt,
         };
         try {
-          const out = await generateOllamaFromBrowser({
+          // Request logprobs alongside text in the same /v1/chat/completions
+          // call. Ollama returns them either way once supported (v0.4.x+),
+          // and the cost on the wire is small relative to a second
+          // generation. Caching the tokens with the text keeps the Probs
+          // view consistent with what was displayed — at temperature > 0,
+          // a second generation would produce a different sample and the
+          // heatmap would describe text that was never on screen.
+          const out = await generateOllamaLogprobs({
             baseUrl: slot.baseUrl || "http://127.0.0.1:11434",
             model: modelName,
             prompt,
             systemPrompt: buildSystemPrompt(slot.systemPrompt || undefined, noMarkdown),
             temperature: slot.temperature,
+            topK: 5,
           });
-          return { text: out.text, responseTimeMs: out.responseTimeMs, provenance: provenanceBase };
+          return {
+            text: out.text,
+            responseTimeMs: out.responseTimeMs,
+            provenance: provenanceBase,
+            // Empty array → older Ollama or model that doesn't surface
+            // logprobs; the Probs view will fall back to a re-fetch.
+            tokens: out.tokens.length > 0 ? out.tokens : undefined,
+          };
         } catch (err) {
           return {
             error: err instanceof Error ? err.message : "Ollama call failed",
@@ -274,14 +316,23 @@ export function usePromptDispatch() {
             systemPrompt: retrySlot.systemPrompt,
           };
           try {
-            const out = await generateOllamaFromBrowser({
+            // Capture logprobs in the same call (see callOllama above for
+            // the temperature-drift rationale). Retry must match dispatch
+            // so a retried panel's Probs view also reads from cache.
+            const out = await generateOllamaLogprobs({
               baseUrl: retrySlot.baseUrl || "http://127.0.0.1:11434",
               model: modelName,
               prompt: currentPrompt,
               systemPrompt: buildSystemPrompt(retrySlot.systemPrompt || undefined, noMarkdown),
               temperature: retrySlot.temperature,
+              topK: 5,
             });
-            panelData = { text: out.text, responseTimeMs: out.responseTimeMs, provenance: provenanceBase };
+            panelData = {
+              text: out.text,
+              responseTimeMs: out.responseTimeMs,
+              provenance: provenanceBase,
+              ...(out.tokens.length > 0 ? { tokens: out.tokens } : {}),
+            };
           } catch (err) {
             panelData = {
               error: err instanceof Error ? err.message : "Ollama call failed",

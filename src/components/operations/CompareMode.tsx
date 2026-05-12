@@ -910,8 +910,17 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
       executedSlots: executedSlots
         ? { A: stripKey(executedSlots.A), B: stripKey(executedSlots.B) }
         : undefined,
-      logprobsA: logprobTokensA ?? undefined,
-      logprobsB: logprobTokensB ?? undefined,
+      // Prefer the live Probs-view state, but fall back to the cached
+      // tokens captured during dispatch (Ollama). This way, an Ollama
+      // generation that the user saves without ever opening Probs still
+      // persists its same-call logprobs — when reloaded, Probs opens
+      // instantly with the heatmap of the actually-displayed text.
+      logprobsA: logprobTokensA
+        ?? (resultA && isPanelOutput(resultA) ? resultA.tokens : undefined)
+        ?? undefined,
+      logprobsB: logprobTokensB
+        ?? (resultB && isPanelOutput(resultB) ? resultB.tokens : undefined)
+        ?? undefined,
     };
   }, [comparisonId, comparisonName, comparisonCreatedAt, prompt, resultA, resultB, annA.annotations, annB.annotations, cpLinks.links, executedSlots, logprobTokensA, logprobTokensB]);
 
@@ -961,6 +970,36 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
     const probSlotA = executedSlots?.A ?? slots.A;
     const probSlotB = executedSlots?.B ?? slots.B;
     const probSlotBActive = isSlotConfigured("B") ? probSlotB : null;
+
+    // Cache hit: dispatch may have already captured logprobs alongside
+    // text (Ollama path requests them in the same /v1/chat/completions
+    // call). When the cache is present for the displayed result, render
+    // it directly — no second call, no temperature drift between the
+    // shown text and the heatmap underneath it. The cache only exists
+    // for slots whose generation path supports same-call logprobs;
+    // others still fall through to the on-demand fetch below.
+    const cachedA = resultA && isPanelOutput(resultA) ? resultA.tokens : undefined;
+    const cachedB = resultB && isPanelOutput(resultB) ? resultB.tokens : undefined;
+    if (cachedA || cachedB) {
+      if (cachedA && cachedA.length > 0) {
+        setLogprobTokensA(cachedA);
+        setProbsNavIndex(0);
+      }
+      if (cachedB && cachedB.length > 0) {
+        setLogprobTokensB(cachedB);
+        setProbsNavIndex(prev => prev ?? 0);
+      }
+      // If both displayed panels have cache, we're done.
+      const needA = isSlotConfigured("A") && !cachedA;
+      const needB = isSlotConfigured("B") && !cachedB;
+      if (!needA && !needB) {
+        setLogprobsLoading(false);
+        return;
+      }
+      // Mixed case (one cached, the other not) falls through to the
+      // fetch path below, which will only generate for the missing side.
+    }
+
     try {
       // Ollama slots run browser-direct (the server-side route on Vercel
       // cannot reach the user's local 127.0.0.1:11434). Build the same
@@ -971,6 +1010,14 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
         s.provider.trim().toLowerCase() === "ollama";
       const aOllama = isOllama(probSlotA);
       const bOllama = isOllama(probSlotBActive);
+
+      // Track which sides still need work. Cache hits above already
+      // wrote tokens into state; skipping them here prevents a wasted
+      // re-generation (and, for Ollama at temperature > 0, the very
+      // drift between displayed text and heatmap that this whole patch
+      // is meant to eliminate).
+      const needA = !(cachedA && cachedA.length > 0);
+      const needB = probSlotBActive !== null && !(cachedB && cachedB.length > 0);
 
       const runOllamaSide = async (slot: ProviderSlot) => {
         const { generateOllamaLogprobs } = await import("@/lib/ai/ollama-browser");
@@ -1001,10 +1048,12 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
       // server-side request body to skip Ollama slots — the route can't
       // reach them anyway, so we don't even ask. When both slots are
       // Ollama, skip the server route entirely.
-      const serverNeeded = !aOllama || (probSlotBActive !== null && !bOllama);
+      // Server is only needed for the still-needed non-Ollama side(s).
+      const serverNeeded =
+        (needA && !aOllama) || (needB && !bOllama);
       const [ollamaA, ollamaB, serverData] = await Promise.all([
-        aOllama ? runOllamaSide(probSlotA) : Promise.resolve(null),
-        bOllama && probSlotBActive ? runOllamaSide(probSlotBActive) : Promise.resolve(null),
+        needA && aOllama ? runOllamaSide(probSlotA) : Promise.resolve(null),
+        needB && bOllama && probSlotBActive ? runOllamaSide(probSlotBActive) : Promise.resolve(null),
         serverNeeded
           ? fetch("/api/analyse/logprobs", {
               method: "POST",
@@ -1018,8 +1067,8 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
                 // the real slot when it's not Ollama, otherwise we still need
                 // to send something — we route around this by gating on
                 // serverNeeded above; here we just send the real config.
-                slotA: aOllama ? probSlotA : probSlotA,
-                slotB: bOllama ? null : probSlotBActive,
+                slotA: probSlotA,
+                slotB: needB && !bOllama ? probSlotBActive : null,
                 noMarkdown,
               }),
             }).then((r) => r.json())
@@ -1030,8 +1079,15 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
         A: { tokens?: TokenLogprob[]; error?: string } | null;
         B: { tokens?: TokenLogprob[]; error?: string } | null;
       } = {
-        A: (aOllama ? ollamaA : serverData?.A ?? null) as { tokens?: TokenLogprob[]; error?: string } | null,
-        B: (bOllama ? ollamaB : serverData?.B ?? null) as { tokens?: TokenLogprob[]; error?: string } | null,
+        // If a side was satisfied by cache above, leave it null here so
+        // the downstream state writes below don't overwrite the already-set
+        // tokens with anything from this fetch path.
+        A: !needA
+          ? null
+          : ((aOllama ? ollamaA : serverData?.A ?? null) as { tokens?: TokenLogprob[]; error?: string } | null),
+        B: !needB
+          ? null
+          : ((bOllama ? ollamaB : serverData?.B ?? null) as { tokens?: TokenLogprob[]; error?: string } | null),
       };
       if (data.A?.tokens?.length) {
         setLogprobTokensA(data.A.tokens);
