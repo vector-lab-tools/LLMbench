@@ -36,6 +36,24 @@ function useIsLocal(): boolean {
   return isLocal;
 }
 
+/**
+ * Client-only access to window.location bits used in the Ollama help
+ * text. Reading `window` directly during render breaks SSR hydration
+ * (React error #418) — values render as "" on the server and as the
+ * real hostname on the client, the trees don't match, React tears the
+ * subtree down and a possibly-in-flight Ollama fetch dies with it.
+ */
+function useClientOrigin(): { hostname: string; origin: string } {
+  const [info, setInfo] = useState({ hostname: "", origin: "" });
+  useEffect(() => {
+    setInfo({
+      hostname: window.location.hostname,
+      origin: window.location.origin,
+    });
+  }, []);
+  return info;
+}
+
 function SlotEditor({
   panel,
   slot,
@@ -51,6 +69,7 @@ function SlotEditor({
 }) {
   const [showKey, setShowKey] = useState(false);
   const isLocal = useIsLocal();
+  const clientOrigin = useClientOrigin();
 
   // Use dynamic models when loaded, otherwise fall back to static config
   const providerConfig = getProviderConfigWithModels(slot.provider);
@@ -148,11 +167,11 @@ function SlotEditor({
               ) : (
                 <> You&apos;re viewing LLMbench from{" "}
                   <span className="font-mono">
-                    {typeof window !== "undefined" ? window.location.hostname : "a deployed origin"}
+                    {clientOrigin.hostname || "a deployed origin"}
                   </span>
                   , so start Ollama with{" "}
                   <code className="font-mono">OLLAMA_ORIGINS=&quot;*&quot; ollama serve</code>{" "}
-                  (or restrict to <code className="font-mono">{typeof window !== "undefined" ? window.location.origin : "your origin"}</code>) so the
+                  (or restrict to <code className="font-mono">{clientOrigin.origin || "your origin"}</code>) so the
                   browser&apos;s CORS policy lets this page call it.</>
               )}
             </p>
