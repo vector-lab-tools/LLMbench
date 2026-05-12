@@ -54,6 +54,37 @@ function useClientOrigin(): { hostname: string; origin: string } {
   return info;
 }
 
+/**
+ * Small inline code block with a copy-to-clipboard button. Used for
+ * the OLLAMA_ORIGINS command so users can paste the exact string with
+ * their own origin pre-filled, rather than hand-editing the example.
+ */
+function CopyableCommand({ command }: { command: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard unavailable; user can still select manually */ }
+  };
+  return (
+    <span className="block my-1.5 flex items-start gap-1.5">
+      <code className="flex-1 font-mono text-[11px] bg-muted/60 px-2 py-1 rounded select-all break-all">
+        {command}
+      </code>
+      <button
+        type="button"
+        onClick={copy}
+        className="btn-editorial-ghost text-[10px] px-2 py-1 shrink-0"
+        title="Copy to clipboard"
+      >
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </span>
+  );
+}
+
 function SlotEditor({
   panel,
   slot,
@@ -165,14 +196,22 @@ function SlotEditor({
                 <> A plain <code className="font-mono">ollama serve</code> is enough when
                 you&apos;re running LLMbench on localhost.</>
               ) : (
-                <> You&apos;re viewing LLMbench from{" "}
-                  <span className="font-mono">
-                    {clientOrigin.hostname || "a deployed origin"}
+                <>
+                  {" "}You&apos;re viewing LLMbench from{" "}
+                  <span className="font-mono">{clientOrigin.hostname || "a deployed origin"}</span>.
+                  Start Ollama with this exact command so its CORS policy lets the browser call it from here:
+                  <CopyableCommand
+                    command={`OLLAMA_ORIGINS="${clientOrigin.origin || "https://your-llmbench-origin"},http://localhost:3000,http://127.0.0.1:3000" ollama serve`}
+                  />
+                  <span className="block mt-1">
+                    <strong className="text-foreground">Safari note:</strong> the browser-direct path works in Chrome,
+                    Firefox, Edge, Arc, and Brave. Safari currently blocks HTTPS pages from calling{" "}
+                    <code className="font-mono">http://localhost</code> regardless of CORS, so use one of the
+                    Chromium-family browsers (or Firefox) for Ollama from a deployed LLMbench. Local dev
+                    (<code className="font-mono">npm run dev</code> on <code className="font-mono">localhost:3000</code>)
+                    works in Safari too.
                   </span>
-                  , so start Ollama with{" "}
-                  <code className="font-mono">OLLAMA_ORIGINS=&quot;*&quot; ollama serve</code>{" "}
-                  (or restrict to <code className="font-mono">{clientOrigin.origin || "your origin"}</code>) so the
-                  browser&apos;s CORS policy lets this page call it.</>
+                </>
               )}
             </p>
           </div>
@@ -544,13 +583,13 @@ const PROVIDER_GUIDES: ProviderGuideEntry[] = [
       "Free. All inference happens on your own machine — no calls leave your laptop, no per-token cost. Works from both local and deployed LLMbench (browser calls Ollama directly).",
     steps: [
       "Install Ollama from ollama.com/download (macOS, Linux, Windows).",
-      "Pull a model: `ollama pull llama3.2` or `ollama pull qwen2.5:7b`. The model library link below lists what's available.",
+      "Pull a model: `ollama pull gemma4` or `ollama pull llama3.2` or `ollama pull qwen3`. The model library link below lists what's available.",
       "Start the server. If you're using a LOCAL LLMbench (e.g. `npm run dev` on localhost:3000), a plain `ollama serve` is enough.",
-      "If you're using a DEPLOYED LLMbench (e.g. on Vercel or GitHub Pages), start Ollama with `OLLAMA_ORIGINS=\"*\" ollama serve` (or scope to the LLMbench origin). This opens Ollama's CORS policy so the browser can call it from a non-local page. The browser → localhost call is allowed because `localhost` is a 'potentially trustworthy' origin per the Secure Contexts spec, exempt from mixed-content blocking.",
-      "In LLMbench Settings, choose Ollama, leave the API key blank, and either pick a model from the list or enter the exact model ID you pulled (e.g. llama3.2:latest).",
+      "If you're using a DEPLOYED LLMbench (e.g. on Vercel), start Ollama with `OLLAMA_ORIGINS=\"<your-LLMbench-origin>\" ollama serve`. The Settings panel for the Ollama slot displays the exact command with your origin pre-filled, ready to copy.",
+      "In LLMbench Settings, choose Ollama, leave the API key blank, and either pick a model from the list or enter the exact model ID you pulled (e.g. gemma4 or llama3.2:latest).",
     ],
     notes:
-      "Ollama is the one provider LLMbench calls directly from the browser instead of routing through its server-side API — that's why Vercel-style deployments can reach a local Ollama at all. Logprobs are not currently exposed by Ollama, so the Probs view, Grammar Probe Phase B/C, and Sampling Probe will not work against an Ollama slot — Compare and the rest of Analyse are fully usable. No data leaves your machine.",
+      "Ollama is the one provider LLMbench calls directly from the browser instead of routing through its server-side API — that's why Vercel-style deployments can reach a local Ollama at all. The browser-direct path works in Chrome, Firefox, Edge, Arc, and Brave. SAFARI doesn't allow it: even with CORS open, Safari blocks HTTPS pages from calling http://localhost, so use a Chromium-family browser or Firefox for Ollama from a deployed LLMbench. Local-dev (npm run dev) on Safari works fine. Logprobs are not currently exposed by Ollama, so the Probs view, Grammar Probe Phase B/C, and Sampling Probe will not work against an Ollama slot — Compare and the rest of Analyse are fully usable. No data leaves your machine.",
   },
 ];
 

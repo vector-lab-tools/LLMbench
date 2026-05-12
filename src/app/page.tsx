@@ -273,15 +273,26 @@ export default function Home() {
                   in analysis modes to choose. If you send an empty prompt, a curated example is chosen automatically &mdash;
                   or pick one from the <strong>Try:</strong> chips below the input.
                 </p>
-                <p className="text-muted-foreground">
+                <p className="text-muted-foreground mb-2">
                   <strong className="text-foreground">Ollama (Local).</strong> No API key &mdash; the model runs on your own machine.
                   LLMbench calls Ollama directly from the browser, so it works from both
                   a local dev build and the deployed app. Install from{" "}
                   <a href="https://ollama.com/download" target="_blank" rel="noopener noreferrer" className="text-burgundy hover:underline">ollama.com/download</a>,
-                  pull a model (<code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">ollama pull llama3.2</code>),
-                  and start the server. From a deployed LLMbench, start Ollama with
-                  <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">OLLAMA_ORIGINS=&quot;*&quot; ollama serve</code> so its CORS policy lets this page call it.
-                  Logprobs are not exposed by Ollama, so the Probs view and logprob-dependent modes (Grammar Probe Phase B/C, Sampling Probe) won&apos;t apply &mdash; Compare and the rest of Analyse are fully usable.
+                  pull a model (<code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">ollama pull gemma4</code> or <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">ollama pull llama3.2</code>),
+                  and start the server.
+                </p>
+                <p className="text-muted-foreground mb-2">
+                  From a <strong className="text-foreground">deployed LLMbench</strong> you must explicitly allow this app&apos;s origin
+                  via Ollama&apos;s CORS list. Restart Ollama with the origin in <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">OLLAMA_ORIGINS</code>;
+                  the Settings panel shows the exact command with your origin pre-filled and a copy button. Example:
+                  <code className="block text-[11px] bg-muted/60 px-2 py-1 rounded mt-1 break-all">
+                    OLLAMA_ORIGINS=&quot;https://llm-bench-mu.vercel.app,http://localhost:3000,http://127.0.0.1:3000&quot; ollama serve
+                  </code>
+                </p>
+                <p className="text-muted-foreground">
+                  <strong className="text-foreground">Browser support.</strong> The browser-direct path works in Chrome, Firefox, Edge, Arc, and Brave.
+                  <strong className="text-foreground"> Safari blocks it</strong>: even with CORS open, Safari refuses HTTPS pages calling <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">http://localhost</code>,
+                  so use a Chromium-family browser or Firefox for Ollama from a deployed LLMbench. Safari is fine for local-dev (<code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">npm run dev</code> on localhost). Logprobs are not exposed by Ollama, so the Probs view and logprob-dependent modes (Grammar Probe Phase B/C, Sampling Probe) won&apos;t apply &mdash; Compare and the rest of Analyse are fully usable.
                 </p>
               </div>
 
