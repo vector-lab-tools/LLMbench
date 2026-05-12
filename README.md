@@ -17,7 +17,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.15.43
+**Version:** 2.15.44
 **Date:** 12 May 2026
 **Licence:** MIT
 
@@ -204,6 +204,8 @@ Quantitative comparison with cosine similarity (frequency-weighted), Jaccard sim
 ### Ollama setup
 
 LLMbench can drive a locally-installed Ollama instance for free, private inference (no API key, no per-token cost, no data leaves your machine).
+
+> **Status (May 2026):** confirmed working end-to-end against the deployed LLMbench at <https://llm-bench-mu.vercel.app> with a locally-running Ollama, once Ollama is started with the `OLLAMA_ORIGINS` CLI invocation below. Tested with Gemma 4 and Llama 3.2 on macOS in Chrome. Logprobs are not yet exposed by Ollama's OpenAI-compatible endpoint — feature request filed upstream as [ollama/ollama#16117](https://github.com/ollama/ollama/issues/16117) — so the Probs view, Grammar Probe Phase B/C, and Sampling Probe don't apply against an Ollama slot. Compare and the rest of Analyse are fully usable.
 
 1. **Install** Ollama: <https://ollama.com/download> (macOS, Linux, Windows).
 2. **Pull a model.** A few that work well:
