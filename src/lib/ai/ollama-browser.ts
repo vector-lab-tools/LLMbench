@@ -157,35 +157,38 @@ export interface HarmonyParseResult {
 
 const HARMONY_MARKER_RE = /<\|[^|>]*\|>/g;
 
-/** Channel names the harmony format reserves for the model's internal
- *  reasoning. When only channels in this set are present (no `final`),
- *  the model has emitted no user-facing answer — we hide them all and
- *  let the panel render a "no final answer" notice rather than promoting
- *  the thought content into the position where the answer should be. */
-const INTERNAL_HARMONY_CHANNELS = new Set([
-  "thought", "thinking", "analysis", "commentary",
-  "reasoning", "plan", "planning", "scratchpad",
-]);
-
 /**
  * Parse a raw harmony-formatted response into `{visible, hidden}`.
  *
- * Strategy (split-based, more robust than a single regex):
+ * Design (v2.2.5, after a wrong turn in v2.2.3/v2.2.4): the chevron-
+ * collapse behaviour only fires when the model emitted a *proper*
+ * harmony structure — i.e. a `final` channel alongside reasoning
+ * channels. In that case `final` becomes visible and the other channels
+ * (thought, commentary, …) get collapsed behind the chevron, as
+ * originally requested.
+ *
+ * When the model emits ONLY reasoning channels (no `final`) — which
+ * happens with Gemma 4 under Ollama because the chat template doesn't
+ * cue the channel transition — we fall back to showing the content as
+ * visible. Hiding it would silently throw the model's actual output
+ * away, which is what v2.2.4 was doing wrong.
+ *
+ * In all cases the structural markers (`<|channel|>`, `<|message|>`,
+ * `<|end|>`, …) are stripped from the visible text. They never appear in
+ * the prose; they're excluded from analysis at the token level too.
+ *
+ * Algorithm:
  *   1. Split on `<|channel|>` boundaries. Each segment after the first
  *      starts with a channel name, optionally followed by `<|message|>`
  *      and then the channel content. End-of-channel markers (`<|end|>`,
- *      `<|return|>`, `<|start|>`) terminate a channel mid-segment.
- *   2. If a `final` channel exists, its content becomes `visible`; every
- *      other parsed channel goes into `hidden`.
- *   3. If no `final` channel exists but at least one non-internal channel
- *      does (rare — covers unusual model behaviour), promote the last
- *      non-internal channel and hide the rest.
- *   4. If only internal channels (thought / thinking / commentary / …)
- *      were emitted, return `visible: ""` so the panel can render a
- *      "no final answer" notice. All internal channels go into `hidden`
- *      and remain inspectable via the chevron.
- *   5. If no parseable channel structure exists at all, fall back to
- *      stripping all `<|...|>` markers in place.
+ *      `<|return|>`, `<|start|>`) truncate a channel mid-segment.
+ *   2. If `final` exists alongside other channels: visible = final
+ *      content, hidden = the others (chevron renders them).
+ *   3. If `final` exists alone: visible = final, hidden = [] (no chevron).
+ *   4. If `final` does NOT exist: visible = all parsed channel content
+ *      joined, hidden = [] (no chevron, no text lost).
+ *   5. If no channel structure parsed: visible = original text minus
+ *      markers, hidden = [].
  */
 export function parseHarmonyOutput(text: string): HarmonyParseResult {
   if (!text || !text.includes("<|channel|>")) {
@@ -231,31 +234,14 @@ export function parseHarmonyOutput(text: string): HarmonyParseResult {
     };
   }
 
-  // No `final` channel. If at least one channel is non-internal, treat the
-  // last non-internal as the visible answer. This handles the edge case
-  // where a model emits a custom channel name we don't recognise.
-  const lastNonInternalIdx = (() => {
-    for (let i = channels.length - 1; i >= 0; i--) {
-      if (!INTERNAL_HARMONY_CHANNELS.has(channels[i].name)) return i;
-    }
-    return -1;
-  })();
-  if (lastNonInternalIdx >= 0) {
-    return {
-      visible: channels[lastNonInternalIdx].content,
-      hidden: channels.filter((_, i) => i !== lastNonInternalIdx),
-    };
-  }
-
-  // Every channel emitted was internal (thought / thinking / commentary).
-  // The model planned but never produced a final answer — typically
-  // because Ollama's chat template for a `thinking`-capable model
-  // (e.g. Gemma 4) didn't include the channel-transition prompt that
-  // would cue the model into the `final` channel. Return empty visible
-  // and hide everything; the panel renders a notice + the chevron.
+  // No `final` channel — typically Gemma 4 emitting only `thought`. Show
+  // the content rather than hide it. Joining multiple channels with a
+  // blank-line separator preserves the order the model emitted them in,
+  // which can be analytically interesting in its own right. No chevron
+  // here because there's nothing structurally separable to collapse.
   return {
-    visible: "",
-    hidden: channels,
+    visible: channels.map(c => c.content).join("\n\n"),
+    hidden: [],
   };
 }
 
@@ -285,13 +271,15 @@ export function partitionHarmonyTokens(
 ): HarmonyTokenPartition {
   if (tokens.length === 0) return { visible: [], hiddenByChannel: {} };
 
-  // Default state: assume we're in the visible channel until a marker
-  // tells us otherwise. This handles non-harmony outputs cleanly — no
-  // markers means every token is visible.
+  // Walk the stream collecting non-marker tokens into the channel
+  // they belong to (default `final` until a marker switches us). Marker
+  // tokens (`<|channel|>`, `<|message|>`, `<|end|>`, …) and the
+  // channel-name tokens that immediately follow `<|channel|>` are
+  // dropped — they're structural noise, not content, and David's
+  // spec is that they must not appear in any analytical view.
   let currentChannel: string = "final";
   let pendingChannelName = false;
-  const visible: OllamaTokenLogprob[] = [];
-  const hiddenByChannel: Record<string, OllamaTokenLogprob[]> = {};
+  const tokensByChannel: Record<string, OllamaTokenLogprob[]> = {};
 
   for (const tok of tokens) {
     const raw = tok.token;
@@ -300,44 +288,33 @@ export function partitionHarmonyTokens(
       continue;
     }
     if (pendingChannelName) {
-      // Channel name token, possibly with leading whitespace; normalise.
       currentChannel = raw.trim().toLowerCase().replace(/[^a-z]/g, "") || currentChannel;
       pendingChannelName = false;
       continue;
     }
-    if (isMarkerToken(raw)) continue; // <|message|>, <|end|>, <|return|>, etc.
+    if (isMarkerToken(raw)) continue;
 
-    if (currentChannel === "final") {
-      visible.push(tok);
-    } else {
-      if (!hiddenByChannel[currentChannel]) hiddenByChannel[currentChannel] = [];
-      hiddenByChannel[currentChannel].push(tok);
-    }
+    if (!tokensByChannel[currentChannel]) tokensByChannel[currentChannel] = [];
+    tokensByChannel[currentChannel].push(tok);
   }
 
-  // Fallback. If we never saw a `final` channel:
-  //   (a) promote the last NON-internal channel (rare; matches the
-  //       parseHarmonyOutput rule);
-  //   (b) if every channel was internal (thought/thinking/commentary/…),
-  //       leave visible empty — analysis should describe nothing rather
-  //       than the model's chain-of-thought, which would have its own
-  //       statistical signature.
-  if (visible.length === 0) {
-    const keys = Object.keys(hiddenByChannel);
-    const lastNonInternal = (() => {
-      for (let i = keys.length - 1; i >= 0; i--) {
-        if (!INTERNAL_HARMONY_CHANNELS.has(keys[i])) return keys[i];
-      }
-      return null;
-    })();
-    if (lastNonInternal) {
-      const promoted = hiddenByChannel[lastNonInternal];
-      delete hiddenByChannel[lastNonInternal];
-      return { visible: promoted, hiddenByChannel };
-    }
-    // All-internal case: keep visible empty, hidden retains every channel.
+  // Mirrors parseHarmonyOutput's rules so prose and heatmap stay in
+  // lockstep. `final` present → it's the visible answer, everything else
+  // goes to hiddenByChannel (the chevron). `final` absent → flatten all
+  // collected channels into visible. Marker and channel-name tokens
+  // were already excluded in the walk above, so visible is guaranteed
+  // marker-free in either case.
+  if ("final" in tokensByChannel) {
+    const visible = tokensByChannel.final;
+    delete tokensByChannel.final;
+    return { visible, hiddenByChannel: tokensByChannel };
   }
-  return { visible, hiddenByChannel };
+
+  const visible: OllamaTokenLogprob[] = [];
+  for (const channelTokens of Object.values(tokensByChannel)) {
+    visible.push(...channelTokens);
+  }
+  return { visible, hiddenByChannel: {} };
 }
 
 // ---------------------------------------------------------------------------
