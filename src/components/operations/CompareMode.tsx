@@ -544,6 +544,30 @@ function AnnotatedPanelDisplay({
             fontFamily={proseFontFamily}
           />
         </div>
+      ) : outputText !== null && outputText.trim().length === 0 && result && isPanelOutput(result) && result.hiddenChannels && result.hiddenChannels.length > 0 ? (
+        // Empty-visible + hidden channels present: the model emitted only
+        // its reasoning (e.g. Gemma 4's thought channel) and never
+        // transitioned to a `final` channel. Show a notice pointing the
+        // researcher to the ribbon above; the chain-of-thought is
+        // inspectable there but is excluded from analysis as designed.
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="text-center text-muted-foreground max-w-md">
+            <AlertCircle className="w-8 h-8 mx-auto mb-3 opacity-40" />
+            <p className="text-body-sm font-medium text-foreground mb-2">
+              No final answer emitted
+            </p>
+            <p className="text-caption">
+              The model produced reasoning channels but did not transition to a
+              <code className="font-mono mx-1 text-[11px] bg-muted/60 px-1 py-0.5 rounded">final</code>
+              channel — typically because Ollama&apos;s chat template for this model
+              doesn&apos;t prompt the channel transition. Inspect the
+              <span className="italic mx-1">thought</span> channel above to see
+              what the model planned, or re-run with a non-thinking model
+              (e.g. <code className="font-mono text-[11px]">llama3.2</code>) to
+              get a direct answer.
+            </p>
+          </div>
+        </div>
       ) : outputText !== null ? (
         <div className="flex-1 min-h-0">
           <ProsePanel

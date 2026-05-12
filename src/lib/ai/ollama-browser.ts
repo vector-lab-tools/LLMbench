@@ -157,30 +157,62 @@ export interface HarmonyParseResult {
 
 const HARMONY_MARKER_RE = /<\|[^|>]*\|>/g;
 
+/** Channel names the harmony format reserves for the model's internal
+ *  reasoning. When only channels in this set are present (no `final`),
+ *  the model has emitted no user-facing answer — we hide them all and
+ *  let the panel render a "no final answer" notice rather than promoting
+ *  the thought content into the position where the answer should be. */
+const INTERNAL_HARMONY_CHANNELS = new Set([
+  "thought", "thinking", "analysis", "commentary",
+  "reasoning", "plan", "planning", "scratchpad",
+]);
+
 /**
  * Parse a raw harmony-formatted response into `{visible, hidden}`.
  *
- * Strategy:
- *   - Walk the text matching `<|channel|>NAME(<|message|>)?CONTENT` segments
- *     until the next channel boundary or end-of-stream.
- *   - The `final` channel's content becomes `visible`.
- *   - Every other parsed channel goes into `hidden` (preserving order).
- *   - If no parseable channel structure is found, fall back to stripping
- *     all `<|...|>` markers in place and returning the result as visible
- *     with no hidden channels — better to show planning prose than nothing.
+ * Strategy (split-based, more robust than a single regex):
+ *   1. Split on `<|channel|>` boundaries. Each segment after the first
+ *      starts with a channel name, optionally followed by `<|message|>`
+ *      and then the channel content. End-of-channel markers (`<|end|>`,
+ *      `<|return|>`, `<|start|>`) terminate a channel mid-segment.
+ *   2. If a `final` channel exists, its content becomes `visible`; every
+ *      other parsed channel goes into `hidden`.
+ *   3. If no `final` channel exists but at least one non-internal channel
+ *      does (rare — covers unusual model behaviour), promote the last
+ *      non-internal channel and hide the rest.
+ *   4. If only internal channels (thought / thinking / commentary / …)
+ *      were emitted, return `visible: ""` so the panel can render a
+ *      "no final answer" notice. All internal channels go into `hidden`
+ *      and remain inspectable via the chevron.
+ *   5. If no parseable channel structure exists at all, fall back to
+ *      stripping all `<|...|>` markers in place.
  */
 export function parseHarmonyOutput(text: string): HarmonyParseResult {
   if (!text || !text.includes("<|channel|>")) {
     return { visible: text ?? "", hidden: [] };
   }
 
-  const channelRe =
-    /<\|channel\|>\s*(\w+)\s*(?:<\|message\|>)?\s*([\s\S]*?)(?=<\|channel\|>|<\|end\|>|<\|return\|>|<\|start\|>|$)/g;
+  // Split on the channel-open marker so we don't depend on a single regex
+  // matching across the whole document. The first segment is whatever
+  // preceded the first `<|channel|>` (typically empty, sometimes a
+  // `<|start|>assistant` preamble we discard).
+  const parts = text.split(/<\|channel\|>/);
   const channels: HarmonyChannel[] = [];
-  let match: RegExpExecArray | null;
-  while ((match = channelRe.exec(text)) !== null) {
-    const name = match[1].toLowerCase();
-    const content = match[2].replace(HARMONY_MARKER_RE, "").trim();
+  for (let i = 1; i < parts.length; i++) {
+    const segment = parts[i];
+    // Channel-name token (\w+), optional <|message|>, then content.
+    const head = segment.match(/^\s*(\w+)\s*(?:<\|message\|>)?\s*([\s\S]*)$/);
+    if (!head) continue;
+    const name = head[1].toLowerCase();
+    let content = head[2];
+    // Truncate at the first end-of-segment marker (the next channel-open
+    // would have caused a fresh split, so we only need to worry about
+    // <|end|>, <|return|>, <|start|>).
+    const endMatch = content.match(/<\|(?:end|return|start)\|>/);
+    if (endMatch && typeof endMatch.index === "number") {
+      content = content.slice(0, endMatch.index);
+    }
+    content = content.replace(HARMONY_MARKER_RE, "").trim();
     if (content.length > 0) channels.push({ name, content });
   }
 
@@ -199,14 +231,31 @@ export function parseHarmonyOutput(text: string): HarmonyParseResult {
     };
   }
 
-  // No explicit `final` channel — treat the last parsed channel as the
-  // visible answer and hide everything before it. Matches the heuristic
-  // most reasoning models use when they emit only `thought` followed by
-  // their answer without an explicit final-channel marker.
-  const last = channels[channels.length - 1];
+  // No `final` channel. If at least one channel is non-internal, treat the
+  // last non-internal as the visible answer. This handles the edge case
+  // where a model emits a custom channel name we don't recognise.
+  const lastNonInternalIdx = (() => {
+    for (let i = channels.length - 1; i >= 0; i--) {
+      if (!INTERNAL_HARMONY_CHANNELS.has(channels[i].name)) return i;
+    }
+    return -1;
+  })();
+  if (lastNonInternalIdx >= 0) {
+    return {
+      visible: channels[lastNonInternalIdx].content,
+      hidden: channels.filter((_, i) => i !== lastNonInternalIdx),
+    };
+  }
+
+  // Every channel emitted was internal (thought / thinking / commentary).
+  // The model planned but never produced a final answer — typically
+  // because Ollama's chat template for a `thinking`-capable model
+  // (e.g. Gemma 4) didn't include the channel-transition prompt that
+  // would cue the model into the `final` channel. Return empty visible
+  // and hide everything; the panel renders a notice + the chevron.
   return {
-    visible: last.content,
-    hidden: channels.slice(0, -1),
+    visible: "",
+    hidden: channels,
   };
 }
 
@@ -266,18 +315,27 @@ export function partitionHarmonyTokens(
     }
   }
 
-  // Fallback: if we never saw a `final` channel, the model probably
-  // emitted only `thought` followed by its answer without a closing
-  // boundary. In that case treat the LAST seen non-final channel's
-  // tokens as visible (matches parseHarmonyOutput's heuristic).
+  // Fallback. If we never saw a `final` channel:
+  //   (a) promote the last NON-internal channel (rare; matches the
+  //       parseHarmonyOutput rule);
+  //   (b) if every channel was internal (thought/thinking/commentary/…),
+  //       leave visible empty — analysis should describe nothing rather
+  //       than the model's chain-of-thought, which would have its own
+  //       statistical signature.
   if (visible.length === 0) {
     const keys = Object.keys(hiddenByChannel);
-    if (keys.length > 0) {
-      const lastKey = keys[keys.length - 1];
-      const promoted = hiddenByChannel[lastKey];
-      delete hiddenByChannel[lastKey];
+    const lastNonInternal = (() => {
+      for (let i = keys.length - 1; i >= 0; i--) {
+        if (!INTERNAL_HARMONY_CHANNELS.has(keys[i])) return keys[i];
+      }
+      return null;
+    })();
+    if (lastNonInternal) {
+      const promoted = hiddenByChannel[lastNonInternal];
+      delete hiddenByChannel[lastNonInternal];
       return { visible: promoted, hiddenByChannel };
     }
+    // All-internal case: keep visible empty, hidden retains every channel.
   }
   return { visible, hiddenByChannel };
 }
