@@ -33,9 +33,20 @@ const DEFAULT_MODELS: Record<AIProvider, ModelConfig[]> = {
     { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash (logprobs)", contextWindow: 1048576, maxOutputTokens: 8192 },
   ],
   ollama: [
-    { id: "llama3.2", name: "Llama 3.2", contextWindow: 128000, maxOutputTokens: 4096 },
-    { id: "llama3.1", name: "Llama 3.1", contextWindow: 128000, maxOutputTokens: 4096 },
+    // Current Ollama defaults — keep ordered by recency / general
+    // popularity. All run locally; pull with `ollama pull <id>`.
+    { id: "gemma4", name: "Gemma 4 (Google)", contextWindow: 128000, maxOutputTokens: 8192 },
+    { id: "gemma3", name: "Gemma 3 (Google)", contextWindow: 128000, maxOutputTokens: 8192 },
+    { id: "gemma2", name: "Gemma 2 (Google)", contextWindow: 8192, maxOutputTokens: 4096 },
+    { id: "llama3.3", name: "Llama 3.3 (Meta)", contextWindow: 128000, maxOutputTokens: 4096 },
+    { id: "llama3.2", name: "Llama 3.2 (Meta)", contextWindow: 128000, maxOutputTokens: 4096 },
+    { id: "llama3.1", name: "Llama 3.1 (Meta)", contextWindow: 128000, maxOutputTokens: 4096 },
+    { id: "qwen3", name: "Qwen 3 (Alibaba)", contextWindow: 131072, maxOutputTokens: 8192 },
+    { id: "qwen2.5", name: "Qwen 2.5 (Alibaba)", contextWindow: 131072, maxOutputTokens: 4096 },
+    { id: "phi4", name: "Phi-4 (Microsoft)", contextWindow: 16384, maxOutputTokens: 4096 },
     { id: "mistral", name: "Mistral", contextWindow: 32000, maxOutputTokens: 4096 },
+    { id: "mistral-nemo", name: "Mistral Nemo", contextWindow: 128000, maxOutputTokens: 4096 },
+    { id: "deepseek-r1", name: "DeepSeek R1 (reasoning)", contextWindow: 65536, maxOutputTokens: 8192 },
   ],
   "openai-compatible": [],
   openrouter: [

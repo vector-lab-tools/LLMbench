@@ -43,11 +43,19 @@ The first model in each list is the default.
 
 ## Ollama (Local)
 
-- `llama3.2` - Llama 3.2
-- `llama3.1` - Llama 3.1
+- `gemma4` - Gemma 4 (Google)
+- `gemma3` - Gemma 3 (Google)
+- `gemma2` - Gemma 2 (Google)
+- `llama3.3` - Llama 3.3 (Meta)
+- `llama3.2` - Llama 3.2 (Meta)
+- `llama3.1` - Llama 3.1 (Meta)
+- `qwen3` - Qwen 3 (Alibaba)
+- `qwen2.5` - Qwen 2.5 (Alibaba)
+- `phi4` - Phi-4 (Microsoft)
 - `mistral` - Mistral
+- `mistral-nemo` - Mistral Nemo
 - `mixtral` - Mixtral 8x7B
-- `deepseek-r1` - DeepSeek R1
+- `deepseek-r1` - DeepSeek R1 (reasoning)
 
 ---
 
