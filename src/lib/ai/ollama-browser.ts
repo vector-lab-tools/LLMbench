@@ -162,7 +162,10 @@ export interface HarmonyParseResult {
   hidden: HarmonyChannel[];
 }
 
-const HARMONY_MARKER_RE = /<\|[^|>]*\|>/g;
+// Matches harmony markers in any of three shapes: `<|TAG|>` (OpenAI),
+// `<|TAG>` (Gemma 4 open), `<TAG|>` (Gemma 4 close). Used to scrub any
+// stray markers that survive segment-level parsing.
+const HARMONY_MARKER_RE = /<\|?[A-Za-z_]+\|?>/g;
 
 /**
  * Parse a raw harmony-formatted response into `{visible, hidden}`.
@@ -198,15 +201,21 @@ const HARMONY_MARKER_RE = /<\|[^|>]*\|>/g;
  *      markers, hidden = [].
  */
 export function parseHarmonyOutput(text: string): HarmonyParseResult {
-  if (!text || !text.includes("<|channel|>")) {
+  // Accept both OpenAI harmony (`<|channel|>`) and Gemma 4 (`<|channel>`)
+  // shapes; see the doc block above isMarkerToken for the byte-level
+  // evidence. In practice Ollama strips harmony markers from
+  // `message.content` for thinking-capable models, so this branch is
+  // mostly defensive — but if anyone ever pipes raw harmony text through
+  // this function we want it to behave correctly for both variants.
+  if (!text || !/<\|channel\|?>/.test(text)) {
     return { visible: text ?? "", hidden: [] };
   }
 
   // Split on the channel-open marker so we don't depend on a single regex
   // matching across the whole document. The first segment is whatever
-  // preceded the first `<|channel|>` (typically empty, sometimes a
+  // preceded the first marker (typically empty, sometimes a
   // `<|start|>assistant` preamble we discard).
-  const parts = text.split(/<\|channel\|>/);
+  const parts = text.split(/<\|channel\|?>/);
   const channels: HarmonyChannel[] = [];
   for (let i = 1; i < parts.length; i++) {
     const segment = parts[i];
@@ -264,13 +273,43 @@ export interface HarmonyTokenPartition {
   hiddenByChannel: Record<string, OllamaTokenLogprob[]>;
 }
 
+/**
+ * Match any "harmony-style" structural token. Two real-world variants:
+ *   - OpenAI harmony (gpt-oss): `<|channel|>`, `<|message|>`, `<|end|>` …
+ *     — both opening and closing pipes.
+ *   - Gemma 4 (Google): `<|channel>` to open (single trailing pipe) and
+ *     `<channel|>` mid-stream to transition out of a reasoning channel
+ *     (single leading pipe). Confirmed by inspecting Gemma 4's actual
+ *     logprobs.content stream against a local Ollama instance — the
+ *     token at position 0 is literally `<|channel>` (10 bytes:
+ *     [60,124,99,104,97,110,110,101,108,62]), not `<|channel|>`.
+ * The regex covers all three shapes: optional leading `|`, an alphabetic
+ * tag, optional trailing `|`, closing `>`.
+ */
 function isMarkerToken(t: string): boolean {
-  return /^<\|[^|>]*\|>$/.test(t.trim());
+  return /^<\|?[A-Za-z_]+\|?>$/.test(t.trim());
 }
 
+/**
+ * Match the "open a new channel" marker. The next token is the channel
+ * name. Recognises both OpenAI harmony (`<|channel|>`) and Gemma 4
+ * (`<|channel>`) shapes.
+ */
 function isChannelOpenToken(t: string): boolean {
+  return /^<\|channel\|?>$/.test(t.trim());
+}
+
+/**
+ * Match the "close current channel" marker. Gemma 4 emits `<channel|>`
+ * mid-stream to leave the reasoning channel and (implicitly) transition
+ * to the visible answer. OpenAI harmony uses `<|end|>` / `<|return|>`
+ * for the same role — both handled here. After this marker fires we
+ * snap `currentChannel` back to `"final"` so subsequent content tokens
+ * land in the visible set.
+ */
+function isChannelCloseToken(t: string): boolean {
   const s = t.trim();
-  return s === "<|channel|>" || s.endsWith("channel|>");
+  return s === "<channel|>" || s === "<|end|>" || s === "<|return|>";
 }
 
 export function partitionHarmonyTokens(
@@ -296,6 +335,14 @@ export function partitionHarmonyTokens(
     }
     if (pendingChannelName) {
       currentChannel = raw.trim().toLowerCase().replace(/[^a-z]/g, "") || currentChannel;
+      pendingChannelName = false;
+      continue;
+    }
+    if (isChannelCloseToken(raw)) {
+      // End-of-reasoning marker (Gemma 4: <channel|>; OpenAI: <|end|>,
+      // <|return|>). Snap back to the visible channel — what follows is
+      // the model's actual answer.
+      currentChannel = "final";
       pendingChannelName = false;
       continue;
     }

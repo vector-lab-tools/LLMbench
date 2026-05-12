@@ -17,7 +17,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.2.6
+**Version:** 2.2.7
 **Date:** 12 May 2026
 **Licence:** MIT
 
