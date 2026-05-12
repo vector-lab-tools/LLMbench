@@ -17,7 +17,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.15.40
+**Version:** 2.15.41
 **Date:** 24 April 2026
 **Licence:** MIT
 
@@ -199,7 +199,36 @@ Quantitative comparison with cosine similarity (frequency-weighted), Jaccard sim
 
 - **Single or dual model.** All modes work with one or two models. Configure just Panel A for single-model analysis or both panels for comparison.
 - **Multi-provider support.** Anthropic (Claude), OpenAI (GPT), Google (Gemini), OpenRouter (300+ models via single key), Hugging Face (open-weights models via Inference API), **Ollama for local models** (runs on your own machine, no API key, browser-direct so it works from both a local and a deployed LLMbench), and any OpenAI-compatible endpoint. API keys are stored in the browser, never sent to a server.
-- **Ollama (Local) — the browser-direct path** *(v2.15.34)*. Most providers go through LLMbench's server-side `/api/generate` route. Ollama is the exception: LLMbench calls `http://localhost:11434/v1/chat/completions` directly from the browser. This works from both a local LLMbench (`npm run dev`) and a deployed one (`https://...vercel.app`) because `localhost` is a *potentially trustworthy URL* per the W3C Secure Contexts spec, exempt from mixed-content blocking in Chromium-family browsers and Firefox. For Ollama from a deployed LLMbench you must allow the calling origin via Ollama's CORS list, e.g. `OLLAMA_ORIGINS="https://your-llmbench.vercel.app,http://localhost:3000" ollama serve` — the Settings panel shows the exact command with your origin pre-filled and a copy button. **Safari** does not honour the localhost mixed-content exemption and blocks the request regardless of CORS; use Chrome / Firefox / Edge / Arc / Brave for the deployed-LLMbench → local-Ollama path. Safari is fine for local-dev. Logprobs are not exposed by Ollama, so the Probs view, Grammar Probe Phase B/C, and Sampling Probe don't apply against an Ollama slot — Compare and the rest of Analyse are fully usable.
+- **Ollama (Local) — the browser-direct path** *(v2.15.34)*. Most providers go through LLMbench's server-side `/api/generate` route. Ollama is the exception: LLMbench calls `http://localhost:11434/v1/chat/completions` directly from the browser. This works from both a local LLMbench (`npm run dev`) and a deployed one (`https://...vercel.app`) because `localhost` is a *potentially trustworthy URL* per the W3C Secure Contexts spec, exempt from mixed-content blocking in Chromium-family browsers and Firefox. See [Ollama setup](#ollama-setup) below for the exact commands. Logprobs are not exposed by Ollama, so the Probs view, Grammar Probe Phase B/C, and Sampling Probe don't apply against an Ollama slot — Compare and the rest of Analyse are fully usable.
+
+### Ollama setup
+
+LLMbench can drive a locally-installed Ollama instance for free, private inference (no API key, no per-token cost, no data leaves your machine).
+
+1. **Install** Ollama: <https://ollama.com/download> (macOS, Linux, Windows).
+2. **Pull a model.** A few that work well:
+   ```bash
+   ollama pull gemma4         # Google Gemma 4
+   ollama pull llama3.2       # Meta Llama 3.2
+   ollama pull qwen3          # Alibaba Qwen 3
+   ollama pull phi4           # Microsoft Phi-4
+   ollama pull deepseek-r1    # DeepSeek R1 (reasoning model)
+   ```
+3. **Start Ollama** with the right CORS configuration for the LLMbench origin you're calling from. The browser fetches Ollama directly, so Ollama's CORS policy must allow your LLMbench origin (`OLLAMA_ORIGINS`).
+
+   **For local-dev LLMbench (`npm run dev` on localhost:3000):** a plain `ollama serve` is enough — Ollama's defaults already allow `localhost`.
+
+   **For the deployed LLMbench at <https://llm-bench-mu.vercel.app>:**
+
+   ```bash
+   OLLAMA_ORIGINS="https://llm-bench-mu.vercel.app,http://localhost:3000,http://127.0.0.1:3000" ollama serve
+   ```
+
+   The Settings panel shows the exact command pre-filled with your current LLMbench origin and a Copy button — so you don't have to hand-edit URLs. If you fork LLMbench to a different deployment, just open Settings on that deploy and copy the command it shows.
+
+4. **In LLMbench Settings**, pick **Ollama (Local)** as the provider, leave the API key blank, and choose a model from the dropdown (or paste the exact ID from `ollama list` into the Custom Model field).
+
+**Browser support.** The browser-direct path works in **Chrome, Firefox, Edge, Arc, and Brave**. **Safari** does not honour the localhost mixed-content exemption (despite the W3C spec) and blocks the request regardless of CORS, so use a Chromium-family browser or Firefox when you want to drive a local Ollama from a deployed LLMbench. Safari is fine for the local-dev path.
 - **Streaming results.** Analysis modes stream results progressively as each run completes, with animated ghost cards for pending results. Metrics update live as data arrives.
 - **Deep Dive.** Every result has a collapsible Deep Dive panel with per-run metric tables, pairwise overlap matrices, entropy hotspot lists, confidence distribution bars, vocabulary frequency comparisons, and CSV export.
 - **Default prompt chips.** Every mode shows curated example prompts when the input is empty. Clicking runs immediately; sending an empty input auto-picks a random example.
