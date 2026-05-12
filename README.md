@@ -17,7 +17,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.15.46
+**Version:** 2.15.47
 **Date:** 12 May 2026
 **Licence:** MIT
 
@@ -254,6 +254,8 @@ LLMbench can drive a locally-installed Ollama instance for free, private inferen
 **Why multiple visualisations of the same data?** The three Probs-view bands (entropy curve, pixel map, 3D net) are not redundant. Each imposes a different spatial grammar on the same token sequence: the curve emphasises *temporal dynamics* of uncertainty, the pixel map offers a *glance-level summary* of the whole response, and the 3D net turns uncertainty into *terrain* that can be rotated and inspected from any angle. Together they prevent any single visual idiom from naturalising itself as *the* way to see token probabilities.
 
 **Why two panels?** Two is the minimum for comparison and sufficient for most analytical work. It follows the variorum principle: you need at least two variants to see what varies. The dual-panel constraint also keeps the interface focused and prevents the tool from becoming a dashboard.
+
+**Why a browser-direct path to local Ollama?** Originally a pragmatic move (Vercel's server functions can't reach a researcher's `127.0.0.1:11434`), the browser-direct path turns out to carry real methodological weight. With Ollama wired through from generation to full token-probability analysis, LLMbench can now be operated end-to-end against a model running on the researcher's own machine — no API key, no per-token billing, no third-party telemetry, no quota-induced rationing of analytical iteration. The round trip collapses from *browser → Vercel → hosted provider → Vercel → browser* to *browser → Ollama → browser*, which matters most for the per-token endpoints (Sampling Probe makes one HTTP call per token, Grammar Probe Phase B one per scaffold): latency drops from hundreds of milliseconds to whatever the local GPU returns, and the interaction starts to feel less like instrumenting a remote system and more like reading. Methodologically, this changes what LLMbench is. It becomes defensible as a research instrument under tighter institutional review — prompts, responses, and logprob distributions stay on the local machine and never enter a vendor's logs — and it becomes usable for hermeneutic work with sensitive material (unpublished interviews, embargoed sources, student writing, draft chapters) where routing the text through a commercial API is not acceptable. It also expands the model frontier: open-weight families that hosted commercial endpoints don't expose (Gemma, Llama, Qwen, Phi, DeepSeek, smaller research checkpoints) become first-class objects of close reading, with the same token-level instrumentation the hosted models receive. The architectural choice and the methodological commitment converge: the closer the model sits to the researcher, the more honest the reading becomes.
 
 ## Getting Started
 
