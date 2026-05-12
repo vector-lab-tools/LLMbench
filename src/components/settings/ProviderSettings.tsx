@@ -184,7 +184,10 @@ function SlotEditor({
               your own machine. LLMbench calls it directly from your browser
               (skipping the server route) so you can use it both from a local
               dev build and from a deployed LLMbench, as long as you let
-              Ollama&apos;s CORS policy talk to this page&apos;s origin.
+              Ollama&apos;s <strong className="text-foreground">CORS</strong> (Cross-Origin Resource Sharing) policy talk to this page&apos;s origin.
+              CORS is the browser&apos;s gatekeeper for cross-origin HTTP requests: the remote server has to opt in by naming
+              the caller&apos;s origin in an <code className="font-mono">Access-Control-Allow-Origin</code> header, which
+              Ollama configures via the <code className="font-mono">OLLAMA_ORIGINS</code> environment variable.
             </p>
             <p>
               Setup: install from{" "}

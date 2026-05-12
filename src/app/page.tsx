@@ -283,7 +283,9 @@ export default function Home() {
                 </p>
                 <p className="text-muted-foreground mb-2">
                   From a <strong className="text-foreground">deployed LLMbench</strong> you must explicitly allow this app&apos;s origin
-                  via Ollama&apos;s CORS list. Restart Ollama with the origin in <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">OLLAMA_ORIGINS</code>;
+                  via Ollama&apos;s <strong className="text-foreground">CORS</strong> (Cross-Origin Resource Sharing) list.
+                  CORS is the browser&apos;s gatekeeper for cross-origin HTTP requests: by default a page at one origin (e.g. <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">https://llm-bench-mu.vercel.app</code>) cannot call a server at a different origin (e.g. <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">http://127.0.0.1:11434</code>) unless that server opts in by naming the caller&apos;s origin in an <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">Access-Control-Allow-Origin</code> header.
+                  Restart Ollama with the origin in <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">OLLAMA_ORIGINS</code>;
                   the Settings panel shows the exact command with your origin pre-filled and a copy button. Example:
                   <code className="block text-[11px] bg-muted/60 px-2 py-1 rounded mt-1 break-all">
                     OLLAMA_ORIGINS=&quot;https://llm-bench-mu.vercel.app,http://localhost:3000,http://127.0.0.1:3000&quot; ollama serve

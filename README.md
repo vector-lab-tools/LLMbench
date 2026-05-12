@@ -17,8 +17,8 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.15.41
-**Date:** 24 April 2026
+**Version:** 2.15.42
+**Date:** 12 May 2026
 **Licence:** MIT
 
 
@@ -214,7 +214,7 @@ LLMbench can drive a locally-installed Ollama instance for free, private inferen
    ollama pull phi4           # Microsoft Phi-4
    ollama pull deepseek-r1    # DeepSeek R1 (reasoning model)
    ```
-3. **Start Ollama** with the right CORS configuration for the LLMbench origin you're calling from. The browser fetches Ollama directly, so Ollama's CORS policy must allow your LLMbench origin (`OLLAMA_ORIGINS`).
+3. **Start Ollama** with the right CORS configuration for the LLMbench origin you're calling from. **CORS** (Cross-Origin Resource Sharing) is the browser's gatekeeper for cross-origin HTTP requests: by default a page at `https://llm-bench-mu.vercel.app` is not allowed to make requests to `http://127.0.0.1:11434` because the two are different origins. The remote server has to opt in by sending an `Access-Control-Allow-Origin` header naming the caller's origin. Ollama's opt-in is the `OLLAMA_ORIGINS` environment variable — a comma-separated list of origins it will accept calls from. The browser fetches Ollama directly, so Ollama's CORS policy must allow your LLMbench origin.
 
    **For local-dev LLMbench (`npm run dev` on localhost:3000):** a plain `ollama serve` is enough — Ollama's defaults already allow `localhost`.
 
