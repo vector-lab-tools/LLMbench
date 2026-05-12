@@ -187,6 +187,32 @@ function SlotEditor({
                 </>
               )}
             </p>
+            {/* Disable-thinking toggle. Ollama-only because it's where
+                we've verified `think: false` works against the
+                /v1/chat/completions endpoint. Cuts Gemma 4 latency
+                from 30s+ to ~0.6s by bypassing the reasoning channel.
+                For non-thinking models this is a no-op (Ollama
+                silently ignores the field). */}
+            <label className="flex items-start gap-2 mt-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={!!slot.disableThinking}
+                onChange={(e) => onUpdate({ disableThinking: e.target.checked })}
+                className="mt-0.5 cursor-pointer"
+              />
+              <span className="flex-1">
+                <span className="block text-caption text-foreground font-medium group-hover:text-burgundy transition-colors">
+                  Disable thinking mode
+                </span>
+                <span className="block text-[10px] text-muted-foreground/80 mt-0.5">
+                  For <em>thinking</em>-capable models (Gemma 4, gpt-oss, qwen3
+                  thinking). Sends <code className="font-mono">think: false</code> to
+                  Ollama, bypassing the reasoning channel for a direct answer.
+                  Cuts latency dramatically (Gemma 4: 30s+ → ~0.6s). No effect on
+                  non-thinking models.
+                </span>
+              </span>
+            </label>
           </div>
         )}
       </div>

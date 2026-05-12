@@ -195,6 +195,7 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
         ],
         temperature: 0,
         topK,
+        disableThinking: slot.disableThinking,
       });
       if (!result.distribution || result.distribution.length === 0) {
         throw new Error(

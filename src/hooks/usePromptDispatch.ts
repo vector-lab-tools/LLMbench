@@ -181,6 +181,7 @@ export function usePromptDispatch() {
             systemPrompt: buildSystemPrompt(slot.systemPrompt || undefined, noMarkdown),
             temperature: slot.temperature,
             topK: 5,
+            disableThinking: slot.disableThinking,
           });
           return {
             text: out.text,
@@ -339,6 +340,7 @@ export function usePromptDispatch() {
               systemPrompt: buildSystemPrompt(retrySlot.systemPrompt || undefined, noMarkdown),
               temperature: retrySlot.temperature,
               topK: 5,
+              disableThinking: retrySlot.disableThinking,
             });
             panelData = {
               text: out.text,

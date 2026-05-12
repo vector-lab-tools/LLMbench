@@ -24,6 +24,8 @@ export interface SavedSlotSnapshot {
   temperature: number;
   systemPrompt?: string;
   baseUrl?: string;
+  /** Whether thinking-mode was disabled at execution time (Ollama). */
+  disableThinking?: boolean;
 }
 
 export interface SavedComparison {

@@ -38,6 +38,18 @@ export interface ProviderSlot {
   temperature: number;
   systemPrompt: string;
   enabled: boolean;
+  /**
+   * For "thinking"-capable models (Gemma 4, gpt-oss, qwen3 thinking
+   * variants), bypass the reasoning channel and ask for a direct
+   * answer. Sent to Ollama as `think: false` in the chat request body.
+   * Drops latency dramatically — a Gemma 4 prompt that takes 30s+ with
+   * thinking on returns in under a second with thinking off.
+   *
+   * Optional + defaults to falsy so existing localStorage slots stay
+   * compatible. The toggle in Settings only surfaces when the slot's
+   * provider supports the flag (currently: Ollama only).
+   */
+  disableThinking?: boolean;
 }
 
 // Both slots together

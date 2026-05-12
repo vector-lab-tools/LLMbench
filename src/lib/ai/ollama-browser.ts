@@ -36,6 +36,12 @@ export interface OllamaBrowserParams {
   systemPrompt?: string;
   temperature?: number;
   signal?: AbortSignal;
+  /** Disable thinking mode on "thinking"-capable models (Gemma 4,
+   *  gpt-oss, qwen3 thinking). Sent as `think: false` in the request
+   *  body. Confirmed working against `/v1/chat/completions` for Gemma 4:
+   *  drops a 30s+ thinking response to ~0.6s, with no harmony channels
+   *  emitted at all (a clean direct answer). */
+  disableThinking?: boolean;
 }
 
 export interface OllamaBrowserResult {
@@ -75,6 +81,7 @@ export async function generateOllamaFromBrowser(
         model: params.model,
         messages,
         temperature: params.temperature ?? 0.7,
+        ...(params.disableThinking ? { think: false } : {}),
       }),
       signal: params.signal,
     });
@@ -377,6 +384,7 @@ async function ollamaChatLogprobs(args: {
   maxTokens?: number;
   topLogprobs: number;
   signal?: AbortSignal;
+  disableThinking?: boolean;
 }): Promise<{ data: {
     choices?: Array<{
       message?: { content?: string };
@@ -397,6 +405,7 @@ async function ollamaChatLogprobs(args: {
         ...(args.maxTokens ? { max_tokens: args.maxTokens } : {}),
         logprobs: true,
         top_logprobs: args.topLogprobs,
+        ...(args.disableThinking ? { think: false } : {}),
       }),
       signal: args.signal,
     });
@@ -448,6 +457,7 @@ export async function generateOllamaLogprobs(params: {
   temperature?: number;
   topK?: number;
   signal?: AbortSignal;
+  disableThinking?: boolean;
 }): Promise<OllamaLogprobsResult> {
   const startedAt = Date.now();
   const messages: Array<{ role: string; content: string }> = [];
@@ -464,6 +474,7 @@ export async function generateOllamaLogprobs(params: {
     temperature: params.temperature ?? 0.7,
     topLogprobs: topK,
     signal: params.signal,
+    disableThinking: params.disableThinking,
   });
 
   const choice = data.choices?.[0];
@@ -521,6 +532,7 @@ export async function ollamaStepLogprobs(params: {
   temperature: number;
   topK: number;
   signal?: AbortSignal;
+  disableThinking?: boolean;
 }): Promise<OllamaStepResult> {
   const startedAt = Date.now();
   const topK = Math.min(Math.max(params.topK, 1), 20);
@@ -532,6 +544,7 @@ export async function ollamaStepLogprobs(params: {
     maxTokens: 1,
     topLogprobs: topK,
     signal: params.signal,
+    disableThinking: params.disableThinking,
   });
 
   const choice = data.choices?.[0];

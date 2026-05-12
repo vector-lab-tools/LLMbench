@@ -450,6 +450,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
               temperature: slot.temperature,
               topK: CONTINUATION_TOP_K,
               signal: controller.signal,
+              disableThinking: slot.disableThinking,
             });
             if (!out.distribution.length) {
               onEvent({
@@ -644,7 +645,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       createdAt: now.toISOString(),
       source: {
         tool: "LLMbench",
-        version: "2.2.5",
+        version: "2.2.6",
         // Spec field — singular, dominant phase (Atlas routes on this).
         phase: dominantPhase,
         // LLMbench extension — full set when the bundle covers multiple
@@ -894,6 +895,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
               systemPrompt: SYSTEM_PROMPT,
               temperature: 0,
               signal: controller.signal,
+              disableThinking: slot.disableThinking,
             });
             onExpansion({
               type: "expansion",

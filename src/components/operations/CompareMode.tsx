@@ -1104,6 +1104,7 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
             systemPrompt: buildSystemPrompt(slot.systemPrompt || undefined, noMarkdown),
             temperature: slot.temperature,
             topK: 5,
+            disableThinking: slot.disableThinking,
           });
           if (!out.tokens.length) {
             return {
