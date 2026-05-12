@@ -81,12 +81,18 @@ export async function generateOllamaFromBrowser(
     // the most likely cause and the most useful fix so the failure
     // doesn't read as a generic "fetch failed".
     if (err instanceof Error && err.name === "AbortError") throw err;
-    throw new Error(
-      `Cannot reach Ollama at ${base}. Confirm Ollama is running ` +
-      `(\`ollama serve\` or the Ollama app), and if you're calling from a ` +
-      `deployed LLMbench, restart Ollama with \`OLLAMA_ORIGINS="*" ollama serve\` ` +
-      `so the browser is allowed to talk to it (CORS).`
-    );
+    // The thrown message uses a structured prefix that the panel-error
+    // renderer (CompareMode and friends) can detect to lay the failure
+    // out with a copy-to-clipboard command block, rather than dumping a
+    // long single-line string at the user. Format:
+    //
+    //   OLLAMA_UNREACHABLE::<baseUrl>
+    //
+    // Anything after the marker is the base URL Ollama was called at.
+    // If the renderer doesn't recognise the prefix, fall back to a
+    // human-readable sentence — old call sites and non-Compare modes
+    // (Sampling, Sensitivity, etc.) still get a useful message.
+    throw new Error(`OLLAMA_UNREACHABLE::${base}`);
   }
 
   if (!res.ok) {

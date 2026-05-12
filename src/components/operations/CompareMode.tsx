@@ -53,6 +53,7 @@ import { useCrossPanelLinks } from "@/hooks/useCrossPanelLinks";
 import { CrossPanelLinks } from "@/components/annotations/CrossPanelLinks";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { ProsePanel } from "@/components/workspace/ProsePanel";
+import { CopyableCommand } from "@/components/shared/CopyableCommand";
 import {
   FONT_OPTIONS,
   type FontOptionId,
@@ -107,6 +108,52 @@ import type { SavedSlotSnapshot } from "@/types/comparison";
 import type { ProviderSlot } from "@/types/ai-settings";
 
 // ---------- helpers ----------
+
+/**
+ * Renders a panel error string. If the string matches the structured
+ * Ollama-unreachable marker emitted by `ollama-browser.ts`
+ * (`OLLAMA_UNREACHABLE::<baseUrl>`), lay it out as: a short headline,
+ * a one-line diagnosis, and a copyable `OLLAMA_ORIGINS="…" ollama serve`
+ * command pre-filled with the user's current page origin — so the user
+ * can copy-paste a single line into their terminal instead of hunting
+ * inside a wrapped sentence. Anything else falls through to plain text.
+ */
+function OllamaErrorOrText({ errorText }: { errorText: string }) {
+  const ollamaMatch = errorText.match(/^OLLAMA_UNREACHABLE::(.+)$/);
+  if (!ollamaMatch) {
+    return <p className="text-body-sm text-center">{errorText}</p>;
+  }
+  const base = ollamaMatch[1];
+  // Build the OLLAMA_ORIGINS command with the current page origin
+  // pre-filled. Same shape as the Settings panel's copyable command so
+  // users see one canonical recipe across the app.
+  const origin =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "https://your-llmbench-origin";
+  const isLocalDev = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+  const command = isLocalDev
+    ? "ollama serve"
+    : `OLLAMA_ORIGINS="${origin},http://localhost:3000,http://127.0.0.1:3000" ollama serve`;
+  return (
+    <div className="text-left">
+      <p className="text-body-sm font-medium text-center mb-2">
+        Cannot reach Ollama at <code className="font-mono text-[11px]">{base}</code>
+      </p>
+      <p className="text-body-sm text-foreground/70 mb-1">
+        {isLocalDev
+          ? "Confirm Ollama is running. Start it with:"
+          : "From a deployed LLMbench, Ollama must allow this page's origin via OLLAMA_ORIGINS. Stop Ollama, then restart it with:"}
+      </p>
+      <CopyableCommand command={command} />
+      {!isLocalDev && (
+        <p className="text-caption text-foreground/60 mt-2">
+          Safari blocks HTTPS pages from calling <code className="font-mono text-[11px]">http://localhost</code> regardless of CORS — use Chrome, Firefox, Edge, Arc, or Brave.
+        </p>
+      )}
+    </div>
+  );
+}
 
 function panelResultToOutput(
   result: PanelResult | null
@@ -308,9 +355,9 @@ function AnnotatedPanelDisplay({
         </div>
       ) : errorText ? (
         <div className="flex-1 flex items-center justify-center p-6">
-          <div className="text-center text-red-500/80 max-w-md">
+          <div className="text-red-500/80 max-w-md">
             <AlertCircle className="w-8 h-8 mx-auto mb-3 opacity-60" />
-            <p className="text-body-sm">{errorText}</p>
+            <OllamaErrorOrText errorText={errorText} />
             {/* Per-panel retry. Useful when one slot returned a transient
                 error (rate limit, capability mismatch fixed in Settings)
                 and the other panel succeeded — the user can re-run just
@@ -318,15 +365,17 @@ function AnnotatedPanelDisplay({
                 hits /api/generate with `panel: "A"|"B"` so only the
                 failing slot's provider is re-billed. */}
             {onRetryPanel && (
-              <button
-                type="button"
-                onClick={onRetryPanel}
-                className="btn-editorial-ghost mt-4 inline-flex items-center gap-1 text-[10px] px-2 py-1 text-foreground/80"
-                title={`Retry generation for Panel ${panel} only — does not re-run the other panel`}
-              >
-                <RotateCcw className="w-3 h-3" />
-                Retry Panel {panel}
-              </button>
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={onRetryPanel}
+                  className="btn-editorial-ghost mt-4 inline-flex items-center gap-1 text-[10px] px-2 py-1 text-foreground/80"
+                  title={`Retry generation for Panel ${panel} only — does not re-run the other panel`}
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Retry Panel {panel}
+                </button>
+              </div>
             )}
           </div>
         </div>

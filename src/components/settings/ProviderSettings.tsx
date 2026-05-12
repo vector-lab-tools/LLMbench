@@ -10,6 +10,7 @@ import {
   getAllProviders,
 } from "@/lib/ai/config";
 import type { AIProvider, ProviderSlot } from "@/types/ai-settings";
+import { CopyableCommand } from "@/components/shared/CopyableCommand";
 
 /** Provider-specific placeholder text for the Custom Model input */
 const CUSTOM_PLACEHOLDERS: Record<AIProvider, string> = {
@@ -52,37 +53,6 @@ function useClientOrigin(): { hostname: string; origin: string } {
     });
   }, []);
   return info;
-}
-
-/**
- * Small inline code block with a copy-to-clipboard button. Used for
- * the OLLAMA_ORIGINS command so users can paste the exact string with
- * their own origin pre-filled, rather than hand-editing the example.
- */
-function CopyableCommand({ command }: { command: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(command);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch { /* clipboard unavailable; user can still select manually */ }
-  };
-  return (
-    <span className="block my-1.5 flex items-start gap-1.5">
-      <code className="flex-1 font-mono text-[11px] bg-muted/60 px-2 py-1 rounded select-all break-all">
-        {command}
-      </code>
-      <button
-        type="button"
-        onClick={copy}
-        className="btn-editorial-ghost text-[10px] px-2 py-1 shrink-0"
-        title="Copy to clipboard"
-      >
-        {copied ? "Copied" : "Copy"}
-      </button>
-    </span>
-  );
 }
 
 function SlotEditor({
