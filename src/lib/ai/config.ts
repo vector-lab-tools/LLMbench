@@ -105,7 +105,12 @@ const PROVIDER_META: Record<AIProvider, Omit<ProviderConfig, "models">> = {
     requiresApiKey: false,
     baseUrlConfigurable: true,
     defaultBaseUrl: "http://localhost:11434",
-    supportsLogprobs: false,
+    // Ollama's /v1/chat/completions does return OpenAI-shaped `logprobs`
+    // and `top_logprobs` when asked (confirmed upstream on
+    // ollama/ollama#16117). The browser-direct logprob path is wired in
+    // `src/lib/ai/ollama-browser.ts` and forked at each call site
+    // (Compare Probs view, Sampling Probe, Grammar Probe Phase B/C).
+    supportsLogprobs: true,
   },
   "openai-compatible": {
     id: "openai-compatible",

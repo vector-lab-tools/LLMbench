@@ -177,6 +177,41 @@ export default function SamplingMode({ pendingPrompt }: SamplingModeProps) {
   const fetchStep = useCallback(async (
     slot: ProviderSlot, prefix: string, topK: number
   ): Promise<SamplingStepResponse> => {
+    // Ollama → browser-direct (server-side route can't reach a user's
+    // localhost from a deployed LLMbench). Other providers go through
+    // the server route as before. Mirrors the fork in usePromptDispatch
+    // for plain generation.
+    if (slot.provider === "ollama") {
+      const startedAt = Date.now();
+      const model = slot.customModelId || slot.model;
+      const { SAMPLING_SYSTEM_PROMPT } = await import("@/lib/sampling/provider");
+      const { ollamaStepLogprobs } = await import("@/lib/ai/ollama-browser");
+      const result = await ollamaStepLogprobs({
+        baseUrl: slot.baseUrl,
+        model,
+        messages: [
+          { role: "system", content: SAMPLING_SYSTEM_PROMPT },
+          { role: "user", content: prefix },
+        ],
+        temperature: 0,
+        topK,
+      });
+      if (!result.distribution || result.distribution.length === 0) {
+        throw new Error(
+          `Ollama returned no logprobs for ${model}. Confirm the model is pulled and the version supports the OpenAI-compat logprobs response.`
+        );
+      }
+      return {
+        distribution: result.distribution,
+        chosen: result.chosen,
+        provenance: {
+          provider: slot.provider,
+          model,
+          modelDisplayName: model,
+          responseTimeMs: Date.now() - startedAt,
+        },
+      } as SamplingStepResponse;
+    }
     const res = await fetch("/api/investigate/sampling-step", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

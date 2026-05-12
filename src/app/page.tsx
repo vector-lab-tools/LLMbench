@@ -294,7 +294,7 @@ export default function Home() {
                 <p className="text-muted-foreground">
                   <strong className="text-foreground">Browser support.</strong> The browser-direct path works in Chrome, Firefox, Edge, Arc, and Brave.
                   <strong className="text-foreground"> Safari blocks it</strong>: even with CORS open, Safari refuses HTTPS pages calling <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">http://localhost</code>,
-                  so use a Chromium-family browser or Firefox for Ollama from a deployed LLMbench. Safari is fine for local-dev (<code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">npm run dev</code> on localhost). Ollama&apos;s OpenAI-compatible endpoint does return logprobs, but LLMbench hasn&apos;t yet routed the browser-direct Ollama path through its logprob endpoints &mdash; so the Probs view and logprob-dependent modes (Grammar Probe Phase B/C, Sampling Probe) don&apos;t apply against an Ollama slot today. Compare and the rest of Analyse are fully usable.
+                  so use a Chromium-family browser or Firefox for Ollama from a deployed LLMbench. Safari is fine for local-dev (<code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">npm run dev</code> on localhost). Ollama&apos;s OpenAI-compatible endpoint returns logprobs, and the browser-direct path requests them &mdash; so the Probs view, Grammar Probe Phase B/C, and Sampling Probe all work against an Ollama slot.
                 </p>
               </div>
 

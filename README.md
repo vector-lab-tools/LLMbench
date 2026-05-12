@@ -17,7 +17,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.15.45
+**Version:** 2.15.46
 **Date:** 12 May 2026
 **Licence:** MIT
 
@@ -199,13 +199,13 @@ Quantitative comparison with cosine similarity (frequency-weighted), Jaccard sim
 
 - **Single or dual model.** All modes work with one or two models. Configure just Panel A for single-model analysis or both panels for comparison.
 - **Multi-provider support.** Anthropic (Claude), OpenAI (GPT), Google (Gemini), OpenRouter (300+ models via single key), Hugging Face (open-weights models via Inference API), **Ollama for local models** (runs on your own machine, no API key, browser-direct so it works from both a local and a deployed LLMbench), and any OpenAI-compatible endpoint. API keys are stored in the browser, never sent to a server.
-- **Ollama (Local) — the browser-direct path** *(v2.15.34)*. Most providers go through LLMbench's server-side `/api/generate` route. Ollama is the exception: LLMbench calls `http://localhost:11434/v1/chat/completions` directly from the browser. This works from both a local LLMbench (`npm run dev`) and a deployed one (`https://...vercel.app`) because `localhost` is a *potentially trustworthy URL* per the W3C Secure Contexts spec, exempt from mixed-content blocking in Chromium-family browsers and Firefox. See [Ollama setup](#ollama-setup) below for the exact commands. Ollama's `/v1/chat/completions` returns logprobs in the canonical OpenAI shape, but LLMbench has not yet wired the browser-direct Ollama path through to its four logprob endpoints — so the Probs view, Grammar Probe Phase B/C, and Sampling Probe don't apply against an Ollama slot today. Compare and the rest of Analyse are fully usable.
+- **Ollama (Local) — the browser-direct path** *(v2.15.34)*. Most providers go through LLMbench's server-side `/api/generate` route. Ollama is the exception: LLMbench calls `http://localhost:11434/v1/chat/completions` directly from the browser. This works from both a local LLMbench (`npm run dev`) and a deployed one (`https://...vercel.app`) because `localhost` is a *potentially trustworthy URL* per the W3C Secure Contexts spec, exempt from mixed-content blocking in Chromium-family browsers and Firefox. See [Ollama setup](#ollama-setup) below for the exact commands. Ollama's `/v1/chat/completions` returns logprobs in the canonical OpenAI shape, and the browser-direct path requests them — so the Probs view, Grammar Probe Phase B/C, and Sampling Probe all work against an Ollama slot too, alongside Compare and the rest of Analyse.
 
 ### Ollama setup
 
 LLMbench can drive a locally-installed Ollama instance for free, private inference (no API key, no per-token cost, no data leaves your machine).
 
-> **Status (May 2026):** confirmed working end-to-end against the deployed LLMbench at <https://llm-bench-mu.vercel.app> with a locally-running Ollama, once Ollama is started with the `OLLAMA_ORIGINS` CLI invocation below. Tested with Gemma 4 and Llama 3.2 on macOS in Chrome. Compare and the Analyse modes that don't depend on logprobs work today against an Ollama slot. The logprob-dependent modes (Probs view, Grammar Probe Phase B/C, Sampling Probe) are not yet wired through to Ollama on LLMbench's side — Ollama's `/v1/chat/completions` endpoint does return `logprobs` and `top_logprobs` in the canonical OpenAI shape (confirmed upstream by an Ollama maintainer in [ollama/ollama#16117](https://github.com/ollama/ollama/issues/16117), which I filed in error and have since closed), so the work is downstream in LLMbench: extending the browser-direct Ollama path (`src/lib/ai/ollama-browser.ts`) to request and decode logprobs, and routing the four logprob endpoints (`/api/analyse/logprobs`, `/api/investigate/sampling-step`, `/api/investigate/grammar-continuation`, `/api/investigate/grammar-expand`) through that browser-direct path for Ollama slots.
+> **Status (May 2026):** confirmed working end-to-end against the deployed LLMbench at <https://llm-bench-mu.vercel.app> with a locally-running Ollama, once Ollama is started with the `OLLAMA_ORIGINS` CLI invocation below. Tested with Gemma 4 and Llama 3.2 on macOS in Chrome. **All modes now work against an Ollama slot**, including the logprob-dependent ones (Probs view, Grammar Probe Phase B/C, Sampling Probe) — Ollama's `/v1/chat/completions` returns `logprobs` and `top_logprobs` in the canonical OpenAI shape (confirmed upstream on [ollama/ollama#16117](https://github.com/ollama/ollama/issues/16117)), and the browser-direct path in `src/lib/ai/ollama-browser.ts` requests and decodes them so deployed LLMbench can drive a user's local Ollama through the full pipeline.
 
 1. **Install** Ollama: <https://ollama.com/download> (macOS, Linux, Windows).
 2. **Pull a model.** A few that work well:

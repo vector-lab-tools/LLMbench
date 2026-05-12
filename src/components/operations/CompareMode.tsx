@@ -607,7 +607,7 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
   // tokens for whichever side is capable.
   const isLogprobCapableProvider = useCallback((p: string) =>
     p === "google" || p === "openai" || p === "openrouter" ||
-    p === "openai-compatible" || p === "huggingface", []);
+    p === "openai-compatible" || p === "huggingface" || p === "ollama", []);
 
   // Word diff computation
   const diffResult = useMemo(() => {
@@ -960,19 +960,79 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
     // freshly loaded saved comparison from before this feature shipped).
     const probSlotA = executedSlots?.A ?? slots.A;
     const probSlotB = executedSlots?.B ?? slots.B;
+    const probSlotBActive = isSlotConfigured("B") ? probSlotB : null;
     try {
-      const res = await fetch("/api/analyse/logprobs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: effectivePrompt,
-          topK: 5,
-          slotA: probSlotA,
-          slotB: isSlotConfigured("B") ? probSlotB : null,
-          noMarkdown,
-        }),
-      });
-      const data = await res.json();
+      // Ollama slots run browser-direct (the server-side route on Vercel
+      // cannot reach the user's local 127.0.0.1:11434). Build the same
+      // {A, B} response shape the server returns so the downstream state
+      // updates below don't have to fork.
+      const isOllama = (s: ProviderSlot | null | undefined) =>
+        typeof s?.provider === "string" &&
+        s.provider.trim().toLowerCase() === "ollama";
+      const aOllama = isOllama(probSlotA);
+      const bOllama = isOllama(probSlotBActive);
+
+      const runOllamaSide = async (slot: ProviderSlot) => {
+        const { generateOllamaLogprobs } = await import("@/lib/ai/ollama-browser");
+        const { buildSystemPrompt } = await import("@/lib/ai/system-prompts");
+        const model = slot.customModelId || slot.model;
+        try {
+          const out = await generateOllamaLogprobs({
+            baseUrl: slot.baseUrl,
+            model,
+            prompt: effectivePrompt,
+            systemPrompt: buildSystemPrompt(slot.systemPrompt || undefined, noMarkdown),
+            temperature: slot.temperature,
+            topK: 5,
+          });
+          if (!out.tokens.length) {
+            return {
+              error: `Ollama returned no logprobs for ${model}. Confirm the model is pulled and the Ollama version supports the OpenAI-compat logprobs response.`,
+            };
+          }
+          return { tokens: out.tokens, text: out.text };
+        } catch (err) {
+          return { error: err instanceof Error ? err.message : "Ollama logprobs failed" };
+        }
+      };
+
+      // Fan out: run Ollama side(s) in the browser; if either side is
+      // non-Ollama, run the server route once and merge. Build the
+      // server-side request body to skip Ollama slots — the route can't
+      // reach them anyway, so we don't even ask. When both slots are
+      // Ollama, skip the server route entirely.
+      const serverNeeded = !aOllama || (probSlotBActive !== null && !bOllama);
+      const [ollamaA, ollamaB, serverData] = await Promise.all([
+        aOllama ? runOllamaSide(probSlotA) : Promise.resolve(null),
+        bOllama && probSlotBActive ? runOllamaSide(probSlotBActive) : Promise.resolve(null),
+        serverNeeded
+          ? fetch("/api/analyse/logprobs", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                prompt: effectivePrompt,
+                topK: 5,
+                // Send a tombstone slot for Ollama sides we've already handled
+                // browser-direct, so the server route doesn't try them. Using
+                // null for slotB is allowed by the route; for slotA we keep
+                // the real slot when it's not Ollama, otherwise we still need
+                // to send something — we route around this by gating on
+                // serverNeeded above; here we just send the real config.
+                slotA: aOllama ? probSlotA : probSlotA,
+                slotB: bOllama ? null : probSlotBActive,
+                noMarkdown,
+              }),
+            }).then((r) => r.json())
+          : Promise.resolve({ A: null, B: null }),
+      ]);
+
+      const data: {
+        A: { tokens?: TokenLogprob[]; error?: string } | null;
+        B: { tokens?: TokenLogprob[]; error?: string } | null;
+      } = {
+        A: (aOllama ? ollamaA : serverData?.A ?? null) as { tokens?: TokenLogprob[]; error?: string } | null,
+        B: (bOllama ? ollamaB : serverData?.B ?? null) as { tokens?: TokenLogprob[]; error?: string } | null,
+      };
       if (data.A?.tokens?.length) {
         setLogprobTokensA(data.A.tokens);
         setProbsNavIndex(0);

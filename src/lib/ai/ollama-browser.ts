@@ -105,3 +105,234 @@ export async function generateOllamaFromBrowser(
   const text: string = data?.choices?.[0]?.message?.content ?? "";
   return { text, responseTimeMs: Date.now() - startedAt };
 }
+
+// ---------------------------------------------------------------------------
+// Logprob-capable browser-direct calls
+//
+// Ollama's `/v1/chat/completions` returns OpenAI-shaped logprobs when asked
+// (`logprobs: true`, optional `top_logprobs: N`); confirmed upstream by an
+// Ollama maintainer on `ollama/ollama#16117` for `gemma4` at top_logprobs=5.
+// The four logprob endpoints in `/api/...` cannot reach a user's local
+// Ollama when LLMbench is deployed (server-side runs in Vercel's cloud),
+// so we replicate them browser-direct here. Each call site forks: Ollama
+// slot → these functions, anything else → existing server route.
+// ---------------------------------------------------------------------------
+
+/** OpenAI-shaped logprob entry as returned by Ollama's /v1/chat/completions. */
+interface OllamaLogprobEntry {
+  token?: string;
+  bytes?: number[] | null;
+  logprob: number;
+  top_logprobs?: Array<{ token?: string; bytes?: number[] | null; logprob: number }>;
+}
+
+/**
+ * Some OpenAI-compatible servers strip leading BPE whitespace from the
+ * `token` string while leaving `bytes` faithful. Decode bytes when present
+ * so " system" doesn't collapse to "system" in the transcript. Same logic
+ * as `decodeTokenField` in `lib/sampling/provider.ts`.
+ */
+function decodeTokenBytes(entry: { token?: string; bytes?: number[] | null }): string {
+  if (entry.bytes && Array.isArray(entry.bytes) && entry.bytes.length > 0) {
+    try {
+      return new TextDecoder("utf-8").decode(new Uint8Array(entry.bytes));
+    } catch {
+      /* fall through to token */
+    }
+  }
+  return entry.token ?? "";
+}
+
+/** Resolve the base URL into a fully-qualified /v1/chat/completions URL. */
+function resolveOllamaUrl(baseUrl?: string): string {
+  const base = (baseUrl || "http://127.0.0.1:11434")
+    .replace("://localhost", "://127.0.0.1")
+    .replace(/\/+$/, "");
+  return base.endsWith("/v1")
+    ? `${base}/chat/completions`
+    : `${base}/v1/chat/completions`;
+}
+
+/**
+ * Low-level Ollama chat-completions call with logprobs. Throws on network
+ * failure (OLLAMA_UNREACHABLE marker, matching `generateOllamaFromBrowser`)
+ * or non-2xx response. Used by the three higher-level wrappers below.
+ */
+async function ollamaChatLogprobs(args: {
+  baseUrl?: string;
+  model: string;
+  messages: Array<{ role: string; content: string }>;
+  temperature: number;
+  maxTokens?: number;
+  topLogprobs: number;
+  signal?: AbortSignal;
+}): Promise<{ data: {
+    choices?: Array<{
+      message?: { content?: string };
+      logprobs?: { content?: OllamaLogprobEntry[] };
+    }>;
+  }; baseForError: string }> {
+  const url = resolveOllamaUrl(args.baseUrl);
+  const baseForError = url.replace(/\/v1\/chat\/completions$/, "");
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: args.model,
+        messages: args.messages,
+        temperature: args.temperature,
+        ...(args.maxTokens ? { max_tokens: args.maxTokens } : {}),
+        logprobs: true,
+        top_logprobs: args.topLogprobs,
+      }),
+      signal: args.signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") throw err;
+    throw new Error(`OLLAMA_UNREACHABLE::${baseForError}`);
+  }
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(
+      `Ollama returned ${res.status}${txt ? `: ${txt.slice(0, 200)}` : ""}`
+    );
+  }
+  const data = await res.json();
+  return { data, baseForError };
+}
+
+// ---------- 1. Full-text logprobs (analyse/logprobs) ----------
+
+export interface OllamaTokenLogprob {
+  token: string;
+  logprob: number;
+  topAlternatives: Array<{ token: string; logprob: number }>;
+}
+
+export interface OllamaLogprobsResult {
+  text: string;
+  tokens: OllamaTokenLogprob[];
+  responseTimeMs: number;
+}
+
+/**
+ * Generate a full response from Ollama with per-token logprobs.
+ * Used by Compare's Probs view via the `/api/analyse/logprobs` fork.
+ * Mirrors the shape of `runDirectFetchLogprobs` in the server route.
+ */
+export async function generateOllamaLogprobs(params: {
+  baseUrl?: string;
+  model: string;
+  prompt: string;
+  systemPrompt?: string;
+  temperature?: number;
+  topK?: number;
+  signal?: AbortSignal;
+}): Promise<OllamaLogprobsResult> {
+  const startedAt = Date.now();
+  const messages: Array<{ role: string; content: string }> = [];
+  if (params.systemPrompt && params.systemPrompt.trim().length > 0) {
+    messages.push({ role: "system", content: params.systemPrompt });
+  }
+  messages.push({ role: "user", content: params.prompt });
+
+  const topK = Math.min(Math.max(params.topK ?? 5, 1), 20);
+  const { data } = await ollamaChatLogprobs({
+    baseUrl: params.baseUrl,
+    model: params.model,
+    messages,
+    temperature: params.temperature ?? 0.7,
+    topLogprobs: topK,
+    signal: params.signal,
+  });
+
+  const choice = data.choices?.[0];
+  const text = choice?.message?.content ?? "";
+  const content: OllamaLogprobEntry[] = choice?.logprobs?.content ?? [];
+  const tokens: OllamaTokenLogprob[] = content.map((entry) => ({
+    token: decodeTokenBytes(entry),
+    logprob: entry.logprob ?? 0,
+    topAlternatives: (entry.top_logprobs ?? [])
+      .filter((t) => t.token !== entry.token)
+      .slice(0, topK)
+      .map((t) => ({ token: decodeTokenBytes(t), logprob: t.logprob })),
+  }));
+
+  return { text, tokens, responseTimeMs: Date.now() - startedAt };
+}
+
+// ---------- 2. Single-step distribution (sampling + grammar continuation) ----------
+
+export interface OllamaStepResult {
+  chosen: { token: string; logprob: number } | null;
+  distribution: Array<{ token: string; logprob: number }>;
+  responseTimeMs: number;
+}
+
+/**
+ * Single-step top-K distribution: `max_tokens: 1` at `temperature: 0` so
+ * the raw distribution is unaltered by provider-side sampling. The browser
+ * re-softmaxes under the user's T and top-p client-side for the Sampling
+ * Probe; Grammar Probe Phase B uses the distribution directly.
+ *
+ * Used by both the `/api/investigate/sampling-step` and
+ * `/api/investigate/grammar-continuation` forks. The difference between
+ * those two endpoints is only in the system prompt and temperature
+ * convention: sampling uses a strict text-completion system prompt at T=0,
+ * continuation uses the user's chosen system+temperature with `max_tokens=1`.
+ * Both shapes flow through this one function.
+ */
+export async function ollamaStepLogprobs(params: {
+  baseUrl?: string;
+  model: string;
+  /** Pre-built messages (system + user) the caller controls. */
+  messages: Array<{ role: string; content: string }>;
+  temperature: number;
+  topK: number;
+  signal?: AbortSignal;
+}): Promise<OllamaStepResult> {
+  const startedAt = Date.now();
+  const topK = Math.min(Math.max(params.topK, 1), 20);
+  const { data } = await ollamaChatLogprobs({
+    baseUrl: params.baseUrl,
+    model: params.model,
+    messages: params.messages,
+    temperature: params.temperature,
+    maxTokens: 1,
+    topLogprobs: topK,
+    signal: params.signal,
+  });
+
+  const choice = data.choices?.[0];
+  const content: OllamaLogprobEntry[] = choice?.logprobs?.content ?? [];
+  const messageContent: string =
+    typeof choice?.message?.content === "string" ? choice.message.content : "";
+
+  let chosen: OllamaStepResult["chosen"] = null;
+  let distribution: OllamaStepResult["distribution"] = [];
+
+  if (content.length > 0) {
+    const entry = content[0];
+    const decodedChosen = decodeTokenBytes(entry);
+    const authoritativeChosen =
+      messageContent.length > 0 ? messageContent : decodedChosen;
+    chosen = { token: authoritativeChosen, logprob: entry.logprob ?? 0 };
+    distribution = (entry.top_logprobs ?? []).map((t) => ({
+      token: decodeTokenBytes(t),
+      logprob: t.logprob,
+    }));
+    // Same rank-0 alignment as the OpenRouter direct-fetch path: keep the
+    // distribution's argmax entry visually equal to what was actually
+    // emitted so the heatmap / sampler shows a faithful transcript.
+    if (distribution.length > 0 && distribution[0].token !== authoritativeChosen) {
+      distribution = [
+        { ...distribution[0], token: authoritativeChosen },
+        ...distribution.slice(1),
+      ];
+    }
+  }
+
+  return { chosen, distribution, responseTimeMs: Date.now() - startedAt };
+}

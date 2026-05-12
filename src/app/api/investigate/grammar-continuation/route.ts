@@ -52,6 +52,13 @@ interface GrammarContinuationRequest {
   slotA: SlotPayload;
   slotB?: SlotPayload | null;
   noMarkdown?: boolean;
+  /**
+   * Optional list of panels the caller has already handled out-of-band
+   * (e.g. browser-direct for Ollama). The server skips those panels in
+   * its scaffold loop — no validation, no error events. The client is
+   * responsible for emitting `scaffold` events for skipped panels.
+   */
+  skipPanels?: Array<"A" | "B">;
 }
 
 interface TokenProb { token: string; logprob: number }
@@ -278,7 +285,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { scaffolds, topK, slotA, slotB, noMarkdown = false } = body;
+  const { scaffolds, topK, slotA, slotB, noMarkdown = false, skipPanels = [] } = body;
   if (!Array.isArray(scaffolds) || scaffolds.length === 0) {
     return Response.json({ error: "scaffolds must be a non-empty array" }, { status: 400 });
   }
@@ -287,8 +294,10 @@ export async function POST(request: NextRequest) {
   const { response, send, close } = createStreamResponse();
 
   (async () => {
-    const panels: { panel: "A" | "B"; slot: SlotPayload }[] = [{ panel: "A", slot: slotA }];
-    if (slotB) panels.push({ panel: "B", slot: slotB });
+    const skip = new Set(skipPanels);
+    const panels: { panel: "A" | "B"; slot: SlotPayload }[] = [];
+    if (!skip.has("A")) panels.push({ panel: "A", slot: slotA });
+    if (slotB && !skip.has("B")) panels.push({ panel: "B", slot: slotB });
 
     const total = panels.length * scaffolds.length;
     send({ type: "meta", total, topK: k, scaffoldCount: scaffolds.length, hasB: !!slotB });

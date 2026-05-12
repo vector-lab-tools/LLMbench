@@ -26,7 +26,7 @@ export interface SamplingSlotPayload {
 }
 
 export const SAMPLING_PROVIDERS = new Set<AIProvider>([
-  "google", "openai", "openai-compatible", "openrouter", "huggingface",
+  "google", "openai", "openai-compatible", "openrouter", "huggingface", "ollama",
 ]);
 
 // Chat-tuned models treat a bare user message as a conversational turn and
@@ -36,7 +36,7 @@ export const SAMPLING_PROVIDERS = new Set<AIProvider>([
 // flows naturally from the end of the prefix. This system prompt disables
 // acknowledgement, commentary, quoting, and echoing, leaving the model
 // nothing to do *except* emit the next token of the user's fragment.
-const SAMPLING_SYSTEM_PROMPT =
+export const SAMPLING_SYSTEM_PROMPT =
   "You are a text completion engine, not a chat assistant. The user's message is a text fragment — " +
   "the opening of a passage you must extend. Your response is the immediate continuation: one or more " +
   "tokens of natural prose that could be concatenated directly after the user's text with no gap. " +

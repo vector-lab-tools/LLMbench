@@ -81,7 +81,7 @@ const PHASES: { id: Phase; label: string; short: string; available: boolean; des
 const PREVALENCE_TEMPS = [0, 0.7];
 const SWEEP_TEMPS = [0, 0.3, 0.7, 1.0, 1.5];
 const CONTINUATION_TOP_K = 15;
-const CONTINUATION_PROVIDERS = new Set(["google", "openai", "openai-compatible", "openrouter", "huggingface"]);
+const CONTINUATION_PROVIDERS = new Set(["google", "openai", "openai-compatible", "openrouter", "huggingface", "ollama"]);
 
 interface ContinuationTokenProb { token: string; logprob: number }
 interface ContinuationResult {
@@ -401,36 +401,151 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       const slotA = panelSelection === "B" ? slots.B : slots.A;
       const slotB = usingBoth ? slots.B : null;
 
-      await fetchStreaming<StreamEvent>(
-        "/api/investigate/grammar-continuation",
-        {
-          scaffolds: selectedScaffolds.map(s => ({ id: s.id, text: s.text })),
-          topK: CONTINUATION_TOP_K,
-          slotA,
-          slotB,
-          noMarkdown,
-        },
-        (event) => {
-          if (event.type === "meta") {
-            setContinuationProgress({ done: 0, total: event.total });
-          } else if (event.type === "scaffold") {
-            setContinuationResults(prev => [
-              ...prev,
-              {
-                panel: event.panel,
-                scaffoldId: event.scaffoldId,
-                scaffold: event.scaffold,
-                chosen: event.result?.chosen ?? null,
-                distribution: event.result?.distribution ?? [],
-                error: event.result?.error,
-                provenance: event.result?.provenance,
+      const isOllama = (s: { provider: string } | null | undefined) =>
+        !!s && typeof s.provider === "string" &&
+        s.provider.trim().toLowerCase() === "ollama";
+
+      const onEvent = (event: StreamEvent) => {
+        if (event.type === "meta") {
+          setContinuationProgress({ done: 0, total: event.total });
+        } else if (event.type === "scaffold") {
+          setContinuationResults(prev => [
+            ...prev,
+            {
+              panel: event.panel,
+              scaffoldId: event.scaffoldId,
+              scaffold: event.scaffold,
+              chosen: event.result?.chosen ?? null,
+              distribution: event.result?.distribution ?? [],
+              error: event.result?.error,
+              provenance: event.result?.provenance,
+            },
+          ]);
+          setContinuationProgress(p => p ? { ...p, done: p.done + 1 } : p);
+        }
+      };
+
+      // Browser-direct Ollama runner. The server route can't reach the
+      // user's local Ollama from a deployed LLMbench, so we replicate
+      // the route's per-scaffold loop client-side and emit the same
+      // NDJSON events to the same handler. Mirrors the server-side
+      // `panels[].for-each-scaffold` shape in
+      // `/api/investigate/grammar-continuation/route.ts`.
+      const runOllamaPanel = async (panel: "A" | "B", slot: typeof slots.A) => {
+        const { ollamaStepLogprobs } = await import("@/lib/ai/ollama-browser");
+        const { buildSystemPrompt } = await import("@/lib/ai/system-prompts");
+        const model = slot.customModelId || slot.model;
+        const sys = buildSystemPrompt(slot.systemPrompt || undefined, noMarkdown);
+        for (const sc of selectedScaffolds) {
+          if (controller.signal.aborted) return;
+          const startedAt = Date.now();
+          try {
+            const messages: Array<{ role: string; content: string }> = [];
+            if (sys) messages.push({ role: "system", content: sys });
+            messages.push({ role: "user", content: sc.text });
+            const out = await ollamaStepLogprobs({
+              baseUrl: slot.baseUrl,
+              model,
+              messages,
+              temperature: slot.temperature,
+              topK: CONTINUATION_TOP_K,
+              signal: controller.signal,
+            });
+            if (!out.distribution.length) {
+              onEvent({
+                type: "scaffold",
+                panel,
+                scaffoldId: sc.id,
+                scaffold: sc.text,
+                result: {
+                  error: `Ollama returned no logprobs for ${model}.`,
+                  provenance: {
+                    provider: slot.provider, model, modelDisplayName: model,
+                    responseTimeMs: Date.now() - startedAt,
+                  },
+                },
+              } as StreamEvent);
+            } else {
+              onEvent({
+                type: "scaffold",
+                panel,
+                scaffoldId: sc.id,
+                scaffold: sc.text,
+                result: {
+                  chosen: out.chosen,
+                  distribution: out.distribution,
+                  provenance: {
+                    provider: slot.provider, model, modelDisplayName: model,
+                    responseTimeMs: Date.now() - startedAt,
+                  },
+                },
+              } as StreamEvent);
+            }
+          } catch (err) {
+            if (controller.signal.aborted) return;
+            onEvent({
+              type: "scaffold",
+              panel,
+              scaffoldId: sc.id,
+              scaffold: sc.text,
+              result: {
+                error: err instanceof Error ? err.message : "Continuation failed",
+                provenance: {
+                  provider: slot.provider, model, modelDisplayName: model,
+                  responseTimeMs: Date.now() - startedAt,
+                },
               },
-            ]);
-            setContinuationProgress(p => p ? { ...p, done: p.done + 1 } : p);
+            } as StreamEvent);
           }
-        },
-        controller.signal,
-      );
+        }
+      };
+
+      const aOllama = isOllama(slotA);
+      const bOllama = isOllama(slotB);
+      const serverSlotA = aOllama ? null : slotA;
+      const serverSlotB = bOllama ? null : slotB;
+      const serverNeeded = serverSlotA || serverSlotB;
+
+      // Fan out: Ollama sides run browser-direct; the rest go through
+      // the server stream. Emit one synthetic meta event so the
+      // progress bar gets a total even when the server route is skipped
+      // entirely (both slots are Ollama).
+      onEvent({
+        type: "meta",
+        total,
+        topK: CONTINUATION_TOP_K,
+        scaffoldCount: selectedScaffolds.length,
+        hasB: !!slotB,
+      } as StreamEvent);
+
+      const runs: Promise<void>[] = [];
+      if (aOllama) runs.push(runOllamaPanel("A", slotA));
+      if (bOllama && slotB) runs.push(runOllamaPanel("B", slotB));
+      if (serverNeeded) {
+        runs.push(
+          fetchStreaming<StreamEvent>(
+            "/api/investigate/grammar-continuation",
+            {
+              scaffolds: selectedScaffolds.map(s => ({ id: s.id, text: s.text })),
+              topK: CONTINUATION_TOP_K,
+              slotA: serverSlotA ?? slotA, // server still needs a slot; if A is Ollama send the real slot (server will validate and skip via its own logic — but we gate with serverNeeded, so this only happens when at least one server slot is real)
+              slotB: serverSlotB,
+              noMarkdown,
+              // Tell the server to skip Ollama slots; otherwise it would
+              // try to validate them and error.
+              skipPanels: [
+                ...(aOllama ? ["A" as const] : []),
+                ...(bOllama ? ["B" as const] : []),
+              ],
+            },
+            // Drop the server's synthetic meta event — we've already sent
+            // ours above with the correct total accounting for both paths.
+            (event) => { if (event.type !== "meta") onEvent(event); },
+            controller.signal,
+          )
+        );
+      }
+      await Promise.all(runs);
     } catch (err) {
       if (!isAbortError(err)) {
         setContinuationError(err instanceof Error ? err.message : "Continuation run failed");
@@ -529,7 +644,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       createdAt: now.toISOString(),
       source: {
         tool: "LLMbench",
-        version: "2.15.45",
+        version: "2.15.46",
         // Spec field — singular, dominant phase (Atlas routes on this).
         phase: dominantPhase,
         // LLMbench extension — full set when the bundle covers multiple
@@ -731,37 +846,86 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     const controller = new AbortController();
     abortControllerRef.current = controller;
     try {
-      await fetchStreaming<StreamEvent>(
-        "/api/investigate/grammar-expand",
-        {
-          pairs: pairs.map(p => ({ scaffoldId: p.scaffoldId, scaffold: p.scaffold, token: p.token })),
-          slot,
-          maxTokens: 6,
-        },
-        (event) => {
-          if (event.type === "expansion") {
-            // Match back to the originating pair to preserve rank and
-            // logprob — the stream returns one event per pair in order.
-            setForcedExpansions(prev => {
-              const pair = pairs[prev.length];
-              if (!pair) return prev;
-              const exp: ForcedExpansion = {
-                scaffoldId: event.scaffoldId,
-                scaffold: pair.scaffold,
-                panel: panelSelection === "B" ? "B" : "A",
-                rank: pair.rank,
-                token: event.token,
-                tokenLogprob: pair.logprob,
-                phrase: event.phrase ?? null,
-                error: event.error,
-              };
-              return [...prev, exp];
+      const onExpansion = (event: { type: string; scaffoldId?: string; token?: string; phrase?: string | null; error?: string }) => {
+        if (event.type === "expansion") {
+          setForcedExpansions(prev => {
+            const pair = pairs[prev.length];
+            if (!pair) return prev;
+            const exp: ForcedExpansion = {
+              scaffoldId: event.scaffoldId ?? pair.scaffoldId,
+              scaffold: pair.scaffold,
+              panel: panelSelection === "B" ? "B" : "A",
+              rank: pair.rank,
+              token: event.token ?? pair.token,
+              tokenLogprob: pair.logprob,
+              phrase: event.phrase ?? null,
+              error: event.error,
+            };
+            return [...prev, exp];
+          });
+          setForcedProgress(p => p ? { ...p, done: p.done + 1 } : p);
+        }
+      };
+      if (slot.provider === "ollama") {
+        // Browser-direct Phase C for Ollama — plain generation, no logprobs
+        // needed here. Mirrors the per-pair loop of
+        // `/api/investigate/grammar-expand/route.ts` so the deployed
+        // LLMbench can drive a local Ollama through the whole
+        // continuation → expansion pipeline.
+        const { generateOllamaFromBrowser } = await import("@/lib/ai/ollama-browser");
+        const SYSTEM_PROMPT =
+          "You complete sentences. The user will send a sentence fragment. Reply with one short natural continuation of at most 6 words. " +
+          "Do not repeat any of the fragment. Do not add punctuation beyond what the continuation needs. " +
+          "Do not add quotes or commentary. Return the continuation only.";
+        const cleanPhrase = (s: string): string => {
+          let out = s.trim();
+          out = out.replace(/^["'`\-–—•*\s]+/, "");
+          out = out.replace(/[\s.,;:!?"'`]+$/g, "");
+          return out;
+        };
+        for (const p of pairs) {
+          if (controller.signal.aborted) break;
+          const fragment = `${p.scaffold}${p.token}`;
+          try {
+            const out = await generateOllamaFromBrowser({
+              baseUrl: slot.baseUrl || "http://127.0.0.1:11434",
+              model: slot.customModelId || slot.model,
+              prompt: fragment,
+              systemPrompt: SYSTEM_PROMPT,
+              temperature: 0,
+              signal: controller.signal,
             });
-            setForcedProgress(p => p ? { ...p, done: p.done + 1 } : p);
+            onExpansion({
+              type: "expansion",
+              scaffoldId: p.scaffoldId,
+              token: p.token,
+              phrase: cleanPhrase(out.text),
+            });
+          } catch (err) {
+            if (controller.signal.aborted) break;
+            onExpansion({
+              type: "expansion",
+              scaffoldId: p.scaffoldId,
+              token: p.token,
+              phrase: null,
+              error: err instanceof Error ? err.message : "Expansion failed",
+            });
           }
-        },
-        controller.signal,
-      );
+        }
+      } else {
+        await fetchStreaming<StreamEvent>(
+          "/api/investigate/grammar-expand",
+          {
+            pairs: pairs.map(p => ({ scaffoldId: p.scaffoldId, scaffold: p.scaffold, token: p.token })),
+            slot,
+            maxTokens: 6,
+          },
+          (event) => {
+            if (event.type === "expansion") onExpansion(event);
+          },
+          controller.signal,
+        );
+      }
     } catch (err) {
       if (!isAbortError(err)) {
         setForcedError(err instanceof Error ? err.message : "Phase C expansion failed");
