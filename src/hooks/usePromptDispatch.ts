@@ -229,38 +229,75 @@ export function usePromptDispatch() {
 
       const slotA = temperatureOverride !== undefined ? { ...slots.A, temperature: temperatureOverride } : slots.A;
       const slotB = temperatureOverride !== undefined ? { ...slots.B, temperature: temperatureOverride } : slots.B;
+      const retrySlot = panel === "A" ? slotA : slotB;
+
+      const buildResult = (p: { error?: string; text?: string; provenance?: Record<string, unknown>; responseTimeMs?: number } | undefined): PanelResult | null => {
+        if (!p) return null;
+        const generatedAt = (p.provenance as { generatedAt?: string } | undefined)?.generatedAt || new Date().toISOString();
+        const provenance = { ...(p.provenance ?? {}), generatedAt };
+        if (p.error) return { error: p.error, provenance: { ...provenance, responseTimeMs: 0 } } as PanelResult;
+        return { text: p.text ?? "", provenance: { ...provenance, responseTimeMs: p.responseTimeMs ?? 0 } } as PanelResult;
+      };
 
       try {
-        const response = await fetch("/api/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            prompt: currentPrompt,
-            slotA,
-            slotB,
-            noMarkdown,
-            panel,
-          }),
-        });
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => null);
-          throw new Error(errorData?.error || `Server error: ${response.status}`);
+        // Same Ollama-fork as the main dispatch (v2.15.34): if the
+        // retried slot is Ollama, bypass /api/generate and call the
+        // browser-direct client. Without this, "Retry Panel A" against
+        // an Ollama slot from a deployed LLMbench would route through
+        // Vercel and surface the server-side "Cannot connect to Ollama"
+        // error — exactly the v2.15.36-shipped bug David spotted.
+        let panelData: Parameters<typeof buildResult>[0];
+        if (retrySlot.provider === "ollama") {
+          const modelName = retrySlot.customModelId || retrySlot.model;
+          const provenanceBase = {
+            provider: retrySlot.provider,
+            model: modelName,
+            modelDisplayName: getModelDisplayName(retrySlot.provider, modelName),
+            temperature: retrySlot.temperature,
+            systemPrompt: retrySlot.systemPrompt,
+          };
+          try {
+            const out = await generateOllamaFromBrowser({
+              baseUrl: retrySlot.baseUrl || "http://127.0.0.1:11434",
+              model: modelName,
+              prompt: currentPrompt,
+              systemPrompt: buildSystemPrompt(retrySlot.systemPrompt || undefined, noMarkdown),
+              temperature: retrySlot.temperature,
+            });
+            panelData = { text: out.text, responseTimeMs: out.responseTimeMs, provenance: provenanceBase };
+          } catch (err) {
+            panelData = {
+              error: err instanceof Error ? err.message : "Ollama call failed",
+              provenance: provenanceBase,
+            };
+          }
+        } else {
+          const response = await fetch("/api/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              prompt: currentPrompt,
+              slotA,
+              slotB,
+              noMarkdown,
+              panel,
+            }),
+          });
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => null);
+            throw new Error(errorData?.error || `Server error: ${response.status}`);
+          }
+          const data = await response.json();
+          panelData = (panel === "A" ? data.A : data.B) as Parameters<typeof buildResult>[0];
         }
-        const data = await response.json();
-        const now = data.generatedAt || new Date().toISOString();
-        const buildResult = (p: { error?: string; text?: string; provenance?: Record<string, unknown>; responseTimeMs?: number } | undefined): PanelResult | null => {
-          if (!p) return null;
-          const provenance = { ...(p.provenance ?? {}), generatedAt: now };
-          if (p.error) return { error: p.error, provenance: { ...provenance, responseTimeMs: 0 } } as PanelResult;
-          return { text: p.text ?? "", provenance: { ...provenance, responseTimeMs: p.responseTimeMs ?? 0 } } as PanelResult;
-        };
+
         setState((prev) => ({
           ...prev,
           isLoading: false,
           loadingA: panel === "A" ? false : prev.loadingA,
           loadingB: panel === "B" ? false : prev.loadingB,
-          resultA: panel === "A" ? buildResult(data.A) : prev.resultA,
-          resultB: panel === "B" ? buildResult(data.B) : prev.resultB,
+          resultA: panel === "A" ? buildResult(panelData) : prev.resultA,
+          resultB: panel === "B" ? buildResult(panelData) : prev.resultB,
           error: null,
           // The retried panel is now executing under the latest slot
           // config, even if the other panel was generated earlier under
