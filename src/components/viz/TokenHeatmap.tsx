@@ -136,8 +136,8 @@ function TokenDetailPanel({
           <span
             className="text-caption text-muted-foreground"
             title={uncertaintyUnit === "perplexity"
-              ? `Perplexity — effective number of equally-likely candidates. Equivalent to ${entropy.toFixed(3)} bits of Shannon entropy.`
-              : `Shannon entropy of the token's probability distribution. Equivalent to perplexity ≈ ${formatUncertainty(entropy, "perplexity", { approx: false, decimals: 2 }).value}.`}
+              ? `Perplexity — effective number of equally-likely candidates the model was choosing between. Computed as 2^H, where H is Shannon entropy over the visible top-K plus the unseen long tail treated as one residual bucket (a lower bound on true full-vocabulary perplexity, since the API doesn't expose the tail's per-token distribution). Equivalent to ${entropy.toFixed(3)} bits of Shannon entropy.`
+              : `Shannon entropy of the token's probability distribution, computed over the visible top-K alternatives plus the unseen long tail treated as one residual bucket — a lower bound on the true full-vocabulary entropy. Equivalent to perplexity ≈ ${formatUncertainty(entropy, "perplexity", { approx: false, decimals: 2 }).value}.`}
           >
             {(() => {
               const u = formatUncertainty(entropy, uncertaintyUnit, { decimals: 3 });
