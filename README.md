@@ -17,7 +17,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.2.12
+**Version:** 2.2.13
 **Date:** 12 May 2026
 **Licence:** MIT
 
@@ -72,6 +72,8 @@ The unit choice is purely a display flag — internals always compute and store 
 **The long-tail problem (v2.2.10).** Provider APIs cap the visible probability distribution at the top-K candidates (LLMbench requests K=5 in Compare; the API hard limit is typically 20). For a token chosen at, say, 28.8% with four named runners-up summing to a further 10%, the remaining ~61% of probability mass spreads across tens of thousands of unseen vocabulary tokens. The API never tells us how that residual is distributed. LLMbench's entropy computation therefore includes the unseen long tail as a single residual bucket of probability `1 − Σ(visible)`, contributing `−p_other · log₂(p_other)` to entropy. This yields a **strict lower bound** on the true full-vocabulary perplexity: collapsing the long tail into a single point of mass under-estimates the entropy it would contribute if its actual per-token distribution were visible. The number on screen is therefore always conservative; the true full-distribution perplexity is `≥ displayed value`. Hovering the perplexity readout in the heatmap shows the methodology gloss inline.
 
 **The 70% colour threshold.** The Probs heatmap uses one hard threshold: tokens chosen at ≥ 70% probability receive no highlight (visual silence), and below that the background glides from pale yellow through orange to deep red at probability 0, on a power-curved gradient (`t = (1 − p/0.70)^0.75`). The 70% threshold is a deliberate UX choice rather than a statistical one — it was chosen so that "the model was clearly confident here" reads as visual silence and the eye lands on the genuinely uncertain choices. The constant lives in `src/components/viz/TokenHeatmap.tsx` and `src/components/operations/CompareMode.tsx` for anyone tuning for a particular research question (e.g., a model whose distributions are flatter overall).
+
+Reference points for reading the heatmap (light mode): **≥ 70%** no highlight, **50–70%** pale yellow, **30–50%** warm orange, **10–30%** deep orange-red, **1–10%** saturated red, **below 1%** deepest red at near-full opacity. Dark mode uses lower lightness across the same hue range so the colour doesn't wash out dark text, but the threshold boundaries are identical.
 
 ## Operations at a Glance
 

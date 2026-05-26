@@ -325,6 +325,46 @@ export default function Home() {
                 <p className="text-muted-foreground mb-2">
                   Token probabilities are a <strong className="text-foreground">first-class data layer</strong> in LLMbench. With <strong>Auto-fetch logprobs</strong> on (default), the data rides alongside every submit when both slots are logprobs-capable: a single API round-trip returns both the response and its per-token distributions. Click <strong>Probs</strong> to render the heatmap &mdash; tokens the model was very confident about are uncoloured; uncertainty glides from pale yellow through orange to deep red, with a 70% threshold below which highlighting begins. The button&rsquo;s status dot tells you whether the data is cached and ready.
                 </p>
+                {/* Colour reference card. Swatch HSLA values are computed
+                    from the exact gradient formula in TokenHeatmap.tsx
+                    (logprobToStyle), evaluated at the midpoint of each
+                    probability range — so the card is a faithful preview
+                    of what the heatmap actually shows at each band. */}
+                <div className="text-muted-foreground mb-2">
+                  <p className="mb-1.5"><strong className="text-foreground">Colour reference</strong> (light mode &mdash; dark mode uses lower lightness across the same hue range, identical thresholds):</p>
+                  <div className="pl-3 border-l-2 border-parchment space-y-0.5 font-mono text-[11px]">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-6 h-3.5 rounded-sm border border-parchment/60 bg-card" />
+                      <span className="w-16 text-foreground">≥ 70%</span>
+                      <span className="text-muted-foreground/80">no highlight (visual silence; model was confident)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-6 h-3.5 rounded-sm" style={{ background: "hsla(41, 90%, 80%, 0.37)" }} />
+                      <span className="w-16 text-foreground">50&ndash;70%</span>
+                      <span className="text-muted-foreground/80">pale yellow wash</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-6 h-3.5 rounded-sm" style={{ background: "hsla(27, 92%, 65%, 0.61)" }} />
+                      <span className="w-16 text-foreground">30&ndash;50%</span>
+                      <span className="text-muted-foreground/80">warm orange</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-6 h-3.5 rounded-sm" style={{ background: "hsla(16, 93%, 53%, 0.82)" }} />
+                      <span className="w-16 text-foreground">10&ndash;30%</span>
+                      <span className="text-muted-foreground/80">deep orange-red</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-6 h-3.5 rounded-sm" style={{ background: "hsla(8, 95%, 45%, 0.96)" }} />
+                      <span className="w-16 text-foreground">1&ndash;10%</span>
+                      <span className="text-muted-foreground/80">saturated red</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-6 h-3.5 rounded-sm" style={{ background: "hsla(5, 95%, 42%, 1.00)" }} />
+                      <span className="w-16 text-foreground">&lt; 1%</span>
+                      <span className="text-muted-foreground/80">deepest red, near-full opacity</span>
+                    </div>
+                  </div>
+                </div>
                 <p className="text-muted-foreground mb-2">
                   <strong className="text-foreground">Slot-snapshot consistency.</strong> The model used to generate the displayed text is captured at submit time. If you change models in Settings before pressing Probs, the probability distribution is fetched against the <em>original</em> model &mdash; not the new one. Compare and Probs always show data from the same model snapshot. To probe with a different model, re-submit; the snapshot updates.
                 </p>
