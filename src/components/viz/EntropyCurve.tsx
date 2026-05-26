@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { computeTokenEntropy } from "@/lib/metrics/text-metrics";
+import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import type { TokenLogprob } from "@/types/analysis";
 
 interface EntropyCurveProps {
@@ -33,6 +34,17 @@ export function EntropyCurve({
 }: EntropyCurveProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<number | null>(null);
+  const { uncertaintyUnit } = useProviderSettings();
+  // Y-axis is computed in entropy bits regardless of display unit —
+  // perplexity is just 2^bits, so the same y-position carries either
+  // reading. We only relabel the tick text and the corner unit caption.
+  // `0,1,2,3,4` bits maps cleanly to `1,2,4,8,16` perplexity candidates,
+  // which is also pleasantly intuitive ("the model was choosing between
+  // 8 plausible tokens here").
+  const tickLabel = (v: number): string => uncertaintyUnit === "perplexity"
+    ? String(Math.pow(2, v))
+    : String(v);
+  const unitCaption = uncertaintyUnit === "perplexity" ? "options" : "bits";
 
   const { entropiesA, entropiesB, maxLen, maxEntropy, meanA, meanB } = useMemo(() => {
     const eA = (tokensA ?? []).map(computeTokenEntropy);
@@ -149,7 +161,7 @@ export function EntropyCurve({
               textAnchor="end"
               fontFamily="ui-monospace, SFMono-Regular, monospace"
             >
-              {v}
+              {tickLabel(v)}
             </text>
           </g>
         ))}
@@ -160,7 +172,7 @@ export function EntropyCurve({
           fill={axisColor}
           fontFamily="ui-monospace, SFMono-Regular, monospace"
         >
-          bits
+          {unitCaption}
         </text>
 
         {/* Divergence markers */}
@@ -288,7 +300,7 @@ export function EntropyCurve({
                 className="inline-block w-3 h-0.5"
                 style={{ background: colorA }}
               />
-              A (μ {meanA.toFixed(2)}b)
+              A (μ {uncertaintyUnit === "perplexity" ? `${Math.pow(2, meanA).toFixed(2)}` : `${meanA.toFixed(2)}b`})
             </span>
           )}
           {entropiesB.length > 0 && (
@@ -297,7 +309,7 @@ export function EntropyCurve({
                 className="inline-block w-3 h-0.5"
                 style={{ background: colorB }}
               />
-              B (μ {meanB.toFixed(2)}b)
+              B (μ {uncertaintyUnit === "perplexity" ? `${Math.pow(2, meanB).toFixed(2)}` : `${meanB.toFixed(2)}b`})
             </span>
           )}
           {divergePositions.length > 0 && (
@@ -316,7 +328,7 @@ export function EntropyCurve({
                 <span className="text-foreground">
                   &ldquo;{hoverTokA.replace(/\n/g, "↵") || "↵"}&rdquo;
                 </span>{" "}
-                {hoverEntA !== null ? `${hoverEntA.toFixed(2)}b` : ""}
+                {hoverEntA !== null ? (uncertaintyUnit === "perplexity" ? `${Math.pow(2, hoverEntA).toFixed(2)}` : `${hoverEntA.toFixed(2)}b`) : ""}
               </>
             )}
             {hoverTokB !== null && (
@@ -325,7 +337,7 @@ export function EntropyCurve({
                 <span className="text-foreground">
                   &ldquo;{hoverTokB.replace(/\n/g, "↵") || "↵"}&rdquo;
                 </span>{" "}
-                {hoverEntB !== null ? `${hoverEntB.toFixed(2)}b` : ""}
+                {hoverEntB !== null ? (uncertaintyUnit === "perplexity" ? `${Math.pow(2, hoverEntB).toFixed(2)}` : `${hoverEntB.toFixed(2)}b`) : ""}
               </>
             )}
           </div>

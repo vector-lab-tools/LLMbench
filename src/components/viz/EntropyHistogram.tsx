@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { computeTokenEntropy } from "@/lib/metrics/text-metrics";
+import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import type { TokenLogprob } from "@/types/analysis";
 
 interface EntropyHistogramProps {
@@ -59,6 +60,15 @@ const BINS = [
 ];
 
 export function EntropyHistogram({ tokens }: EntropyHistogramProps) {
+  const { uncertaintyUnit } = useProviderSettings();
+  // Bin edges are computed in bits internally (bins are defined that way),
+  // but rendered in the user's chosen unit. Perplexity = 2^bits, so a
+  // 0.5-bit edge → 1.41 candidates, 1.0-bit → 2, 1.5-bit → 2.83, 2.0-bit → 4.
+  const formatEdge = (bits: number): string => uncertaintyUnit === "perplexity"
+    ? Math.pow(2, bits).toFixed(2)
+    : bits.toFixed(1);
+  const edgeSuffix = uncertaintyUnit === "perplexity" ? "" : " bits";
+  const headerNoun = uncertaintyUnit === "perplexity" ? "Perplexity" : "Entropy";
   const [selectedBin, setSelectedBin] = useState<number | null>(null);
 
   const { counts, maxCount, tokenEntropies } = useMemo(() => {
@@ -87,7 +97,7 @@ export function EntropyHistogram({ tokens }: EntropyHistogramProps) {
       {/* Header + description */}
       <div>
         <div className="text-caption font-medium text-muted-foreground">
-          Entropy Distribution{" "}
+          {headerNoun} Distribution{" "}
           <span className="font-normal text-muted-foreground/70">({total} tokens)</span>
         </div>
         <p className="text-[10px] text-muted-foreground/60 mt-0.5 leading-relaxed">
@@ -153,12 +163,12 @@ export function EntropyHistogram({ tokens }: EntropyHistogramProps) {
           <div className="flex items-start justify-between gap-2 mb-2">
             <div>
               <span className={`text-caption font-semibold ${BINS[selectedBin].text}`}>
-                {BINS[selectedBin].label} Entropy
+                {BINS[selectedBin].label} {headerNoun}
               </span>
               <span className="text-caption text-muted-foreground ml-2">
-                {selectedBin === 0 ? "0 – 0.5 bits" :
-                 selectedBin === 4 ? "2.0+ bits" :
-                 `${BINS[selectedBin - 1].max.toFixed(1)} – ${BINS[selectedBin].max.toFixed(1)} bits`}
+                {selectedBin === 0 ? `${formatEdge(0)} – ${formatEdge(0.5)}${edgeSuffix}` :
+                 selectedBin === 4 ? `${formatEdge(2.0)}+${edgeSuffix}` :
+                 `${formatEdge(BINS[selectedBin - 1].max)} – ${formatEdge(BINS[selectedBin].max)}${edgeSuffix}`}
               </span>
             </div>
             <button
