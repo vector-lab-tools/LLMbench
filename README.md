@@ -17,7 +17,7 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.2.10
+**Version:** 2.2.11
 **Date:** 12 May 2026
 **Licence:** MIT
 
@@ -58,6 +58,20 @@ LLMbench treats token probabilities as a **central** data layer rather than a cl
 - **Slot-snapshot consistency.** The slot configuration used for a generation is snapshotted at submit time (`executedSlots`). All downstream views — the auto-fetch effect, the manual `Probs` button, the per-panel capability indicator, the retry button — read from this snapshot. So if you generate with Qwen, switch to GPT-4o in Settings, and then press **Probs**, the probability distribution is fetched against Qwen (the model that produced the displayed text). The compare view and the probs view always show data from the same model. To probe with a different model, re-submit; the snapshot updates.
 
 Together these mean the probs view is no longer a separate request waiting to happen; it is the second face of the response you already have. Compare and Probs always show the same text, with their data sourced from the same model snapshot. When a particular model can't return logprobs (Gemini 2.5 series, gpt-3.5-turbo, some Hugging Face routes), the empty state names the actual cause and recommends a working alternative — `gemini-2.0-flash`, `gpt-4o`/`gpt-4o-mini`, or an OpenRouter `openai/*` route — rather than implying a re-send will fix it.
+
+### Measuring uncertainty: perplexity, entropy, and the long tail (v2.2.8+)
+
+LLMbench reports per-token uncertainty in one of two units, toggleable in Settings:
+
+- **Perplexity** (default) — `2^entropy`. Reads as "the effective number of equally-likely candidates the model was choosing between." 0 bits of entropy → perplexity 1 (certainty); 1 bit → perplexity 2; 3.32 bits → perplexity ≈ 10. Chosen as the default because for a humanities audience, "the model was choosing between ~10 plausible tokens" lands more immediately than "3.32 bits of entropy."
+
+- **Entropy in bits** — Shannon entropy with log base 2, the canonical information-theoretic measure (Shannon 1948). Additive across positions, standard across information theory, computational linguistics, and ML evaluation. Available for the information-theoretic reading or when entropy values need to be compared across sequences.
+
+The unit choice is purely a display flag — internals always compute and store Shannon entropy in bits. CSV and PDF analytical exports always report bits regardless of the display unit, because reproducibility and citation want the canonical reporting form.
+
+**The long-tail problem (v2.2.10).** Provider APIs cap the visible probability distribution at the top-K candidates (LLMbench requests K=5 in Compare; the API hard limit is typically 20). For a token chosen at, say, 28.8% with four named runners-up summing to a further 10%, the remaining ~61% of probability mass spreads across tens of thousands of unseen vocabulary tokens. The API never tells us how that residual is distributed. LLMbench's entropy computation therefore includes the unseen long tail as a single residual bucket of probability `1 − Σ(visible)`, contributing `−p_other · log₂(p_other)` to entropy. This yields a **strict lower bound** on the true full-vocabulary perplexity: collapsing the long tail into a single point of mass under-estimates the entropy it would contribute if its actual per-token distribution were visible. The number on screen is therefore always conservative; the true full-distribution perplexity is `≥ displayed value`. Hovering the perplexity readout in the heatmap shows the methodology gloss inline.
+
+**The 70% colour threshold.** The Probs heatmap uses one hard threshold: tokens chosen at ≥ 70% probability receive no highlight (visual silence), and below that the background glides from pale yellow through orange to deep red at probability 0, on a power-curved gradient (`t = (1 − p/0.70)^0.75`). The 70% threshold is a deliberate UX choice rather than a statistical one — it was chosen so that "the model was clearly confident here" reads as visual silence and the eye lands on the genuinely uncertain choices. The constant lives in `src/components/viz/TokenHeatmap.tsx` and `src/components/operations/CompareMode.tsx` for anyone tuning for a particular research question (e.g., a model whose distributions are flatter overall).
 
 ## Operations at a Glance
 
