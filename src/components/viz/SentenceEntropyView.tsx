@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { computeMeanEntropy } from "@/lib/metrics/text-metrics";
+import { formatUncertainty } from "@/lib/metrics/uncertainty";
+import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import type { TokenLogprob } from "@/types/analysis";
 
 interface SentenceEntropyViewProps {
@@ -82,6 +84,7 @@ function entropyToBackground(entropy: number, maxEntropy: number, isDark: boolea
 
 export function SentenceEntropyView({ tokens, isDark }: SentenceEntropyViewProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const { uncertaintyUnit } = useProviderSettings();
 
   const { segments, maxEntropy, maxEntropyIndex } = useMemo(() => {
     const segs = buildSentenceSegments(tokens);
@@ -130,7 +133,12 @@ export function SentenceEntropyView({ tokens, isDark }: SentenceEntropyViewProps
                 <span className="absolute bottom-full left-0 mb-1 z-20 bg-card border border-parchment/80 rounded shadow-sm px-2 py-1.5 text-caption text-foreground whitespace-nowrap pointer-events-none">
                   <span className="font-medium">{seg.tokenCount} tokens</span>
                   <span className="mx-1 text-muted-foreground">·</span>
-                  <span>mean entropy: <span className="font-mono">{seg.meanEntropy.toFixed(3)}</span> bits</span>
+                  {(() => {
+                    const u = formatUncertainty(seg.meanEntropy, uncertaintyUnit, { decimals: 3 });
+                    return (
+                      <span>mean {u.label.toLowerCase()}: <span className="font-mono">{u.value}</span>{u.suffix}</span>
+                    );
+                  })()}
                   {isHighest && (
                     <span className="ml-1 text-red-500 font-medium">← highest</span>
                   )}

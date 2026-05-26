@@ -357,7 +357,7 @@ export default function ProviderSettings({
   isDark?: boolean;
   onToggleDark?: () => void;
 }) {
-  const { slots, updateSlot, showSettings, setShowSettings, autoFetchLogprobs, setAutoFetchLogprobs } =
+  const { slots, updateSlot, showSettings, setShowSettings, autoFetchLogprobs, setAutoFetchLogprobs, uncertaintyUnit, setUncertaintyUnit } =
     useProviderSettings();
 
   // Load dynamic models from /models.md on mount
@@ -406,6 +406,25 @@ export default function ProviderSettings({
                 className="rounded"
               />
               Auto-fetch logprobs
+            </label>
+            {/* Display-only swap between the two ways of expressing
+                token-level uncertainty. Internals always store Shannon
+                entropy (bits); this flag only changes the rendered
+                label across heatmap / sentence entropy / sampling step.
+                Perplexity is the humanities-friendly default. */}
+            <label
+              className="flex items-center gap-2 text-caption text-muted-foreground cursor-pointer select-none"
+              title="How to render token-level uncertainty across the Probs view. Perplexity ≈ effective number of equally-likely candidates the model was choosing between. Entropy = Shannon entropy in bits (additive, information-theoretic). Internals always compute bits — this is a display flag."
+            >
+              Uncertainty:
+              <select
+                value={uncertaintyUnit}
+                onChange={(e) => setUncertaintyUnit(e.target.value as "perplexity" | "entropy")}
+                className="bg-card border border-border rounded px-1.5 py-0.5 text-caption text-foreground focus:outline-none focus:ring-1 focus:ring-burgundy/40"
+              >
+                <option value="perplexity">perplexity</option>
+                <option value="entropy">entropy (bits)</option>
+              </select>
             </label>
             <button
               onClick={() => setShowSettings(false)}

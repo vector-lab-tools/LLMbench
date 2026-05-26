@@ -13,6 +13,7 @@ import { TokenHeatmap } from "@/components/viz/TokenHeatmap";
 import { EntropyHistogram } from "@/components/viz/EntropyHistogram";
 import { SentenceEntropyView } from "@/components/viz/SentenceEntropyView";
 import { computeTokenEntropy } from "@/lib/metrics/text-metrics";
+import { formatUncertainty } from "@/lib/metrics/uncertainty";
 import type { TokenLogprob } from "@/types/analysis";
 
 interface LogprobsOutput {
@@ -42,7 +43,7 @@ interface LogprobsModeProps {
 }
 
 export default function LogprobsMode({ isDark, pendingPrompt }: LogprobsModeProps) {
-  const { slots, getSlotLabel, isSlotConfigured, noMarkdown } = useProviderSettings();
+  const { slots, getSlotLabel, isSlotConfigured, noMarkdown, uncertaintyUnit } = useProviderSettings();
   const [panelSelection, setPanelSelection] = useState<PanelSelection>("A");
   const [prompt, setPrompt] = useState("");
 
@@ -307,7 +308,9 @@ export default function LogprobsMode({ isDark, pendingPrompt }: LogprobsModeProp
                     <tr className="border-b border-parchment">
                       <th className="text-left py-1.5 px-2 font-medium text-muted-foreground">Rank</th>
                       <th className="text-left py-1.5 px-2 font-medium text-muted-foreground">Token</th>
-                      <th className="text-right py-1.5 px-2 font-medium text-muted-foreground">Entropy</th>
+                      <th className="text-right py-1.5 px-2 font-medium text-muted-foreground">
+                        {uncertaintyUnit === "perplexity" ? "Perplexity" : "Entropy"}
+                      </th>
                       <th className="text-right py-1.5 px-2 font-medium text-muted-foreground">Chosen Prob</th>
                       <th className="text-left py-1.5 px-2 font-medium text-muted-foreground">Context</th>
                     </tr>
@@ -324,7 +327,7 @@ export default function LogprobsMode({ isDark, pendingPrompt }: LogprobsModeProp
                             &ldquo;{token.token.trim() || "\\n"}&rdquo;
                           </td>
                           <td className="py-1 px-2 text-right tabular-nums font-mono text-orange-600 dark:text-orange-400">
-                            {entropy.toFixed(3)}
+                            {formatUncertainty(entropy, uncertaintyUnit, { decimals: 3, approx: false }).value}
                           </td>
                           <td className="py-1 px-2 text-right tabular-nums text-muted-foreground">
                             {(Math.exp(token.logprob) * 100).toFixed(1)}%

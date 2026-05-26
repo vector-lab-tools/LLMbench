@@ -5,6 +5,8 @@ import { Canvas, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls, Text } from "@react-three/drei";
 import * as THREE from "three";
 import { computeTokenEntropy } from "@/lib/metrics/text-metrics";
+import { formatUncertainty } from "@/lib/metrics/uncertainty";
+import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import type { TokenLogprob } from "@/types/analysis";
 
 // ---------- Config ----------
@@ -304,6 +306,7 @@ function NetCanvas({
   label,
   isDark,
 }: NetCanvasProps) {
+  const { uncertaintyUnit } = useProviderSettings();
   const [hovered, setHovered] = useState<{
     index: number;
     token: string;
@@ -335,7 +338,15 @@ function NetCanvas({
             <span className="text-foreground">
               &ldquo;{hovered.token.replace(/\n/g, "↵") || "↵"}&rdquo;
             </span>{" "}
-            · H {hovered.entropy.toFixed(2)}b · p{" "}
+            {(() => {
+              const u = formatUncertainty(hovered.entropy, uncertaintyUnit, { decimals: 2 });
+              // Compact tooltip: prefer "PP ≈ 9.97" / "H 3.32b" — keeps
+              // the strip readable in the 3D net's overlay typography.
+              const short = uncertaintyUnit === "perplexity"
+                ? `PP ${u.value}`
+                : `H ${u.value}b`;
+              return <>· {short} · p{" "}</>;
+            })()}
             {(hovered.prob * 100).toFixed(1)}%
           </>
         ) : (

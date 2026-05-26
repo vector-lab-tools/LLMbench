@@ -645,7 +645,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       createdAt: now.toISOString(),
       source: {
         tool: "LLMbench",
-        version: "2.2.7",
+        version: "2.2.8",
         // Spec field — singular, dominant phase (Atlas routes on this).
         phase: dominantPhase,
         // LLMbench extension — full set when the bundle covers multiple
@@ -1962,6 +1962,7 @@ function ContinuationCard({
   suppressTokens: string[];
   panelLabel: string;
 }) {
+  const { uncertaintyUnit } = useProviderSettings();
   const suppressSet = new Set(suppressTokens.map(t => t.toLowerCase().trim()));
   const dist = result.distribution;
   // Entropy (bits) over returned top-K; a soft proxy, truncated.
@@ -1978,7 +1979,9 @@ function ContinuationCard({
           {result.panel} · {panelLabel}
         </span>
         <span className="text-muted-foreground font-mono text-[10px]">
-          H ≈ {entropyBits.toFixed(2)} bits
+          {uncertaintyUnit === "perplexity"
+            ? `PP ≈ ${Math.pow(2, entropyBits).toFixed(entropyBits < 1 ? 3 : entropyBits < 3.32 ? 2 : 1)}`
+            : `H ≈ ${entropyBits.toFixed(2)} bits`}
           {result.provenance && (
             <> · {result.provenance.responseTimeMs}ms</>
           )}

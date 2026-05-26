@@ -3,6 +3,8 @@
 import { useState, type CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import { computeTokenEntropy } from "@/lib/metrics/text-metrics";
+import { formatUncertainty } from "@/lib/metrics/uncertainty";
+import { useProviderSettings } from "@/context/ProviderSettingsContext";
 import type { TokenLogprob } from "@/types/analysis";
 
 interface TokenHeatmapProps {
@@ -71,6 +73,16 @@ function TokenDetailPanel({
   const siblingToken = siblingTokens?.[activeIndex] ?? null;
   const diverged = siblingToken && siblingToken.token !== activeToken.token;
   const notes: { color: string; text: string }[] = [];
+  const { uncertaintyUnit } = useProviderSettings();
+  // Pre-formatted noun phrases for the analytical notes below. Letting
+  // formatUncertainty do the work means flipping the Settings toggle
+  // immediately re-renders both the header read-out (3 lines down) and
+  // the prose notes ("High entropy (X bits)" → "High perplexity (≈ N)")
+  // from one source of truth.
+  const uVerbose = formatUncertainty(entropy, uncertaintyUnit, { decimals: 2 });
+  const uVerbosePhrase = `${uVerbose.value}${uVerbose.suffix}`;
+  const uHighLabel = uncertaintyUnit === "perplexity" ? "High perplexity" : "High entropy";
+  const uModerateLabel = uncertaintyUnit === "perplexity" ? "Moderate perplexity" : "Moderate uncertainty";
 
   if (diverged && siblingToken) {
     const inAlts = activeToken.topAlternatives.some(a => a.token === siblingToken.token);
@@ -83,12 +95,12 @@ function TokenDetailPanel({
   if (entropy > 2.0) {
     notes.push({
       color: "text-red-700 dark:text-red-400 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30",
-      text: `High entropy (${entropy.toFixed(2)} bits): the model had no strong preference at this position — probability was spread across many alternatives. This is where stochastic sampling has the most impact; different runs will often choose differently here.`,
+      text: `${uHighLabel} (${uVerbosePhrase}): the model had no strong preference at this position — probability was spread across many alternatives. This is where stochastic sampling has the most impact; different runs will often choose differently here.`,
     });
   } else if (entropy > 1.2) {
     notes.push({
       color: "text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/30",
-      text: `Moderate uncertainty (${entropy.toFixed(2)} bits): several tokens were plausible here. At temperature > 0 the model samples from this distribution rather than always picking the most likely token.`,
+      text: `${uModerateLabel} (${uVerbosePhrase}): several tokens were plausible here. At temperature > 0 the model samples from this distribution rather than always picking the most likely token.`,
     });
   }
 
@@ -121,11 +133,23 @@ function TokenDetailPanel({
             </span>
             <span className="text-muted-foreground/60"> / {tokens.length}</span>
           </span>
-          <span className="text-caption text-muted-foreground">
-            Entropy:{" "}
-            <span className="font-mono text-foreground font-semibold">
-              {entropy.toFixed(3)} bits
-            </span>
+          <span
+            className="text-caption text-muted-foreground"
+            title={uncertaintyUnit === "perplexity"
+              ? `Perplexity — effective number of equally-likely candidates. Equivalent to ${entropy.toFixed(3)} bits of Shannon entropy.`
+              : `Shannon entropy of the token's probability distribution. Equivalent to perplexity ≈ ${formatUncertainty(entropy, "perplexity", { approx: false, decimals: 2 }).value}.`}
+          >
+            {(() => {
+              const u = formatUncertainty(entropy, uncertaintyUnit, { decimals: 3 });
+              return (
+                <>
+                  {u.label}:{" "}
+                  <span className="font-mono text-foreground font-semibold">
+                    {u.value}{u.suffix}
+                  </span>
+                </>
+              );
+            })()}
           </span>
           <span className="text-caption text-muted-foreground">
             Chosen:{" "}

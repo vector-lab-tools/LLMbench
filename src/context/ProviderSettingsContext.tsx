@@ -10,6 +10,7 @@ import React, {
 import type { ProviderSlot, ProviderSlots } from "@/types/ai-settings";
 import { DEFAULT_SLOT_A, DEFAULT_SLOT_B } from "@/types/ai-settings";
 import { getModelDisplayName } from "@/lib/ai/config";
+import type { UncertaintyUnit } from "@/lib/metrics/uncertainty";
 
 const STORAGE_KEY = "llmbench-provider-settings";
 const NO_MARKDOWN_KEY = "llmbench-no-markdown";
@@ -18,6 +19,14 @@ const NO_MARKDOWN_KEY = "llmbench-no-markdown";
 // "switch to probs view → second API request" round-trip and lets users
 // keep diff and probs views in sync from a single submit.
 const AUTO_LOGPROBS_KEY = "llmbench-auto-fetch-logprobs";
+// Display unit for token-level uncertainty across the Probs / heatmap /
+// sentence-entropy / sampling-step UIs. "perplexity" by default because
+// "the model was choosing between ~10 plausible tokens" is more legible
+// to a humanities reader than "3.32 bits of entropy". Power users can
+// flip to "entropy" in Settings for the information-theoretic reading.
+// Internals still compute and store entropy in bits — this is purely a
+// display flag.
+const UNCERTAINTY_UNIT_KEY = "llmbench-uncertainty-unit";
 
 interface ProviderSettingsContextValue {
   slots: ProviderSlots;
@@ -30,6 +39,8 @@ interface ProviderSettingsContextValue {
   setNoMarkdown: (value: boolean) => void;
   autoFetchLogprobs: boolean;
   setAutoFetchLogprobs: (value: boolean) => void;
+  uncertaintyUnit: UncertaintyUnit;
+  setUncertaintyUnit: (value: UncertaintyUnit) => void;
 }
 
 const ProviderSettingsContext =
@@ -78,6 +89,8 @@ export function ProviderSettingsProvider({
   // opens with data already loaded rather than triggering a second model
   // request. Power users can still turn this off in Settings.
   const [autoFetchLogprobs, setAutoFetchLogprobsState] = useState(true);
+  // Default to perplexity — easier to read for a humanities audience.
+  const [uncertaintyUnit, setUncertaintyUnitState] = useState<UncertaintyUnit>("perplexity");
 
   const setNoMarkdown = useCallback((value: boolean) => {
     setNoMarkdownState(value);
@@ -87,6 +100,11 @@ export function ProviderSettingsProvider({
   const setAutoFetchLogprobs = useCallback((value: boolean) => {
     setAutoFetchLogprobsState(value);
     try { localStorage.setItem(AUTO_LOGPROBS_KEY, JSON.stringify(value)); } catch { /* ignore */ }
+  }, []);
+
+  const setUncertaintyUnit = useCallback((value: UncertaintyUnit) => {
+    setUncertaintyUnitState(value);
+    try { localStorage.setItem(UNCERTAINTY_UNIT_KEY, JSON.stringify(value)); } catch { /* ignore */ }
   }, []);
 
   // Load from localStorage on mount
@@ -99,6 +117,15 @@ export function ProviderSettingsProvider({
     try {
       const stored = localStorage.getItem(AUTO_LOGPROBS_KEY);
       if (stored !== null) setAutoFetchLogprobsState(JSON.parse(stored));
+    } catch { /* ignore */ }
+    try {
+      const stored = localStorage.getItem(UNCERTAINTY_UNIT_KEY);
+      if (stored !== null) {
+        const parsed = JSON.parse(stored);
+        if (parsed === "perplexity" || parsed === "entropy") {
+          setUncertaintyUnitState(parsed);
+        }
+      }
     } catch { /* ignore */ }
     setLoaded(true);
   }, []);
@@ -151,6 +178,8 @@ export function ProviderSettingsProvider({
         setNoMarkdown,
         autoFetchLogprobs,
         setAutoFetchLogprobs,
+        uncertaintyUnit,
+        setUncertaintyUnit,
       }}
     >
       {children}
