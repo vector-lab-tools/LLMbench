@@ -80,7 +80,7 @@ export const DEFAULT_PATTERNS: GrammarPattern[] = [
     // non-overlapping extractors.
     xExtractor: "\\bnot\\s+(?!just\\b|merely\\b|only\\b|simply\\b)([^,.;:!?]+?)\\s*,?\\s+but\\s+",
     note:
-      "Appears with striking regularity across LLM outputs, especially in explanatory and op-ed registers. The construction promises nuance while flattening toward a stable geometric direction in embedding space. Phase B's geometry view plots logprob rank against cosine(X, Y-phrase) to make this collapse visible in one chart. Aligns with Manifold Atlas's `not-x-but-y` grammar for cross-tool probing.",
+      "Appears with striking regularity across LLM outputs, especially in explanatory and op-ed registers. The construction promises nuance while collapsing into a small set of highly-probable Y completions. Phase B's distribution view (top-1 mass, entropy, cliché share) captures this collapse directly from the chat model's softmax output, without recourse to any embedding space.",
   },
   {
     id: "not-just-x-but-y",
@@ -103,7 +103,7 @@ export const DEFAULT_PATTERNS: GrammarPattern[] = [
     suppressTokens: ["not", "just", "merely", "only", "simply"],
     xExtractor: "\\bnot\\s+(?:just|merely|only|simply)\\s+([^,.;:!?]+?)\\s*,?\\s+but\\s+",
     note:
-      "The characteristically RLHF-flavoured variant — the construction the model reaches for when it has been trained toward 'balance' and 'nuance'. Aligns with Manifold Atlas's `not-just-x-but-y` grammar.",
+      "The characteristically RLHF-flavoured variant — the construction the model reaches for when it has been trained toward 'balance' and 'nuance'.",
   },
   {
     id: "it-is-not-x-it-is-y",
@@ -125,7 +125,7 @@ export const DEFAULT_PATTERNS: GrammarPattern[] = [
     suppressTokens: ["not", "it's", "it", "is"],
     xExtractor: "\\b(?:it['\\u2019]s|it\\s+is|this\\s+isn['\\u2019]t|this\\s+is\\s+not)\\s+(?:that\\s+)?([^,.;:!?—–-]+?)[,;.—–-]+\\s*(?:it['\\u2019]s|it\\s+is)\\s+",
     note:
-      "Closely related to 'not X but Y' but structurally separate: the correction is staged as two clauses rather than one. A tell of explainer register, common in AI-assisted writing coaching. Aligns with Manifold Atlas's `it-is-not-x-it-is-y` grammar.",
+      "Closely related to 'not X but Y' but structurally separate: the correction is staged as two clauses rather than one. A tell of explainer register, common in AI-assisted writing coaching.",
   },
   {
     id: "while-x-y",
@@ -148,7 +148,7 @@ export const DEFAULT_PATTERNS: GrammarPattern[] = [
     // Captures the concession clause (X) between the pivot word and the comma.
     xExtractor: "\\b(?:while|although|though)\\s+([^,.;:!?]+?),\\s+",
     note:
-      "Structurally a concession → assertion pivot. The tell is that the concession is near-uniformly rhetorical — the model is not genuinely torn, it has already decided. Geometrically: the Y half sits close to a conventional direction while X is decorative. Aligns with Manifold Atlas's `while-x-y` grammar.",
+      "Structurally a concession → assertion pivot. The tell is that the concession is near-uniformly rhetorical — the model is not genuinely torn, it has already decided. Detectable from the chat-model surface: low entropy and high cliché share on the Y-side completions, regardless of which X was conceded.",
   },
   {
     id: "what-matters-is-not-x-but-y",
@@ -170,7 +170,7 @@ export const DEFAULT_PATTERNS: GrammarPattern[] = [
     suppressTokens: ["what", "matters", "counts", "important", "not", "but"],
     xExtractor: "\\b(?:what\\s+(?:matters|counts|(?:is\\s+)?(?:important|really\\s+at\\s+stake)))\\s+(?:is\\s+)?not\\s+([^,.;:!?]+?)\\s*,?\\s+but\\s+",
     note:
-      "The cleft puts the antithesis in a frame of moral stakes — a gesture toward significance that is then satisfied by a near-neighbour rotation. Aligns with Manifold Atlas's `what-matters-is-not-x-but-y` grammar.",
+      "The cleft puts the antithesis in a frame of moral stakes — a gesture toward significance that is then satisfied by a near-formulaic Y. Phase B's distribution metrics expose the formulaic move directly.",
   },
   {
     id: "hedging-triplet",

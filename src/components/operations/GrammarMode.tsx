@@ -73,7 +73,7 @@ interface GrammarModeProps {
 const PHASES: { id: Phase; label: string; short: string; available: boolean; description: string }[] = [
   { id: "prevalence",   label: "A. Prevalence",           short: "A",     available: true,  description: "Regex-count pattern hits across the suite × temperatures × models." },
   { id: "continuation", label: "B. Continuation logprobs", short: "B",   available: true,  description: "For each pattern scaffold, inspect the top-K next-token distribution." },
-  { id: "forced",       label: "C. Forced continuation",  short: "C",    available: true,  description: "For each scaffold, take the top-N Y tokens from Phase B and expand each into a short Y-phrase. Hand off to Manifold Atlas." },
+  { id: "forced",       label: "C. Forced continuation",  short: "C",    available: true,  description: "For each scaffold, take the top-N Y tokens from Phase B and expand each into a short Y-phrase. Recorded in the exported run data for archival and downstream chat-model analysis." },
   { id: "perturbation", label: "D. Perturbation",         short: "D",    available: true,  description: "Neutral vs anti-pattern vs pro-pattern framings. Measures whether the construction is structural (persists under suppression) or stylistic (flexes with instruction)." },
   { id: "temperature",  label: "E. Temperature sweep",    short: "E",    available: true,  description: "Prevalence vs T ∈ {0, 0.3, 0.7, 1.0, 1.5}. Is the pattern at the greedy centre?" },
 ];
@@ -145,9 +145,13 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
   // Phase C takes Phase B's top-K next-token distributions (the candidate Y
   // tokens) and, for each (scaffold, Y-token) pair, asks the model to expand
   // the token into a short Y-phrase. The result is a harvestable
-  // scaffold → Y-token → Y-phrase table that hands off to Manifold Atlas via
-  // the grammar-probe bundle for higher-volume geometric scrutiny. The
-  // backend is /api/investigate/grammar-expand; this UI drives it.
+  // scaffold → Y-token → Y-phrase table, recorded in the run-data export
+  // for archival and downstream chat-model analysis. Earlier versions of
+  // this phase were framed as feedstock for cosine geometry in Manifold
+  // Atlas; that handover was retired in v2.2.14 on the grounds that the
+  // chat model whose tokens these are and any embedding model that would
+  // compute their cosine geometry are different objects. The backend is
+  // /api/investigate/grammar-expand; this UI drives it.
   interface ForcedExpansion {
     scaffoldId: string;
     scaffold: string;
@@ -566,14 +570,22 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
     setContinuationError(null);
   }, []);
 
-  // ---- Bundle export ------------------------------------------------------
-  // "Grammar data bundle": exports whatever Grammar Probe data the researcher
-  // has generated so far — Phase A prevalence runs, Phase B top-K continuations,
-  // and Phase E temperature sweeps — into a single analysable JSON document.
-  // Previously this required embeddings and exported geometry scatter points;
-  // since LLMbench's slot providers don't reliably expose embedding endpoints,
-  // we now export the raw logprob + prose data and let downstream tools
-  // (Manifold Atlas, notebooks) compute geometry against their own embedders.
+  // ---- Run-data export ----------------------------------------------------
+  // Exports whatever Grammar Probe data the researcher has generated so far
+  // — Phase A prevalence runs, Phase B top-K continuations, Phase C forced
+  // expansions, Phase D perturbation framings, and Phase E temperature sweeps
+  // — into a single analysable JSON document for archival and reproducibility.
+  //
+  // Earlier versions of this export framed it as feedstock for downstream
+  // geometric analysis (handover to Manifold Atlas). That framing was retired
+  // in v2.2.14 on methodological grounds: the chat model whose generation we
+  // observe and any embedding model that would compute cosine similarity are
+  // different objects in different vector spaces. Taking tokens the chat model
+  // surfaced and measuring their cosine geometry in an embedding model's space
+  // describes that embedding model's geometry, not the chat model's. Grammar
+  // Probe therefore stays on the generation surface where its evidence sits —
+  // probability mass, entropy, prevalence counts, forced expansions — and this
+  // export is a portable record of those observations, full stop.
   const handleDownloadBundle = useCallback(() => {
     const hasAny = runs.length > 0 || continuationResults.length > 0 || sweepRuns.length > 0;
     if (!hasAny) return;
@@ -593,16 +605,16 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       return sweepRuns.length > 0;
     });
     // `phase` (singular) is the dominant phase for importers that expect
-    // a single identifier (e.g. Manifold Atlas checks `source.phase` when
-    // routing between its geometry and prevalence views). `phases` (plural)
-    // carries the full set so importers that support multi-phase bundles
-    // can use it directly.
+    // a single identifier; `phases` (plural) carries the full set so
+    // importers that support multi-phase bundles can use it directly.
+    // The format identifier (`vector-lab.grammar-probe.v1`) is preserved
+    // for backward compatibility — any external tooling that consumes the
+    // file by that name should keep working.
     const dominantPhase = phases.includes("B") ? "B" : phases[0] ?? null;
 
     // Extract X term from a scaffold using the pattern's xExtractor regex.
-    // Used to build the canonical `probes[].x` field per the v1 spec
-    // (vector-lab-design/GRAMMAR-PROBE-BUNDLE.md). Falls back to empty
-    // string on any error or no match — Atlas treats empty x defensively.
+    // Used to build the `probes[].x` field per the v1 export shape. Falls
+    // back to empty string on any error or no match.
     const extractXFromScaffold = (scaffold: string): string => {
       if (!pattern.xExtractor) return "";
       try {
@@ -645,7 +657,7 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
       createdAt: now.toISOString(),
       source: {
         tool: "LLMbench",
-        version: "2.2.13",
+        version: "2.2.14",
         // Spec field — singular, dominant phase (Atlas routes on this).
         phase: dominantPhase,
         // LLMbench extension — full set when the bundle covers multiple
@@ -725,8 +737,9 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
         ])),
       })),
       // Phase B: top-K next-token distributions per scaffold per panel.
-      // This is the raw material downstream tools (e.g. Manifold Atlas)
-      // can embed against their own embedder to reconstruct geometry.
+      // Direct observations of the chat model's softmax output at each
+      // scaffold position — analysable as-is for prevalence, entropy,
+      // and cliché-share questions.
       continuationProbes: continuationResults.map(c => ({
         scaffoldId: c.scaffoldId,
         panel: c.panel,
@@ -737,8 +750,10 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
         error: c.error,
       })),
       // Phase C: forced-continuation Y-phrase expansions, one row per
-      // (scaffold, top-N Y token) pair. Consumed by Manifold Atlas for
-      // Grammar-of-Vectors cosine scrutiny.
+      // (scaffold, top-N Y token) pair. Records what the chat model
+      // actually produced when asked to complete each candidate token —
+      // useful for archival and downstream linguistic / rhetorical
+      // analysis of the model's expansion behaviour.
       forcedExpansions: forcedExpansions.map(e => ({
         scaffoldId: e.scaffoldId,
         scaffold: e.scaffold,
@@ -799,8 +814,9 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
   // For each scaffold already probed in Phase B, take the top-N highest
   // logprob tokens (the candidate Ys) and ask the model to expand each one
   // into a short continuation phrase (via /api/investigate/grammar-expand).
-  // The result is a (scaffold, Y-token, Y-phrase) table harvestable for
-  // downstream cosine geometry in Manifold Atlas.
+  // The result is a (scaffold, Y-token, Y-phrase) table recorded in the
+  // run-data export — a direct observation of how the chat model fills out
+  // each candidate, archived alongside the Phase B distribution it came from.
   const handleRunForced = useCallback(async () => {
     if (isForcedLoading) return;
     if (continuationResults.length === 0) {
@@ -1446,10 +1462,10 @@ export default function GrammarMode({ pendingPrompt: _pendingPrompt }: GrammarMo
                         sweepRuns.length === 0
                       }
                       className="btn-editorial-ghost px-2 py-1 text-caption flex items-center gap-1.5 disabled:opacity-30"
-                      title="Export all Grammar Probe data (Phase A runs, Phase B distributions, Phase E sweep) as .grammar.json"
+                      title="Export all Grammar Probe data (Phase A runs, Phase B distributions, Phase C expansions, Phase D perturbation, Phase E sweep) as a portable JSON file for archival and reproducibility"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      Export Grammar data bundle
+                      Export run data
                     </button>
                   </div>
 
@@ -2315,9 +2331,10 @@ import type { GrammarPattern } from "@/lib/grammar/patterns";
 // UI around /api/investigate/grammar-expand. Depends on Phase B having run.
 // For each scaffold, pulls the top-N distribution entries as candidate Y
 // tokens and asks the model to expand each into a short continuation
-// phrase. Renders a scaffold × Y-token × Y-phrase table. The harvested
-// Ys travel to Manifold Atlas via the full Grammar data bundle export,
-// which Atlas imports directly — no per-scaffold deep link is needed.
+// phrase. Renders a scaffold × Y-token × Y-phrase table, with the full
+// harvest recorded in the run-data export for archival and downstream
+// chat-model analysis (see the doc block above handleDownloadBundle for
+// the v2.2.14 methodological reasoning).
 function ForcedContinuationPanel({
   pattern,
   continuationResults,
