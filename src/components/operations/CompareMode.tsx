@@ -2660,8 +2660,18 @@ export default function CompareMode({ isDark, onToggleDark, pendingPrompt }: Com
         />
       )}
 
-      {/* Prompt area */}
-      <div className="border-t border-border bg-card shrink-0">
+      {/* Prompt area.
+          Sticky to the viewport bottom (v2.2.16). LLMbench uses a
+          document-scroll layout, so when a view grows the page past the
+          window height — most visibly the Probs view with its nav strip
+          and visualisation bands open — a normal-flow prompt bar gets
+          pushed below the fold and reads as "the prompt is gone." The
+          user previously had to scroll to find the expand toggle.
+          Pinning the whole prompt area (collapse strip + textarea) to
+          `bottom-0` keeps it reachable from any view and any document
+          height, without per-mode special-casing. z-30 sits above the
+          heatmap / pixel-map / 3D-net content but below modals (z-50+). */}
+      <div className="border-t border-border bg-card shrink-0 sticky bottom-0 z-30">
         {/* Collapse toggle strip */}
         <div className={`flex items-center border-b border-border/30 ${promptBouncing ? "prompt-toggle-bounce" : ""}`} onAnimationEnd={() => setPromptBouncing(false)}>
           {lastSentPrompt && (
