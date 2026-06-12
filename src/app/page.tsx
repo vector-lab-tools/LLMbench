@@ -565,19 +565,55 @@ export default function Home() {
               </section>
 
               <section>
+                <h3 className="font-semibold text-foreground mb-1.5">
+                  Two units for one measurement: perplexity and entropy
+                </h3>
+                <p className="text-muted-foreground mb-2">
+                  LLMbench summarises each position&rsquo;s uncertainty with a single number, displayed in your choice
+                  of unit (the <strong className="text-foreground">Uncertainty</strong> dropdown in Settings). Both
+                  units describe the same underlying quantity &mdash; how spread out the probability distribution was
+                  &mdash; from two angles:
+                </p>
+                <p className="text-muted-foreground mb-2">
+                  <strong className="text-foreground">Perplexity</strong> (the default) is the{" "}
+                  <em>effective number of equally-likely candidates</em> the model was choosing between. Perplexity 1
+                  means certainty (one option); 2 means a coin-flip between two; 10 means the choice behaved like a
+                  ten-way tie. It is computed as{" "}
+                  <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">2^entropy</code> and is the standard
+                  reporting unit in NLP because &ldquo;the model was choosing between ~4 plausible tokens&rdquo; is
+                  immediately readable.
+                </p>
+                <p className="text-muted-foreground mb-2">
+                  <strong className="text-foreground">Entropy</strong> is Shannon entropy in bits (
+                  <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">H = &minus;&Sigma; p&middot;log&#8322;(p)</code>
+                  , Shannon 1948) &mdash; the canonical information-theoretic measure. Zero bits means certainty; each
+                  additional bit doubles the effective number of options (1 bit &asymp; 2 candidates, 2 bits &asymp; 4,
+                  3 bits &asymp; 8). Bits are additive across positions, which makes them the right unit for comparing
+                  or summing uncertainty over a whole sequence &mdash; and the unit CSV/PDF exports always use.
+                </p>
+                <p className="text-muted-foreground">
+                  The two are interchangeable (<code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">perplexity = 2^bits</code>);
+                  switching the dropdown re-labels every display without changing any underlying data. One caveat at
+                  the certain end: 0.006 bits reads clearly as &ldquo;almost zero uncertainty,&rdquo; while its
+                  perplexity equivalent (1.004) can look like noise &mdash; hovering the read-out always shows the
+                  equivalent in the other unit.
+                </p>
+              </section>
+
+              <section>
                 <h3 className="font-semibold text-foreground mb-1.5">How the inspector panel works</h3>
                 <p className="text-muted-foreground mb-2">
                   <strong className="text-foreground">Position 32 / 239.</strong> You&rsquo;re inspecting the 32nd token
                   out of 239 the model generated. Each token is roughly a word or word fragment.
                 </p>
                 <p className="text-muted-foreground mb-2">
-                  <strong className="text-foreground">Entropy: 1.862 bits.</strong> This is Shannon entropy computed
-                  across the top-k candidate distribution:{" "}
-                  <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">H = -Σ p·log₂(p)</code>. It measures how{" "}
-                  <em>spread out</em> the distribution is. Zero bits means the model was certain; high bits mean it was
-                  hedging between many options. 1.86 bits is moderate uncertainty &mdash; several tokens were live
-                  contenders. The colour of the token in the heatmap is driven by this (the continuous yellow&rarr;red
-                  gradient).
+                  <strong className="text-foreground">Perplexity: &asymp; 3.64</strong> (equivalently{" "}
+                  <strong className="text-foreground">1.862 bits</strong> of entropy, if your Settings unit is set to
+                  bits). The model&rsquo;s choice at this position behaved like a roughly{" "}
+                  <em>3.6-way tie</em> &mdash; moderate uncertainty, several tokens were live contenders. Zero
+                  uncertainty would read as perplexity 1 (0 bits); a genuine many-way fork reads as perplexity 8+
+                  (3+ bits). The heatmap colour of the token is driven by the chosen token&rsquo;s probability (the
+                  continuous yellow&rarr;red gradient), while this read-out summarises the <em>whole</em> distribution.
                 </p>
                 <p className="text-muted-foreground mb-2">
                   <strong className="text-foreground">Chosen: 4.66%.</strong> The token actually emitted
@@ -640,7 +676,7 @@ export default function Home() {
                 <p className="text-muted-foreground mb-2">
                   The fact that &ldquo;other&rdquo; is 62% tells you the distribution has a long tail: no single
                   alternative dominated, but the probability was thinly spread across thousands of remaining tokens.
-                  That&rsquo;s consistent with the 1.86-bit entropy reading.
+                  That&rsquo;s consistent with the perplexity &asymp; 3.64 (1.86-bit) reading.
                 </p>
                 <p className="text-muted-foreground mb-2">
                   <strong className="text-foreground">Divergence annotation.</strong> This is LLMbench&rsquo;s own
@@ -651,8 +687,9 @@ export default function Home() {
                 </p>
                 <p className="text-muted-foreground">
                   <strong className="text-foreground">Uncertainty annotation.</strong> Again LLMbench&rsquo;s
-                  interpretation of the entropy number. The threshold logic is: low entropy = confident, moderate =
-                  plausible alternatives existed, high = a genuine fork where temperature/sampling is doing real work.
+                  interpretation of the uncertainty number (whichever unit you display it in). The threshold logic is:
+                  low perplexity/entropy = confident, moderate = plausible alternatives existed, high = a genuine fork
+                  where temperature/sampling is doing real work.
                 </p>
               </section>
 
