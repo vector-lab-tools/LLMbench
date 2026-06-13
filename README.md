@@ -18,7 +18,7 @@
 **Author:** David M. Berry
 **Institution:** University of Sussex
 **Version:** 2.2.17
-**Date:** 12 May 2026
+**Date:** 13 June 2026
 **Licence:** MIT
 
 
@@ -381,9 +381,13 @@ The architecture follows the Manifold Atlas pattern: a thin `page.tsx` manages m
 - [x] Grammar Probe pattern library — five antithesis constructions (`not-x-but-y`, `not-just-x-but-y`, `it-is-not-x-it-is-y`, `while-x-y`, `what-matters-is-not-x-but-y`) plus three further patterns (Hyland hedges, tricolon, modal stacking)
 - [x] Grammar Probe suite library — four purpose suites (baseline / invitation / resistance / adversarial) and six domain suites (politics, technology, science, ethics, pedagogy, everyday), composable with per-suite stratification
 - [x] Grammar Probe Phase C — forced-continuation expansion (v2.15.9), with results recorded in the exported run data for archival and downstream chat-model analysis
-- [ ] Grammar Probe Phases D (perturbation) and E (temperature sweep)
+- [x] Grammar Probe Phase D — perturbation framings (neutral / anti-pattern / pro-pattern) with structural / stylistic / invitable verdict classification (v2.15.10)
+- [x] Ollama (local models) end-to-end — browser-direct generation and logprobs, so a deployed LLMbench can drive a local Ollama with full token-level analysis (v2.15.34–v2.2.0); `OLLAMA_ORIGINS` setup surfaced in Settings and README; "Disable thinking mode" toggle for thinking-capable models (Gemma 4, gpt-oss); harmony reasoning channels collapsed behind a chevron and excluded from analysis
+- [x] Uncertainty unit toggle — report per-token uncertainty as perplexity (default) or entropy in bits, across heatmap / curve / histogram / 3D net / sampling, with the unseen long tail folded in as a residual bucket for a lower-bound perplexity (v2.2.8–v2.2.11)
+- [x] Sticky prompt bar — prompt stays reachable from any view, including the tall Probs layout (v2.2.16)
+- [x] Vector Lab branding refresh — new navy "V" mark (v2.2.17)
 - [ ] Logit-bias "suppress tokens" experiment for Grammar Probe
-- [ ] Embedding-based semantic similarity in divergence mode
+- [ ] Wider top-K window (request up to the API max of 20) to tighten the perplexity lower bound
 - [ ] Supabase cloud persistence and sharing
 
 ## Related Work
