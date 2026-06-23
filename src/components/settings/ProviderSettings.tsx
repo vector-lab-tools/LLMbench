@@ -293,7 +293,7 @@ function SlotEditor({
                 } catch { /* ignore */ }
               }}
               placeholder={`Enter ${providerConfig.name} API key`}
-              className={`input-editorial w-full pr-10 ${
+              className={`input-editorial w-full pr-10 text-caption ${
                 hasKey
                   ? "border-green-500 ring-1 ring-green-500/40"
                   : "border-red-400 ring-1 ring-red-400/40"
