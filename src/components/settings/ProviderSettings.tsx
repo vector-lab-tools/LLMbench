@@ -257,11 +257,26 @@ function SlotEditor({
         </div>
       )}
 
-      {/* API Key */}
-      {providerConfig.requiresApiKey && (
+      {/* API Key.
+          The key field is the one box a first-time user must not miss, so
+          it carries a persistent status signal (added v2.2.19): a red
+          border + "● required" marker while empty, switching to a green
+          border + "✓ key set" once a key is entered. The status colour
+          shows at rest (when the user is scanning the panel); focus still
+          turns the border burgundy via .input-editorial, so the active
+          field reads normally while being edited. Ollama never shows this
+          block at all — its provider config has requiresApiKey: false. */}
+      {providerConfig.requiresApiKey && (() => {
+        const hasKey = !!slot.apiKey.trim();
+        return (
         <div>
-          <label className="block text-caption text-muted-foreground mb-1">
+          <label className="flex items-center gap-2 text-caption text-muted-foreground mb-1">
             API Key
+            {hasKey ? (
+              <span className="text-[10px] font-medium text-green-600 dark:text-green-400">✓ key set</span>
+            ) : (
+              <span className="text-[10px] font-medium text-red-500">● required</span>
+            )}
           </label>
           <div className="relative">
             <input
@@ -278,7 +293,11 @@ function SlotEditor({
                 } catch { /* ignore */ }
               }}
               placeholder={`Enter ${providerConfig.name} API key`}
-              className="input-editorial w-full pr-10"
+              className={`input-editorial w-full pr-10 ${
+                hasKey
+                  ? "border-green-500 ring-1 ring-green-500/40"
+                  : "border-red-400 ring-1 ring-red-400/40"
+              }`}
             />
             <button
               type="button"
@@ -293,7 +312,8 @@ function SlotEditor({
             </button>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Base URL (for Ollama, OpenAI-compatible) */}
       {providerConfig.baseUrlConfigurable && (
