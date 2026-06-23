@@ -362,7 +362,7 @@ function SlotEditor({
           value={slot.systemPrompt}
           onChange={(e) => onUpdate({ systemPrompt: e.target.value })}
           placeholder="Optional system instructions for this model..."
-          className="input-editorial w-full resize-none"
+          className="input-editorial w-full resize-none text-caption"
           rows={3}
         />
       </div>
