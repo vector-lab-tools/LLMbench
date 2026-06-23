@@ -522,8 +522,8 @@ const PROVIDER_GUIDES: ProviderGuideEntry[] = [
       "Sign up at huggingface.co (email or GitHub).",
       "Open Settings → Access Tokens (the link below).",
       "Click \"+ Create new token\". Choose Token type \"Read\". A name like \"llmbench\" is fine.",
-      "Copy the token (starts with hf_). Paste into the API Key field above.",
-      "In the Model dropdown choose any HF model — Llama 3 / Qwen / Mistral all work. Add a custom model ID if you need a specific repo.",
+      "In the Model dropdown (below) choose any HF model — Llama 3 / Qwen / Mistral all work. Add a custom model ID if you need a specific repo.",
+      "Copy the token (starts with hf_). Paste into the API Key field which appears below.",
     ],
     notes:
       "Logprobs work on the Hugging Face router for OpenAI-compatible chat models. If you see empty distributions, try a different model — not every HF-routed model exposes logprobs.",
@@ -540,7 +540,7 @@ const PROVIDER_GUIDES: ProviderGuideEntry[] = [
       "Sign up at platform.openai.com.",
       "Add a payment method under Billing.",
       "Open API Keys (the link below) and click \"Create new secret key\". Copy it once — it cannot be shown again.",
-      "Paste into the API Key field above. Pick a model (gpt-4o or gpt-4o-mini for logprobs work).",
+      "Paste into the API Key field below. Pick a model (gpt-4o or gpt-4o-mini for logprobs work).",
     ],
     notes:
       "The cleanest provider for Sampling Probe — direct API returns full top_logprobs without proxy stripping.",
@@ -555,7 +555,7 @@ const PROVIDER_GUIDES: ProviderGuideEntry[] = [
     steps: [
       "Sign up at console.anthropic.com.",
       "Open Settings → API Keys (link below) and click \"Create Key\".",
-      "Copy the key (starts with sk-ant-). Paste above.",
+      "Copy the key (starts with sk-ant-). Paste into the API Key field below.",
     ],
     notes:
       "Claude does not expose logprobs through the public API, so Anthropic slots cannot be used with Sampling Probe or Grammar Probe Phase B/C. Compare and Analyse modes work fully.",
@@ -572,7 +572,7 @@ const PROVIDER_GUIDES: ProviderGuideEntry[] = [
       "Open Google AI Studio (aistudio.google.com) and sign in with a Google account.",
       "Click \"Get API key\" or visit the link below.",
       "Create an API key in a new or existing Google Cloud project.",
-      "Copy and paste above. Pick gemini-2.0-flash if you want logprobs (2.5-series does not return them).",
+      "Copy and paste into the API Key field below. Pick gemini-2.0-flash if you want logprobs (2.5-series does not return them).",
     ],
   },
   {
@@ -586,7 +586,7 @@ const PROVIDER_GUIDES: ProviderGuideEntry[] = [
       "Sign up at openrouter.ai.",
       "Add credit (a few dollars covers a lot of LLMbench usage).",
       "Open Keys (link below), create a key, copy it.",
-      "Paste above. The Model dropdown lists OpenRouter-compatible models; you can also use a custom model ID.",
+      "Paste into the API Key field below. The Model dropdown lists OpenRouter-compatible models; you can also use a custom model ID.",
     ],
     notes:
       "Logprobs are reliably available on openai/* routes (gpt-4o, gpt-4o-mini). Other routes may return empty distributions; LLMbench will surface a clear error if so.",
