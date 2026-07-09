@@ -282,8 +282,21 @@ async function runSlotLogprobs(slot: SlotPayload, prompt: string, topK: number, 
       return runGoogleLogprobs(slot, prompt, topK, noMarkdown);
     }
     case "openai":
-    case "openai-compatible":
       return runOpenAILogprobs(slot, prompt, topK, noMarkdown);
+    case "openai-compatible": {
+      // Custom-baseURL OpenAI-compatible providers (e.g. Indiana's REALMS) must use
+      // the direct-fetch path: the Vercel AI SDK does not reliably surface per-token
+      // top_logprobs through providerMetadata for these endpoints, which drops the
+      // top-k alternatives and leaves only the chosen token + leftover mass.
+      const baseUrl = (slot.baseUrl || "").replace(/\/+$/, "");
+      if (!baseUrl) {
+        return {
+          error: "OpenAI-compatible provider requires a base URL for token probabilities.",
+          provenance: buildProvenance(slot, 0),
+        };
+      }
+      return runDirectFetchLogprobs(slot, baseUrl, prompt, topK, noMarkdown);
+    }
     case "openrouter":
       return runDirectFetchLogprobs(
         slot,
