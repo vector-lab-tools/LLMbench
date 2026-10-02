@@ -35,65 +35,65 @@ The views below use a single prompt, *"Tell me about Calvino's Cybernetics and G
 
 ### Compare mode
 
-Two models answer the same prompt side by side. Each panel header reports the model, temperature, latency, and word count.
-
 ![Compare mode, dual panel](docs/screenshots/01-compare.png)
 
-Word-level diff highlights shared and unique words across the two outputs, with per-panel unique counts.
+*Compare, dual panel. Two models answer the same prompt side by side; each panel header reports the model, temperature, latency, and word count. (v2.2.26)*
 
 ![Compare mode, word-level diff](docs/screenshots/04-diff.png)
 
-Tone view counts and highlights Hyland's metadiscourse categories (hedges, boosters, attitude markers, intensifiers, self-mentions, engagement) in each output.
+*Compare, word-level diff. Shared and unique words are highlighted across the two outputs, with per-panel unique counts. (v2.2.26)*
 
 ![Compare mode, tone and register analysis](docs/screenshots/05-tone.png)
 
-### Token probabilities (Probs view)
+*Compare, tone view. Hyland's metadiscourse categories (hedges, boosters, attitude markers, intensifiers, self-mentions, engagement) are counted and highlighted in each output. (v2.2.26)*
 
-Each token is coloured by the model's chosen probability. The inspector shows the top-5 next-token distribution at the selected position, together with divergence-point annotations and per-token perplexity.
+### Token probabilities (Probs view)
 
 ![Probs view, token heatmap and probability inspector](docs/screenshots/02-probs-heatmap.png)
 
-The bird's-eye pixel map renders every token as one cell, coloured by confidence, across five palettes (Heat, Viridis, Magma, Ice, Mono).
+*Probs view, token heatmap. Each token is coloured by the model's chosen probability; the inspector shows the top-5 next-token distribution at the selected position, with divergence-point annotations and per-token perplexity. (v2.2.26)*
 
 ![Probs view, bird's-eye pixel map](docs/screenshots/03-probs-pixels.png)
 
-### Analyse modes
+*Probs view, bird's-eye pixel map. Every token is rendered as one cell coloured by confidence, across five palettes (Heat, Viridis, Magma, Ice, Mono). (v2.2.26)*
 
-Stochastic Variation runs the same prompt several times and reports per-run lexical diversity and average pairwise overlap.
+### Analyse modes
 
 ![Analyse: Stochastic Variation](docs/screenshots/07-analyse-stochastic.png)
 
-Temperature Gradient runs one prompt across six temperatures from 0.0 to 2.0, with word-count and diversity ranges.
+*Analyse, Stochastic Variation. The same prompt run several times, with per-run lexical diversity and average pairwise overlap. (v2.2.26)*
 
 ![Analyse: Temperature Gradient](docs/screenshots/08-analyse-temperature.png)
 
-Prompt Sensitivity tests a base prompt against auto-generated variations (politeness markers, casing, rephrasing), scored by vocabulary overlap with the base.
+*Analyse, Temperature Gradient. One prompt across six temperatures from 0.0 to 2.0, with word-count and diversity ranges. (v2.2.26)*
 
 ![Analyse: Prompt Sensitivity](docs/screenshots/09-analyse-sensitivity.png)
 
-Token Probabilities (standalone) reports per-token entropy for a single output: mean entropy, a perplexity-distribution histogram, a heatmap, and CSV export.
+*Analyse, Prompt Sensitivity. A base prompt against auto-generated variations (politeness markers, casing, rephrasing), scored by vocabulary overlap with the base. (v2.2.26)*
 
 ![Analyse: Token Probabilities](docs/screenshots/10-analyse-logprobs.png)
 
-Cross-Model Divergence computes quantitative comparison metrics: cosine and Jaccard similarity, Dice word overlap, shared and unique vocabulary, and sentence-level structure.
+*Analyse, Token Probabilities (standalone). Per-token entropy for a single output: mean entropy, a perplexity-distribution histogram, a heatmap, and CSV export. (v2.2.26)*
 
 ![Analyse: Cross-Model Divergence](docs/screenshots/11-analyse-divergence.png)
 
-### Investigate tier
+*Analyse, Cross-Model Divergence. Quantitative comparison metrics: cosine and Jaccard similarity, Dice word overlap, shared and unique vocabulary, and sentence-level structure. (v2.2.26)*
 
-The Grammar Probe counts rhetorical patterns (Not X but Y, hedging, tricolon, modal stacking) across a prompt suite, through five phases from prevalence to temperature sweep.
+### Investigate tier
 
 ![Investigate: Grammar Probe](docs/screenshots/12-investigate-grammar.png)
 
-The Sampling Probe unfolds autoregressive generation one token at a time, with real logprobs, a top-K inspector, and counterfactual forks from any step.
+*Investigate, Grammar Probe. Counts rhetorical patterns (Not X but Y, hedging, tricolon, modal stacking) across a prompt suite, through five phases from prevalence to temperature sweep. (v2.2.26)*
 
 ![Investigate: Sampling Probe](docs/screenshots/13-investigate-sampling.png)
 
+*Investigate, Sampling Probe. Autoregressive generation one token at a time, with real logprobs, a top-K inspector, and counterfactual forks from any step. (v2.2.26)*
+
 ### Provider settings
 
-Each panel is bound to a provider and model independently. API keys are stored in the browser only.
-
 ![Provider settings](docs/screenshots/06-settings.png)
+
+*Provider settings. Each panel is bound to a provider and model independently; API keys are stored in the browser only. (v2.2.26)*
 
 ## Scholarly Context
 
