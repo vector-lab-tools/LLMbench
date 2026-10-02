@@ -29,6 +29,72 @@ The tool is designed for humanistic inquiry into LLM behaviour, not engineering 
 
 > LLMbench is part of the [Vector Lab](https://github.com/dmberry) family of research instruments, alongside [Manifold Atlas](https://github.com/dmberry/manifold-atlas), [Vectorscope](https://github.com/dmberry/vectorscope), and [Theoryscope](https://github.com/dmberry/theoryscope). The four tools share an editorial design system, an open-weight-friendly methodology, and a commitment to making the geometry of meaning legible for critical analysis. They diverge in their object: Manifold Atlas compares output geometries between models, Vectorscope inspects the internals of a single open-weight model, Theoryscope maps the geometry of a corpus of theoretical texts, and LLMbench reads the surface of model outputs as prose.
 
+## Screenshots
+
+The views below use a single prompt, *"Tell me about Calvino's Cybernetics and Ghosts and its relevance for AI today"*, with two open-weight models in the two panels (Qwen2.5 Coder 32B and 7B via Hugging Face).
+
+### Compare mode
+
+Two models answer the same prompt side by side. Each panel header reports the model, temperature, latency, and word count.
+
+![Compare mode, dual panel](docs/screenshots/01-compare.png)
+
+Word-level diff highlights shared and unique words across the two outputs, with per-panel unique counts.
+
+![Compare mode, word-level diff](docs/screenshots/04-diff.png)
+
+Tone view counts and highlights Hyland's metadiscourse categories (hedges, boosters, attitude markers, intensifiers, self-mentions, engagement) in each output.
+
+![Compare mode, tone and register analysis](docs/screenshots/05-tone.png)
+
+### Token probabilities (Probs view)
+
+Each token is coloured by the model's chosen probability. The inspector shows the top-5 next-token distribution at the selected position, together with divergence-point annotations and per-token perplexity.
+
+![Probs view, token heatmap and probability inspector](docs/screenshots/02-probs-heatmap.png)
+
+The bird's-eye pixel map renders every token as one cell, coloured by confidence, across five palettes (Heat, Viridis, Magma, Ice, Mono).
+
+![Probs view, bird's-eye pixel map](docs/screenshots/03-probs-pixels.png)
+
+### Analyse modes
+
+Stochastic Variation runs the same prompt several times and reports per-run lexical diversity and average pairwise overlap.
+
+![Analyse: Stochastic Variation](docs/screenshots/07-analyse-stochastic.png)
+
+Temperature Gradient runs one prompt across six temperatures from 0.0 to 2.0, with word-count and diversity ranges.
+
+![Analyse: Temperature Gradient](docs/screenshots/08-analyse-temperature.png)
+
+Prompt Sensitivity tests a base prompt against auto-generated variations (politeness markers, casing, rephrasing), scored by vocabulary overlap with the base.
+
+![Analyse: Prompt Sensitivity](docs/screenshots/09-analyse-sensitivity.png)
+
+Token Probabilities (standalone) reports per-token entropy for a single output: mean entropy, a perplexity-distribution histogram, a heatmap, and CSV export.
+
+![Analyse: Token Probabilities](docs/screenshots/10-analyse-logprobs.png)
+
+Cross-Model Divergence computes quantitative comparison metrics: cosine and Jaccard similarity, Dice word overlap, shared and unique vocabulary, and sentence-level structure.
+
+![Analyse: Cross-Model Divergence](docs/screenshots/11-analyse-divergence.png)
+
+### Investigate tier
+
+The Grammar Probe counts rhetorical patterns (Not X but Y, hedging, tricolon, modal stacking) across a prompt suite, through five phases from prevalence to temperature sweep.
+
+![Investigate: Grammar Probe](docs/screenshots/12-investigate-grammar.png)
+
+The Sampling Probe unfolds autoregressive generation one token at a time, with real logprobs, a top-K inspector, and counterfactual forks from any step.
+
+![Investigate: Sampling Probe](docs/screenshots/13-investigate-sampling.png)
+
+### Provider settings
+
+Each panel is bound to a provider and model independently. API keys are stored in the browser only.
+
+![Provider settings](docs/screenshots/06-settings.png)
+
 ## Scholarly Context
 
 LLMbench emerges from the convergence of three research programmes.
