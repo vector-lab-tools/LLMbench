@@ -13,10 +13,10 @@ authors:
     orcid: "https://orcid.org/0000-0002-2147-1366"
     affiliation: "University of Sussex"
 repository-code: "https://github.com/vector-lab-tools/LLMbench"
-url: "https://vector-lab-tools.github.io"
+url: "https://vector-lab-tools.github.io/LLMbench/"
 license: GPL-3.0-or-later
-version: "2.2.26"
-date-released: "2026-07-28"
+version: "2.2.27"
+date-released: "2026-10-27"
 keywords:
   - large language models
   - close reading
