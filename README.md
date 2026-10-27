@@ -20,6 +20,7 @@
 **Version:** 2.2.26
 **Date:** 28 July 2026
 **Licence:** GPL-3.0-or-later
+**Site:** <https://vector-lab-tools.github.io/LLMbench/> · **App:** <https://llm-bench-mu.vercel.app>
 
 
 
