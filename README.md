@@ -39,6 +39,10 @@ The views below use a single prompt, *"Tell me about Calvino's Cybernetics and G
 
 *Compare, dual panel. Two models answer the same prompt side by side; each panel header reports the model, temperature, latency, and word count. (v2.2.26)*
 
+![Compare mode, annotation and cross-panel linking](docs/screenshots/14-annotation-link.png)
+
+*Compare, annotation and cross-panel linking. Each response is annotated line by line with typed notes (observation, question, metaphor, pattern, context, critique), and annotations in the two panels are linked, here as a divergence. (v2.2.26)*
+
 ![Compare mode, word-level diff](docs/screenshots/04-diff.png)
 
 *Compare, word-level diff. Shared and unique words are highlighted across the two outputs, with per-panel unique counts. (v2.2.26)*
