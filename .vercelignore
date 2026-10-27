@@ -1,0 +1,4 @@
+# Keep deployments lean: exclude files not used by the app or the build.
+docs/
+.claude/
+tsconfig.tsbuildinfo
