@@ -1,6 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
   <title>Vector Lab mark</title>
-  <polygon points="6.03,14.50 93.97,14.50 86.03,21.50 13.97,21.50" fill="#1a1aff"/>
-  <polygon points="93.97,14.50 50.00,93.17 48.05,82.32 83.99,18.01" fill="#4a2aff"/>
-  <polygon points="50.00,93.17 6.03,14.50 16.01,18.01 51.95,82.32" fill="#1a6aff"/>
+  <style>
+    .top    { fill: #1a1aff; }
+    .right  { fill: #4a2aff; }
+    .left   { fill: #1a6aff; }
+    @media (prefers-color-scheme: dark) {
+      .top    { fill: #8a90ff; }
+      .right  { fill: #a68aff; }
+      .left   { fill: #80b0ff; }
+    }
+  </style>
+  <polygon class="top"   points="6.03,14.50 93.97,14.50 86.03,21.50 13.97,21.50"/>
+  <polygon class="right" points="93.97,14.50 50.00,93.17 48.05,82.32 83.99,18.01"/>
+  <polygon class="left"  points="50.00,93.17 6.03,14.50 16.01,18.01 51.95,82.32"/>
 </svg>
