@@ -17,8 +17,8 @@
 
 **Author:** David M. Berry
 **Institution:** University of Sussex
-**Version:** 2.2.27
-**Date:** 27 October 2026
+**Version:** 2.2.28
+**Date:** 29 October 2026
 **Licence:** GPL-3.0-or-later
 **Site:** <https://vector-lab-tools.github.io/LLMbench/> · **App:** <https://llm-bench-mu.vercel.app>
 
