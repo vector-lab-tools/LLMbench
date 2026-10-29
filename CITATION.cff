@@ -11,6 +11,7 @@ authors:
   - family-names: Berry
     given-names: David M.
     affiliation: "University of Sussex"
+doi: 10.5281/zenodo.23762797
 repository-code: "https://github.com/vector-lab-tools/LLMbench"
 url: "https://vector-lab-tools.github.io/LLMbench/"
 license: GPL-3.0-or-later

@@ -482,3 +482,9 @@ Copyright (C) 2026 David M. Berry.
 LLMbench is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See the [LICENSE](LICENSE) file for the full text.
 
 **Relicensing note.** LLMbench was previously released under the MIT Licence. As the sole copyright holder, David M. Berry relicenses the software under GPL-3.0-or-later. This relicensing applies retroactively to all earlier versions and releases: every prior version is also available under the terms of the GNU General Public License, version 3 or later. Any copies obtained under the earlier MIT terms remain valid under those terms, as MIT permits.
+
+## Citation
+
+[![DOI](https://zenodo.org/badge/1152334538.svg)](https://doi.org/10.5281/zenodo.23762797)
+
+If you use LLMbench in your research, please cite it via its Zenodo archive. The concept DOI [10.5281/zenodo.23762797](https://doi.org/10.5281/zenodo.23762797) always resolves to the latest version; version 2.2.29 is archived at [10.5281/zenodo.23762798](https://doi.org/10.5281/zenodo.23762798). Full citation metadata is in [CITATION.cff](CITATION.cff).
