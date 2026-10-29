@@ -10,6 +10,7 @@ abstract: >
 authors:
   - family-names: Berry
     given-names: David M.
+    orcid: "https://orcid.org/0000-0002-7737-5586"
     affiliation: "University of Sussex"
 doi: 10.5281/zenodo.23762797
 repository-code: "https://github.com/vector-lab-tools/LLMbench"
