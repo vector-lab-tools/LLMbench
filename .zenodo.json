@@ -1,0 +1,23 @@
+{
+  "title": "LLMbench: A Comparative Close Reading Workbench for Large Language Models",
+  "description": "LLMbench is a web-based research instrument for the comparative close reading of Large Language Model outputs, enabling researchers to subject AI-generated text to hermeneutic scrutiny. Part of the Vector Lab family of research instruments for critical vector theory.",
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "GPL-3.0-or-later",
+  "creators": [
+    {
+      "name": "Berry, David M.",
+      "orcid": "0000-0002-2147-1366",
+      "affiliation": "University of Sussex"
+    }
+  ],
+  "keywords": [
+    "large language models",
+    "close reading",
+    "digital humanities",
+    "critical code studies",
+    "computational criticism",
+    "AI analysis",
+    "vector lab"
+  ]
+}
