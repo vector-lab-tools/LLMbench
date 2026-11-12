@@ -49,6 +49,19 @@ export default function Home() {
   const [helpTab, setHelpTab] = useState<HelpTabId>("start");
   const [showLogprobsExplainer, setShowLogprobsExplainer] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+
+  // Escape closes the topmost of Help, its logprobs explainer, and About.
+  useEffect(() => {
+    if (!showHelp && !showAbout && !showLogprobsExplainer) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (showLogprobsExplainer) setShowLogprobsExplainer(false);
+      else if (showHelp) setShowHelp(false);
+      else setShowAbout(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showHelp, showAbout, showLogprobsExplainer]);
   const [showTutorial, setShowTutorial] = useState(false);
   const [pendingPrompt, setPendingPrompt] = useState<string | undefined>();
   const { setShowSettings, noMarkdown, setNoMarkdown } = useProviderSettings();
