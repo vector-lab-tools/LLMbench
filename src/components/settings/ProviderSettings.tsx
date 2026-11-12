@@ -9,7 +9,7 @@ import {
   getProviderConfigWithModels,
   getAllProviders,
 } from "@/lib/ai/config";
-import type { AIProvider, ProviderSlot } from "@/types/ai-settings";
+import type { AIProvider, ProviderSlot, ProviderSlots } from "@/types/ai-settings";
 import { CopyableCommand } from "@/components/shared/CopyableCommand";
 
 /** Provider-specific placeholder text for the Custom Model input */
@@ -387,18 +387,68 @@ export default function ProviderSettings({
     initializeModels().then(() => setModelsLoaded(true));
   }, []);
 
+  // Edits go to a draft copy taken each time the panel opens, and only reach
+  // the saved settings on Save. Closing with unsaved changes asks first.
+  const [draft, setDraft] = useState<ProviderSlots>(slots);
+  const [draftAutoFetch, setDraftAutoFetch] = useState(autoFetchLogprobs);
+  const [draftUnit, setDraftUnit] = useState(uncertaintyUnit);
+  const [confirmClose, setConfirmClose] = useState(false);
+
+  useEffect(() => {
+    if (showSettings) {
+      setDraft(slots);
+      setDraftAutoFetch(autoFetchLogprobs);
+      setDraftUnit(uncertaintyUnit);
+      setConfirmClose(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showSettings]);
+
+  const dirty =
+    JSON.stringify(draft) !== JSON.stringify(slots) ||
+    draftAutoFetch !== autoFetchLogprobs ||
+    draftUnit !== uncertaintyUnit;
+
+  const updateDraft = (panel: "A" | "B", updates: Partial<ProviderSlot>) =>
+    setDraft((prev) => ({ ...prev, [panel]: { ...prev[panel], ...updates } }));
+
+  const saveAndClose = () => {
+    updateSlot("A", draft.A);
+    updateSlot("B", draft.B);
+    setAutoFetchLogprobs(draftAutoFetch);
+    setUncertaintyUnit(draftUnit);
+    setShowSettings(false);
+  };
+
+  const requestClose = () => {
+    if (dirty) setConfirmClose(true);
+    else setShowSettings(false);
+  };
+
+  useEffect(() => {
+    if (!showSettings) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (confirmClose) setConfirmClose(false);
+      else if (dirty) setConfirmClose(true);
+      else setShowSettings(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showSettings, confirmClose, dirty, setShowSettings]);
+
   if (!showSettings) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setShowSettings(false)}>
-      <div className="bg-card border border-border rounded-lg shadow-editorial-lg w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={requestClose}>
+      <div className="relative bg-card border border-border rounded-lg shadow-editorial-lg w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         {/* Header: title and close only; options sit in their own row below */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h2 className="font-display text-display-md font-bold text-foreground">
             Provider Settings
           </h2>
           <button
-            onClick={() => setShowSettings(false)}
+            onClick={requestClose}
             className="btn-editorial-ghost p-1.5"
             aria-label="Close settings"
           >
@@ -429,8 +479,8 @@ export default function ProviderSettings({
             >
               <input
                 type="checkbox"
-                checked={autoFetchLogprobs}
-                onChange={(e) => setAutoFetchLogprobs(e.target.checked)}
+                checked={draftAutoFetch}
+                onChange={(e) => setDraftAutoFetch(e.target.checked)}
                 className="rounded"
               />
               Auto-fetch logprobs
@@ -446,8 +496,8 @@ export default function ProviderSettings({
             >
               Uncertainty:
               <select
-                value={uncertaintyUnit}
-                onChange={(e) => setUncertaintyUnit(e.target.value as "perplexity" | "entropy")}
+                value={draftUnit}
+                onChange={(e) => setDraftUnit(e.target.value as "perplexity" | "entropy")}
                 className="bg-card border border-border rounded px-1.5 py-0.5 text-caption text-foreground focus:outline-none focus:ring-1 focus:ring-burgundy/40"
               >
                 <option value="perplexity">perplexity</option>
@@ -471,10 +521,10 @@ export default function ProviderSettings({
           <div className="flex-1">
             <SlotEditor
               panel="A"
-              slot={slots.A}
+              slot={draft.A}
               modelsLoaded={modelsLoaded}
               logprobsFilter={logprobsFilter}
-              onUpdate={(updates) => updateSlot("A", updates)}
+              onUpdate={(updates) => updateDraft("A", updates)}
             />
           </div>
           <div className="hidden md:block w-px bg-border shrink-0" />
@@ -482,31 +532,74 @@ export default function ProviderSettings({
           <div className="flex-1">
             <SlotEditor
               panel="B"
-              slot={slots.B}
+              slot={draft.B}
               modelsLoaded={modelsLoaded}
               logprobsFilter={logprobsFilter}
-              onUpdate={(updates) => updateSlot("B", updates)}
+              onUpdate={(updates) => updateDraft("B", updates)}
             />
           </div>
         </div>
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-border flex items-center justify-between shrink-0">
-          <span className="text-caption text-muted-foreground">
-            API keys are stored in your browser only.
-            {modelsLoaded && " Models loaded from models.md."}
-          </span>
-          {onToggleDark && (
-            <button
-              onClick={onToggleDark}
-              className="flex items-center gap-1.5 text-caption text-muted-foreground hover:text-foreground"
-            >
-              {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-              <span>{isDark ? "Light mode" : "Dark mode"}</span>
+        <div className="px-6 py-3 border-t border-border flex flex-wrap items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-4">
+            <span className="text-caption text-muted-foreground">
+              API keys are stored in your browser only.
+            </span>
+            {onToggleDark && (
+              <button
+                onClick={onToggleDark}
+                className="flex items-center gap-1.5 text-caption text-muted-foreground hover:text-foreground"
+              >
+                {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+                <span>{isDark ? "Light mode" : "Dark mode"}</span>
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {dirty && <span className="text-caption text-burgundy">Unsaved changes</span>}
+            <button onClick={requestClose} className="btn-editorial-ghost px-3 py-1.5 text-caption">
+              Cancel
             </button>
-          )}
+            <button
+              onClick={saveAndClose}
+              disabled={!dirty}
+              className="btn-editorial-primary px-3 py-1.5 text-caption disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Save
+            </button>
+          </div>
         </div>
+
+        {confirmClose && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-black/30" onClick={() => setConfirmClose(false)}>
+            <div
+              role="alertdialog"
+              aria-labelledby="settings-unsaved-title"
+              className="bg-card border border-border rounded-lg shadow-editorial-lg p-5 w-full max-w-sm mx-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 id="settings-unsaved-title" className="font-display text-display-sm font-semibold text-foreground mb-1.5">
+                Save your changes?
+              </h3>
+              <p className="text-body-sm text-muted-foreground mb-4">
+                You changed the provider settings. Save them, or discard and keep the previous settings.
+              </p>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setConfirmClose(false)} className="btn-editorial-ghost px-3 py-1.5 text-caption">
+                  Keep editing
+                </button>
+                <button onClick={() => setShowSettings(false)} className="btn-editorial-ghost px-3 py-1.5 text-caption">
+                  Discard
+                </button>
+                <button onClick={saveAndClose} className="btn-editorial-primary px-3 py-1.5 text-caption" autoFocus>
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
