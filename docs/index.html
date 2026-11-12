@@ -161,6 +161,13 @@
   .faq details .key { font-family: var(--mono); font-size: 12.5px; color: var(--ink); background: var(--surface-alt); border-radius: 6px; padding: 1px 6px; }
   .faq details pre { margin: 0 0 16px; }
 
+  /* Troubleshooting lists inside notes */
+  .note ul { margin: 10px 0 0; padding-left: 20px; }
+  .note li { margin: 8px 0; font-size: 15.5px; color: var(--muted); }
+  .note li b { color: var(--ink); }
+  .note .key { font-family: var(--mono); font-size: 12.5px; color: var(--ink); background: var(--surface-alt); border-radius: 6px; padding: 1px 6px; }
+  .prov b { color: var(--ink); }
+
   @media (max-width: 820px) {
     .hero .wrap { grid-template-columns: 1fr; gap: 32px; padding-block: 48px 40px; }
     .mode, .mode.flip, .worked { grid-template-columns: 1fr; gap: 20px; }
@@ -325,7 +332,7 @@
 
         <div class="prov">
           <h4>OpenAI <span class="pill yes">logprobs</span></h4>
-          <p>Key at <a href="https://platform.openai.com/api-keys">platform.openai.com/api-keys</a>, begins <span class="key">sk-</span>. The most reliable source of token probabilities (use <span class="key">gpt-4o</span> or <span class="key">gpt-4o-mini</span>).</p>
+          <p>Key at <a href="https://platform.openai.com/api-keys">platform.openai.com/api-keys</a>, begins <span class="key">sk-</span>. The most reliable source of token probabilities (use <span class="key">gpt-4o</span> or <span class="key">gpt-4o-mini</span>). <b>Blocker:</b> a new key needs billing set up, or calls return a quota error; add a payment method or credits under Billing.</p>
         </div>
 
         <div class="prov">
@@ -335,12 +342,12 @@
 
         <div class="prov">
           <h4>OpenRouter <span class="pill yes">logprobs*</span></h4>
-          <p>Key at <a href="https://openrouter.ai/keys">openrouter.ai/keys</a>, begins <span class="key">sk-or-</span>. Many models through one key; logprobs come back only on the <span class="key">openai/*</span> routes, which proxy to OpenAI.</p>
+          <p>Key at <a href="https://openrouter.ai/keys">openrouter.ai/keys</a>, begins <span class="key">sk-or-</span>. Many models through one key; logprobs come back only on the <span class="key">openai/*</span> routes, which proxy to OpenAI. <b>Blocker:</b> add account credit before calling paid models.</p>
         </div>
 
         <div class="prov">
           <h4>Hugging Face <span class="pill yes">logprobs*</span></h4>
-          <p>Token at <a href="https://huggingface.co/settings/tokens">huggingface.co/settings/tokens</a>, begins <span class="key">hf_</span>. The router sends your request to a third-party provider whose logprobs support varies by model; the Qwen2.5-Coder models are the dependable choice. The account needs inference credit.</p>
+          <p>Token at <a href="https://huggingface.co/settings/tokens">huggingface.co/settings/tokens</a>, begins <span class="key">hf_</span>. The router sends your request to a third-party provider whose logprobs support varies by model; the Qwen2.5-Coder models are the dependable choice. <b>Blocker:</b> the token needs inference permission (a fine-grained token with "Make calls to Inference Providers" enabled, or a classic read token), and the account needs inference credit.</p>
         </div>
 
         <div class="prov">
@@ -353,6 +360,17 @@
           <p>For a self-hosted or institutional endpoint, such as a university gateway. Give the provider a Base URL ending at <span class="key">/v1</span> and its key. Logprobs work if that endpoint returns them.</p>
         </div>
 
+      </div>
+
+      <div class="note">
+        <p><strong>If a key is rejected, or a model runs but the Probs view stays empty:</strong></p>
+        <ul>
+          <li><b>OpenAI "quota" or 429</b> — the key is valid but has no billing. Add a payment method or credits at platform.openai.com.</li>
+          <li><b>Hugging Face 401 or 403</b> — the token lacks inference permission, or the account is out of inference credit. Create a token with inference access and check your usage.</li>
+          <li><b>Gemini returns text but the Probs view is empty</b> — switch the model to <span class="key">gemini-2.0-flash</span>; the 2.5 models do not return logprobs.</li>
+          <li><b>OpenRouter runs but there are no probabilities</b> — only the <span class="key">openai/*</span> routes return logprobs; other routes do not.</li>
+          <li><b>An institutional or OpenAI-compatible endpoint fails</b> — check the Base URL ends at <span class="key">/v1</span>, and that the endpoint actually returns logprobs.</li>
+        </ul>
       </div>
 
       <div class="note">
@@ -371,6 +389,15 @@
       </ol>
       <div class="note">
         <p><strong>Browser note.</strong> The browser-direct path to a local Ollama works in Chrome, Firefox, Edge, Arc and Brave. Safari blocks it (it does not honour the localhost exemption), so use one of the others when driving a local Ollama from the deployed site. Safari is fine for the local-dev route.</p>
+      </div>
+
+      <div class="note">
+        <p><strong>If Ollama will not connect:</strong></p>
+        <ul>
+          <li><b>"Failed to fetch" or connection refused</b> — Ollama is not running, or it was started without the origin allowed. Restart it with the <span class="key">OLLAMA_ORIGINS</span> command above, and confirm <a href="http://localhost:11434">localhost:11434</a> answers.</li>
+          <li><b>The model is not in the dropdown</b> — pull it first with <span class="key">ollama pull llama3.2</span>, then reopen Settings; or paste the exact id from <span class="key">ollama list</span> into the Custom Model field.</li>
+          <li><b>It works in Chrome but not Safari</b> — Safari blocks the browser-direct localhost call. Use Chrome, Firefox, Edge, Arc or Brave.</li>
+        </ul>
       </div>
 
       <h3 style="margin-top:34px">Run it yourself</h3>

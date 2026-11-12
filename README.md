@@ -20,7 +20,7 @@
 **Version:** 2.2.29
 **Date:** 29 October 2026
 **Licence:** GPL-3.0-or-later
-**Site:** <https://vector-lab-tools.github.io/LLMbench/> · **App:** <https://llm-bench-mu.vercel.app>
+**Site:** <https://vector-lab-tools.github.io/LLMbench/> · **App:** <https://llm-bench-mu.vercel.app> · **Setup help:** [FAQ](https://vector-lab-tools.github.io/LLMbench/#faq)
 
 
 
@@ -285,7 +285,7 @@ Quantitative comparison with cosine similarity (frequency-weighted), Jaccard sim
 ## General Features
 
 - **Single or dual model.** All modes work with one or two models. Configure just Panel A for single-model analysis or both panels for comparison.
-- **Multi-provider support.** Anthropic (Claude), OpenAI (GPT), Google (Gemini), OpenRouter (300+ models via single key), Hugging Face (open-weights models via Inference API), **Ollama for local models** (runs on your own machine, no API key, browser-direct so it works from both a local and a deployed LLMbench), and any OpenAI-compatible endpoint. API keys are stored in the browser, never sent to a server.
+- **Multi-provider support.** Anthropic (Claude), OpenAI (GPT), Google (Gemini), OpenRouter (300+ models via single key), Hugging Face (open-weights models via Inference API), **Ollama for local models** (runs on your own machine, no API key, browser-direct so it works from both a local and a deployed LLMbench), and any OpenAI-compatible endpoint. API keys are stored in the browser and never persisted server-side; a hosted provider's key passes through a serverless function that forwards it and keeps no copy, and Ollama needs no key at all.
 - **Ollama (Local) — the browser-direct path** *(v2.15.34)*. Most providers go through LLMbench's server-side `/api/generate` route. Ollama is the exception: LLMbench calls `http://localhost:11434/v1/chat/completions` directly from the browser. This works from both a local LLMbench (`npm run dev`) and a deployed one (`https://...vercel.app`) because `localhost` is a *potentially trustworthy URL* per the W3C Secure Contexts spec, exempt from mixed-content blocking in Chromium-family browsers and Firefox. See [Ollama setup](#ollama-setup) below for the exact commands. Ollama's `/v1/chat/completions` returns logprobs in the canonical OpenAI shape, and the browser-direct path requests them — so the Probs view, Grammar Probe Phase B/C, and Sampling Probe all work against an Ollama slot too, alongside Compare and the rest of Analyse.
 
 ### Ollama setup
@@ -369,6 +369,8 @@ cp .env.example .env.local
 ```
 
 API keys are configured in the browser through the Settings panel (gear icon), not in environment variables. The `.env.local` file is used for optional Supabase configuration if cloud persistence is enabled later.
+
+**Getting a provider key working is the step most people stall on.** The [FAQ](https://vector-lab-tools.github.io/LLMbench/#faq) and the [per-provider setup guide](https://vector-lab-tools.github.io/LLMbench/#setup) on the docs site cover the common blockers: OpenAI billing, Hugging Face token permissions and inference credit, the one Gemini model that returns logprobs, and the Ollama `OLLAMA_ORIGINS` command with its Safari caveat.
 
 ### Running
 
