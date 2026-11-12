@@ -783,7 +783,7 @@ export default function Home() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Licence</span>
-                  <span className="text-foreground">MIT</span>
+                  <span className="text-foreground">GPL-3.0-or-later</span>
                 </div>
               </div>
 
