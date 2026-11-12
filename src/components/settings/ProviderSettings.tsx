@@ -390,14 +390,22 @@ export default function ProviderSettings({
   if (!showSettings) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-black/40">
-      <div className="bg-card border border-border rounded-lg shadow-editorial-lg w-full max-w-2xl max-h-[80vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setShowSettings(false)}>
+      <div className="bg-card border border-border rounded-lg shadow-editorial-lg w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        {/* Header: title and close only; options sit in their own row below */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h2 className="font-display text-display-md font-bold text-foreground">
             Provider Settings
           </h2>
-          <div className="flex items-center gap-4">
+          <button
+            onClick={() => setShowSettings(false)}
+            className="btn-editorial-ghost p-1.5"
+            aria-label="Close settings"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-6 py-2.5 border-b border-border bg-muted/20 shrink-0">
             {/* Restrict the provider/model dropdowns to entries that
                 support logprobs. Display-only — does not affect runtime
                 behaviour beyond what is selectable. */}
@@ -446,14 +454,9 @@ export default function ProviderSettings({
                 <option value="entropy">entropy (bits)</option>
               </select>
             </label>
-            <button
-              onClick={() => setShowSettings(false)}
-              className="btn-editorial-ghost p-1.5"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
         </div>
+
+        <div className="flex-1 min-h-0 overflow-y-auto">
 
         {/* Onboarding guide — first thing the user sees. Collapsible so it
             doesn't push the slot editors below the fold for returning users
@@ -486,9 +489,10 @@ export default function ProviderSettings({
             />
           </div>
         </div>
+        </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-border flex items-center justify-between">
+        <div className="px-6 py-3 border-t border-border flex items-center justify-between shrink-0">
           <span className="text-caption text-muted-foreground">
             API keys are stored in your browser only.
             {modelsLoaded && " Models loaded from models.md."}

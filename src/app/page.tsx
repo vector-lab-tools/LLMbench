@@ -30,10 +30,23 @@ const MODE_LABELS: Record<TabId, string> = {
   sampling: "Sampling Probe",
 };
 
+const HELP_TABS = [
+  { id: "start", label: "Getting started" },
+  { id: "ollama", label: "Ollama (local)" },
+  { id: "compare", label: "Compare" },
+  { id: "probs", label: "Token probabilities" },
+  { id: "analyse", label: "Analyse modes" },
+  { id: "grammar", label: "Grammar Probe" },
+  { id: "sampling", label: "Sampling Probe" },
+  { id: "tips", label: "Tips" },
+] as const;
+type HelpTabId = (typeof HELP_TABS)[number]["id"];
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabId>("compare");
   const [isDark, setIsDark] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [helpTab, setHelpTab] = useState<HelpTabId>("start");
   const [showLogprobsExplainer, setShowLogprobsExplainer] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
@@ -247,270 +260,268 @@ export default function Home() {
         </button>
       )}
 
-      {/* Help modal */}
+      {/* Help modal: sidebar of panes, one section shown at a time */}
       {showHelp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowHelp(false)}>
-          <div className="bg-popover rounded-sm shadow-lg p-6 w-full max-w-2xl border border-parchment max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-popover rounded-sm shadow-lg w-full max-w-4xl border border-parchment h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-parchment/60 shrink-0">
               <h2 className="font-display text-display-md font-bold text-foreground">
                 Help
               </h2>
               <button
                 onClick={() => setShowHelp(false)}
                 className="p-1 text-muted-foreground hover:text-foreground"
+                aria-label="Close help"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-4 text-body-sm text-foreground">
-              <div>
-                <h3 className="font-semibold mb-1">Getting Started</h3>
-                <p className="text-muted-foreground mb-2">
-                  Click <strong>Settings</strong> to configure one or two LLM providers with API keys.
-                  You can use Google Gemini, OpenAI, Anthropic, OpenRouter, Hugging Face, Ollama (local), or any OpenAI-compatible provider.
-                  Each mode works with one or two models; use the <strong>A / B / Both</strong> selector
-                  in analysis modes to choose. If you send an empty prompt, a curated example is chosen automatically &mdash;
-                  or pick one from the <strong>Try:</strong> chips below the input.
-                </p>
-                <p className="text-muted-foreground mb-2">
-                  <strong className="text-foreground">Ollama (Local).</strong> No API key &mdash; the model runs on your own machine.
-                  LLMbench calls Ollama directly from the browser, so it works from both
-                  a local dev build and the deployed app. Install from{" "}
-                  <a href="https://ollama.com/download" target="_blank" rel="noopener noreferrer" className="text-burgundy hover:underline">ollama.com/download</a>,
-                  pull a model (<code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">ollama pull gemma4</code> or <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">ollama pull llama3.2</code>),
-                  and start the server.
-                </p>
-                <p className="text-muted-foreground mb-2">
-                  From a <strong className="text-foreground">deployed LLMbench</strong> you must explicitly allow this app&apos;s origin
-                  via Ollama&apos;s <strong className="text-foreground">CORS</strong> (Cross-Origin Resource Sharing) list.
-                  CORS is the browser&apos;s gatekeeper for cross-origin HTTP requests: by default a page at one origin (e.g. <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">https://llm-bench-mu.vercel.app</code>) cannot call a server at a different origin (e.g. <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">http://127.0.0.1:11434</code>) unless that server opts in by naming the caller&apos;s origin in an <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">Access-Control-Allow-Origin</code> header.
-                  Restart Ollama with the origin in <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">OLLAMA_ORIGINS</code>;
-                  the Settings panel shows the exact command with your origin pre-filled and a copy button. Example:
-                  <code className="block text-[11px] bg-muted/60 px-2 py-1 rounded mt-1 break-all">
-                    OLLAMA_ORIGINS=&quot;https://llm-bench-mu.vercel.app,http://localhost:3000,http://127.0.0.1:3000&quot; ollama serve
-                  </code>
-                </p>
-                <p className="text-muted-foreground">
-                  <strong className="text-foreground">Browser support.</strong> The browser-direct path works in Chrome, Firefox, Edge, Arc, and Brave.
-                  <strong className="text-foreground"> Safari blocks it</strong>: even with CORS open, Safari refuses HTTPS pages calling <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">http://localhost</code>,
-                  so use a Chromium-family browser or Firefox for Ollama from a deployed LLMbench. Safari is fine for local-dev (<code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">npm run dev</code> on localhost). Ollama&apos;s OpenAI-compatible endpoint returns logprobs, and the browser-direct path requests them &mdash; so the Probs view, Grammar Probe Phase B/C, and Sampling Probe all work against an Ollama slot.
-                </p>
-              </div>
+            <div className="flex flex-col md:flex-row flex-1 min-h-0">
+              <nav className="flex md:flex-col gap-1 p-3 md:w-52 shrink-0 overflow-x-auto md:overflow-y-auto border-b md:border-b-0 md:border-r border-parchment/60" aria-label="Help sections">
+                {HELP_TABS.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setHelpTab(t.id)}
+                    className={`text-left whitespace-nowrap px-3 py-1.5 rounded-sm text-body-sm transition-colors ${
+                      helpTab === t.id
+                        ? "bg-burgundy/10 text-burgundy font-semibold"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </nav>
 
-              <div>
-                <h3 className="font-semibold mb-1">Compare</h3>
-                <p className="text-muted-foreground mb-2">
-                  The primary close-reading workspace. Enter a prompt in the bar at the bottom, press <strong>Enter</strong> or the send button, and responses appear side by side. A <strong>clock icon</strong> in the prompt bar gives access to your last 10 prompts. After sending, the prompt bar collapses &mdash; click <strong>Prompt</strong> in the bottom strip to expand it again, or press <strong>New</strong> to clear everything and start fresh.
-                </p>
-                <p className="text-muted-foreground mb-1.5">
-                  <strong className="text-foreground">Annotations.</strong> Select any text in a panel to annotate it. Six types are available: Observation, Question, Metaphor, Pattern, Context, Critique &mdash; each colour-coded with a gutter marker.
-                </p>
-                <p className="text-muted-foreground mb-1.5">
-                  <strong className="text-foreground">Toolbar overlays</strong> &mdash; click once to activate, click again to turn off:
-                </p>
-                <div className="space-y-1.5 text-muted-foreground pl-3 border-l-2 border-parchment mb-2">
-                  <p><strong className="text-foreground">Diff</strong> &mdash; Word-level highlighting of what each model said uniquely. Words present in one panel but not the other are highlighted; synchronised scrolling keeps both panels aligned.</p>
-                  <p><strong className="text-foreground">Struct</strong> &mdash; Numbers each sentence in the margin and highlights discourse connectives (however, therefore, moreover&hellip;) in burgundy. Reveals the argumentative skeleton of each response.</p>
-                  <p><strong className="text-foreground">Tone</strong> &mdash; Applies Hyland&rsquo;s (2005) metadiscourse model across seven register categories: <span className="text-blue-700">Hedges</span> (might, perhaps), <span className="text-emerald-700">Boosters</span> (clearly, must), <span className="text-orange-700">Limiting</span> (not, never), <span className="text-purple-700">Attitude</span> (important, surprising), <span className="text-amber-700">Intensifiers</span> (very, extremely), <span className="text-rose-700">Self-mentions</span> (I, we), and <span className="text-teal-700">Engagement markers</span> (you, consider, note). Click any chip to read its Hyland definition. Hover any marked word for a linguistic note and surrounding context.</p>
-                  <p><strong className="text-foreground">Probs</strong> &mdash; Overlays a token probability heatmap on both panels. With <strong>Auto-fetch logprobs</strong> on (default in Settings), the data is fetched alongside the main generation, so toggling Probs is a pure visual op &mdash; no extra API call. A small dot on the button indicates the cache state (green = ready, amber pulse = fetching). See <em>Using Probs</em> below. Requires Google Gemini (2.0), OpenAI, OpenRouter (GPT-4o/Mini), or Hugging Face.</p>
-                </div>
-                <p className="text-muted-foreground mb-1">
-                  <strong className="text-foreground">Export.</strong> Save as structured JSON, formatted plain text, or a side-by-side landscape PDF with annotation badges. In Probs view, Export opens a dedicated modal with PDF snapshot, PNG image, and per-token JSON.
-                </p>
-              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 text-body-sm text-foreground">
+                {helpTab === "start" && (
+                  <div className="space-y-3">
+                    <h3 className="font-display text-display-sm font-semibold">Getting started</h3>
+                    <p className="text-muted-foreground">
+                      Click <strong className="text-foreground">Settings</strong> to configure one or two LLM providers. You can use Google Gemini, OpenAI, Anthropic, OpenRouter, Hugging Face, Ollama (local, no key), or any OpenAI-compatible endpoint. Keys are stored in your browser only.
+                    </p>
+                    <p className="text-muted-foreground">
+                      Each mode works with one or two models; use the <strong className="text-foreground">A / B / Both</strong> selector in the analysis modes to choose. If you send an empty prompt, a curated example is chosen automatically, or pick one from the <strong className="text-foreground">Try:</strong> chips below the input.
+                    </p>
+                    <div className="pl-3 border-l-2 border-parchment space-y-1.5 text-muted-foreground">
+                      <p><strong className="text-foreground">Which models return token probabilities?</strong> The Probs view and the probability-based probes need a model that returns logprobs:</p>
+                      <ul className="list-disc pl-4 space-y-0.5">
+                        <li>OpenAI (<code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">gpt-4o</code>, <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">gpt-4o-mini</code>)</li>
+                        <li>Google Gemini <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">gemini-2.0-flash</code> (the 2.5 models do not)</li>
+                        <li>OpenRouter on its <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">openai/*</code> routes</li>
+                        <li>Hugging Face: Llama 3.3 70B (the default) or Gemma 4 31B</li>
+                        <li>Any local Ollama model</li>
+                      </ul>
+                      <p>Anthropic returns none. Tick <strong className="text-foreground">Logprobs-compatible only</strong> in Settings to filter the model list.</p>
+                    </div>
+                    <p className="text-muted-foreground">
+                      Hosted model line-ups change. If a model you saved is retired by its provider, LLMbench falls back to that provider&rsquo;s default when it loads. Every provider also has a <strong className="text-foreground">Custom Model</strong> option, so you can always type a model ID the list does not show.
+                    </p>
+                  </div>
+                )}
 
-              <div>
-                <h3 className="font-semibold mb-2">Using Probs (token probabilities in Compare)</h3>
-                <p className="text-muted-foreground mb-2">
-                  Token probabilities are a <strong className="text-foreground">first-class data layer</strong> in LLMbench. With <strong>Auto-fetch logprobs</strong> on (default), the data rides alongside every submit when both slots are logprobs-capable: a single API round-trip returns both the response and its per-token distributions. Click <strong>Probs</strong> to render the heatmap &mdash; tokens the model was very confident about are uncoloured; uncertainty glides from pale yellow through orange to deep red, with a 70% threshold below which highlighting begins. The button&rsquo;s status dot tells you whether the data is cached and ready.
-                </p>
-                {/* Colour reference card. Swatch HSLA values are computed
-                    from the exact gradient formula in TokenHeatmap.tsx
-                    (logprobToStyle), evaluated at the midpoint of each
-                    probability range — so the card is a faithful preview
-                    of what the heatmap actually shows at each band. */}
-                <div className="text-muted-foreground mb-2">
-                  <p className="mb-1.5"><strong className="text-foreground">Colour reference</strong> (light mode &mdash; dark mode uses lower lightness across the same hue range, identical thresholds):</p>
-                  <div className="pl-3 border-l-2 border-parchment space-y-0.5 font-mono text-[11px]">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block w-6 h-3.5 rounded-sm border border-parchment/60 bg-card" />
-                      <span className="w-16 text-foreground">≥ 70%</span>
-                      <span className="text-muted-foreground/80">no highlight (visual silence; model was confident)</span>
+                {helpTab === "ollama" && (
+                  <div className="space-y-3">
+                    <h3 className="font-display text-display-sm font-semibold">Ollama (local)</h3>
+                    <p className="text-muted-foreground">
+                      No API key: the model runs on your own machine and nothing leaves it. LLMbench calls Ollama directly from the browser, so it works from both a local dev build and the deployed app.
+                    </p>
+                    <ol className="list-decimal pl-5 space-y-1 text-muted-foreground">
+                      <li>Install from <a href="https://ollama.com/download" target="_blank" rel="noopener noreferrer" className="text-burgundy hover:underline">ollama.com/download</a>.</li>
+                      <li>Pull a model, for example <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">ollama pull llama3.2</code>.</li>
+                      <li>Start the server (see below), then choose <strong className="text-foreground">Ollama (Local)</strong> in Settings.</li>
+                    </ol>
+                    <p className="text-muted-foreground">
+                      <strong className="text-foreground">From the deployed app</strong> you must allow its origin in Ollama&rsquo;s <strong className="text-foreground">CORS</strong> list. CORS is the browser&rsquo;s gatekeeper for cross-origin requests: a page at <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">https://llm-bench-mu.vercel.app</code> cannot call <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">http://127.0.0.1:11434</code> unless Ollama names that origin. The Settings panel shows the command with your origin pre-filled and a copy button:
+                    </p>
+                    <code className="block text-[11px] bg-muted/60 px-2 py-1.5 rounded break-all">
+                      OLLAMA_ORIGINS=&quot;https://llm-bench-mu.vercel.app,http://localhost:3000,http://127.0.0.1:3000&quot; ollama serve
+                    </code>
+                    <p className="text-muted-foreground">
+                      For a local dev build (<code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">npm run dev</code>), a plain <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">ollama serve</code> is enough.
+                    </p>
+                    <p className="text-muted-foreground">
+                      <strong className="text-foreground">Browser support.</strong> The browser-direct path works in Chrome, Firefox, Edge, Arc and Brave. <strong className="text-foreground">Safari blocks it</strong>: even with CORS open, it refuses HTTPS pages calling <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">http://localhost</code>. Safari is fine for the local dev build.
+                    </p>
+                    <p className="text-muted-foreground">
+                      Ollama returns full logprobs, so the Probs view, Grammar Probe phases B and C, and the Sampling Probe all work against an Ollama slot.
+                    </p>
+                  </div>
+                )}
+
+                {helpTab === "compare" && (
+                  <div className="space-y-3">
+                    <h3 className="font-display text-display-sm font-semibold">Compare</h3>
+                    <p className="text-muted-foreground">
+                      The primary close-reading workspace. Enter a prompt in the bar at the bottom and press <strong className="text-foreground">Enter</strong>; responses appear side by side. The <strong className="text-foreground">clock icon</strong> in the prompt bar gives your last 10 prompts. After sending, the prompt bar collapses: click <strong className="text-foreground">Prompt</strong> in the bottom strip to expand it, or <strong className="text-foreground">New</strong> to start fresh.
+                    </p>
+                    <p className="text-muted-foreground">
+                      <strong className="text-foreground">Annotations.</strong> Select any text in a panel to annotate it. Six types: Observation, Question, Metaphor, Pattern, Context, Critique, each colour-coded with a gutter marker.
+                    </p>
+                    <p className="text-muted-foreground"><strong className="text-foreground">Toolbar overlays</strong> (click once to turn on, again to turn off):</p>
+                    <div className="space-y-1.5 text-muted-foreground pl-3 border-l-2 border-parchment">
+                      <p><strong className="text-foreground">Diff</strong>: word-level highlighting of what each model said uniquely, with synchronised scrolling.</p>
+                      <p><strong className="text-foreground">Struct</strong>: numbers each sentence in the margin and highlights discourse connectives (however, therefore, moreover) in burgundy, showing the argumentative skeleton.</p>
+                      <p><strong className="text-foreground">Tone</strong>: Hyland&rsquo;s (2005) metadiscourse model across seven categories: <span className="text-blue-700">Hedges</span>, <span className="text-emerald-700">Boosters</span>, <span className="text-orange-700">Limiting</span>, <span className="text-purple-700">Attitude</span>, <span className="text-amber-700">Intensifiers</span>, <span className="text-rose-700">Self-mentions</span> and <span className="text-teal-700">Engagement markers</span>. Click a chip for its definition; hover a marked word for a note.</p>
+                      <p><strong className="text-foreground">Probs</strong>: a token-probability heatmap over both panels. See the <button onClick={() => setHelpTab("probs")} className="text-burgundy hover:underline">Token probabilities</button> pane.</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block w-6 h-3.5 rounded-sm" style={{ background: "hsla(41, 90%, 80%, 0.37)" }} />
-                      <span className="w-16 text-foreground">50&ndash;70%</span>
-                      <span className="text-muted-foreground/80">pale yellow wash</span>
+                    <p className="text-muted-foreground">
+                      <strong className="text-foreground">Export.</strong> Structured JSON, formatted plain text, or a side-by-side landscape PDF with annotation badges. In the Probs view, Export opens a dedicated modal with PDF snapshot, PNG image and per-token JSON.
+                    </p>
+                  </div>
+                )}
+
+                {helpTab === "probs" && (
+                  <div className="space-y-3">
+                    <h3 className="font-display text-display-sm font-semibold">Token probabilities (Probs)</h3>
+                    <p className="text-muted-foreground">
+                      With <strong className="text-foreground">Auto-fetch logprobs</strong> on (the default), the per-token distributions arrive with the response itself, so toggling <strong className="text-foreground">Probs</strong> is a pure visual change with no extra API call. The dot on the button shows the cache state: green ready, amber fetching. Confident tokens stay uncoloured; below 70% the highlight runs from pale yellow through orange to deep red.
+                    </p>
+                    <div className="text-muted-foreground">
+                      <p className="mb-1.5"><strong className="text-foreground">Colour reference</strong> (dark mode uses lower lightness across the same hues and thresholds):</p>
+                      <div className="pl-3 border-l-2 border-parchment space-y-0.5 font-mono text-[11px]">
+                        <div className="flex items-center gap-2"><span className="inline-block w-6 h-3.5 rounded-sm border border-parchment/60 bg-card" /><span className="w-16 text-foreground">≥ 70%</span><span className="text-muted-foreground/80">no highlight</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-6 h-3.5 rounded-sm" style={{ background: "hsla(41, 90%, 80%, 0.37)" }} /><span className="w-16 text-foreground">50&ndash;70%</span><span className="text-muted-foreground/80">pale yellow</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-6 h-3.5 rounded-sm" style={{ background: "hsla(27, 92%, 65%, 0.61)" }} /><span className="w-16 text-foreground">30&ndash;50%</span><span className="text-muted-foreground/80">warm orange</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-6 h-3.5 rounded-sm" style={{ background: "hsla(16, 93%, 53%, 0.82)" }} /><span className="w-16 text-foreground">10&ndash;30%</span><span className="text-muted-foreground/80">deep orange-red</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-6 h-3.5 rounded-sm" style={{ background: "hsla(8, 95%, 45%, 0.96)" }} /><span className="w-16 text-foreground">1&ndash;10%</span><span className="text-muted-foreground/80">saturated red</span></div>
+                        <div className="flex items-center gap-2"><span className="inline-block w-6 h-3.5 rounded-sm" style={{ background: "hsla(5, 95%, 42%, 1.00)" }} /><span className="w-16 text-foreground">&lt; 1%</span><span className="text-muted-foreground/80">deepest red</span></div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block w-6 h-3.5 rounded-sm" style={{ background: "hsla(27, 92%, 65%, 0.61)" }} />
-                      <span className="w-16 text-foreground">30&ndash;50%</span>
-                      <span className="text-muted-foreground/80">warm orange</span>
+                    <p className="text-muted-foreground"><strong className="text-foreground">Navigation strip</strong> (below the toolbar when Probs is on):</p>
+                    <div className="space-y-1 text-muted-foreground pl-3 border-l-2 border-parchment">
+                      <p><strong className="text-foreground">← →</strong> step one token; <strong className="text-foreground">↑ ↓</strong> jump a row; <strong className="text-foreground">Home / End</strong> first and last token. The keyboard works too.</p>
+                      <p><strong className="text-foreground">Uncertain</strong>: jumps to the highest-entropy positions.</p>
+                      <p><strong className="text-foreground">Forks</strong>: positions where the chosen token had under 70% probability.</p>
+                      <p><strong className="text-foreground">≠ Diverge</strong>: positions where Panel A and Panel B chose different tokens (needs logprobs on both).</p>
+                      <p><strong className="text-foreground">Click a token</strong> to pin its distribution; <strong className="text-foreground">⌘/Ctrl+click</strong> pins a second for side-by-side comparison.</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block w-6 h-3.5 rounded-sm" style={{ background: "hsla(16, 93%, 53%, 0.82)" }} />
-                      <span className="w-16 text-foreground">10&ndash;30%</span>
-                      <span className="text-muted-foreground/80">deep orange-red</span>
+                    <p className="text-muted-foreground"><strong className="text-foreground">Visualisation bands</strong> (right of the nav strip):</p>
+                    <div className="space-y-1 text-muted-foreground pl-3 border-l-2 border-parchment">
+                      <p><strong className="text-foreground">Graph</strong>: per-token entropy curve, A and B overlaid; click a point to jump.</p>
+                      <p><strong className="text-foreground">Pixels</strong>: bird&rsquo;s-eye grid, one cell per token, five palettes; click a cell to jump.</p>
+                      <p><strong className="text-foreground">Net</strong>: rotatable 3D probability skyline where peaks are uncertain tokens.</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block w-6 h-3.5 rounded-sm" style={{ background: "hsla(8, 95%, 45%, 0.96)" }} />
-                      <span className="w-16 text-foreground">1&ndash;10%</span>
-                      <span className="text-muted-foreground/80">saturated red</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block w-6 h-3.5 rounded-sm" style={{ background: "hsla(5, 95%, 42%, 1.00)" }} />
-                      <span className="w-16 text-foreground">&lt; 1%</span>
-                      <span className="text-muted-foreground/80">deepest red, near-full opacity</span>
+                    <p className="text-muted-foreground">
+                      <strong className="text-foreground">Snapshot consistency.</strong> The model that generated the text is captured at submit time; Probs always fetches against that model, even if you change Settings afterwards. Re-submit to probe a different model.
+                    </p>
+                    <p className="text-muted-foreground">
+                      <strong className="text-foreground">When a model returns no logprobs</strong>, the empty state names the cause and suggests a working alternative, with a <strong className="text-foreground">Retry with current settings</strong> button so you can switch models without re-running the prompt.
+                    </p>
+                    <p className="text-muted-foreground">
+                      <strong className="text-foreground">Units.</strong> Uncertainty shows as <strong className="text-foreground">perplexity</strong> (default; <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">2^entropy</code>, the effective number of equally likely candidates) or <strong className="text-foreground">entropy in bits</strong>, set from the Uncertainty dropdown in Settings. Exports always report bits.
+                    </p>
+                    <p className="text-muted-foreground">
+                      <strong className="text-foreground">The long tail.</strong> Providers return only the top-K candidates (LLMbench asks for 5). The unseen remainder is counted as one residual bucket, <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">1&nbsp;&minus;&nbsp;&Sigma;(visible)</code>, which makes the displayed perplexity a lower bound: the true full-vocabulary value is always at least what you see.
+                    </p>
+                    <p>
+                      <button
+                        onClick={() => setShowLogprobsExplainer(true)}
+                        className="text-burgundy hover:underline font-medium"
+                      >
+                        Learn what logprobs are and how to interpret them &rarr;
+                      </button>
+                    </p>
+                  </div>
+                )}
+
+                {helpTab === "analyse" && (
+                  <div className="space-y-3">
+                    <h3 className="font-display text-display-sm font-semibold">Analyse modes</h3>
+                    <div className="space-y-2.5 text-muted-foreground">
+                      <p><strong className="text-foreground">Stochastic Variation</strong>: sends the same prompt to the same model several times to measure how outputs differ across runs. Reports word-count variation, vocabulary diversity and pairwise word overlap.</p>
+                      <p><strong className="text-foreground">Temperature Gradient</strong>: runs the prompt across a fixed sweep of temperatures (0.0 to 2.0) to show how sampling randomness changes determinism and variety.</p>
+                      <p><strong className="text-foreground">Prompt Sensitivity</strong>: generates micro-variations of your prompt (adding &ldquo;please&rdquo;, rephrasing as a question, adding &ldquo;step by step&rdquo;) and ranks them by divergence from the base output.</p>
+                      <p><strong className="text-foreground">Token Probabilities</strong>: single-response logprob analysis with a heatmap (click to pin, ⌘/Ctrl+click to compare two tokens), an entropy histogram (click a bin to list its tokens), sentences coloured by mean entropy, and an Uncertainty Deep Dive. Needs a logprobs-capable model.</p>
+                      <p><strong className="text-foreground">Cross-Model Divergence</strong>: Jaccard similarity, vocabulary overlap, sentence-level structure and top word frequencies side by side.</p>
                     </div>
                   </div>
-                </div>
-                <p className="text-muted-foreground mb-2">
-                  <strong className="text-foreground">Slot-snapshot consistency.</strong> The model used to generate the displayed text is captured at submit time. If you change models in Settings before pressing Probs, the probability distribution is fetched against the <em>original</em> model &mdash; not the new one. Compare and Probs always show data from the same model snapshot. To probe with a different model, re-submit; the snapshot updates.
-                </p>
-                <p className="text-muted-foreground mb-2">
-                  <strong className="text-foreground">When a model can&rsquo;t return logprobs.</strong> Some models accept the logprobs flag but return no token-level data (Gemini 2.5 Pro/Flash, gpt-3.5-turbo, certain HF-routed chat models). The empty state names the cause and recommends a working alternative &mdash; <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">gemini-2.0-flash</code>, <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">gpt-4o</code> / <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">gpt-4o-mini</code>, or an OpenRouter <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">openai/*</code> route. A <strong>Retry with current settings</strong> button appears in the error block so you can re-fetch after switching models without re-running the whole prompt.
-                </p>
-                <p className="text-muted-foreground mb-1.5"><strong className="text-foreground">Navigation strip</strong> (below the toolbar when Probs is on):</p>
-                <div className="space-y-1 text-muted-foreground pl-3 border-l-2 border-parchment mb-2">
-                  <p><strong className="text-foreground">← →</strong> step one token at a time; <strong>↑ ↓</strong> jump a visual row; <strong>Home / End</strong> jump to first/last token. Arrow keys work from the keyboard too.</p>
-                  <p><strong className="text-foreground">Uncertain</strong> chip &mdash; jumps to the highest-entropy positions (where the model was most spread across alternatives). Click again to deselect.</p>
-                  <p><strong className="text-foreground">Forks</strong> chip &mdash; jumps to positions where the chosen token had less than 70% probability. Click again to deselect.</p>
-                  <p><strong className="text-foreground">≠ Diverge</strong> chip &mdash; jumps to positions where Panel A and Panel B chose different tokens (requires both panels to have logprob data). Click again to deselect.</p>
-                  <p><strong className="text-foreground">Click a token</strong> to pin its probability distribution in a side panel. <strong>⌘/Ctrl+click</strong> to pin a second token and compare two positions side by side.</p>
-                </div>
-                <p className="text-muted-foreground mb-1.5"><strong className="text-foreground">Visualisation bands</strong> (toggle from the right of the nav strip):</p>
-                <div className="space-y-1 text-muted-foreground pl-3 border-l-2 border-parchment mb-2">
-                  <p><strong className="text-foreground">📈 Graph</strong> &mdash; Entropy curve: an SVG sparkline of per-token entropy across the whole sequence, with A and B overlaid. Click any point to jump to that token.</p>
-                  <p><strong className="text-foreground">🟨 Pixels</strong> &mdash; Token pixel map: a bird&rsquo;s-eye grid where each cell is one token, coloured by probability. Five palettes (Heat, Viridis, Magma, Ice, Mono). Click any cell to jump the cursor. Both panels use the same cell size so counts are directly comparable.</p>
-                  <p><strong className="text-foreground">🕸️ Net</strong> &mdash; 3D probability skyline: a rotatable WebGL mesh where peaks are uncertain tokens. Drag to rotate. Click any point to jump the cursor.</p>
-                </div>
-                <p className="text-muted-foreground mb-1.5">
-                  <strong className="text-foreground">Measurement methodology.</strong> LLMbench reports per-token uncertainty in one of two units, swappable from the <strong>Uncertainty</strong> dropdown in Settings: <strong>perplexity</strong> (default; <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">2^entropy</code>, reads as &ldquo;the effective number of equally-likely candidates the model was choosing between&rdquo;) or <strong>entropy in bits</strong> (canonical Shannon entropy, additive across positions, log&nbsp;base&nbsp;2). The toggle is purely a display flag &mdash; internals always compute bits; CSV/PDF analytical exports always report bits for citation and reproducibility.
-                </p>
-                <p className="text-muted-foreground mb-1.5">
-                  <strong className="text-foreground">The long-tail caveat.</strong> Provider APIs cap the visible probability distribution at the top-K candidates (LLMbench requests K=5; the API hard limit is typically 20). The remaining probability mass spreads across tens of thousands of unseen vocabulary tokens whose per-token distribution we never see. LLMbench&rsquo;s entropy calculation includes the unseen tail as a single residual bucket of probability <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">1&nbsp;&minus;&nbsp;&Sigma;(visible)</code>, contributing <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">&minus;p_other&nbsp;&middot;&nbsp;log&#8322;(p_other)</code> to entropy. This yields a strict <strong>lower bound</strong> on the true full-vocabulary perplexity &mdash; collapsing the tail into a single point of mass under-estimates the entropy it would contribute if its actual distribution were visible. The number on screen is therefore always conservative; the true full-distribution perplexity is <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">&ge; displayed value</code>. Hovering the perplexity readout in the heatmap shows the methodology gloss inline.
-                </p>
-                <p className="text-muted-foreground">
-                  <button
-                    onClick={() => setShowLogprobsExplainer(true)}
-                    className="text-burgundy hover:underline font-medium"
-                  >
-                    Learn what logprobs actually are and how to interpret them &rarr;
-                  </button>
-                </p>
-              </div>
+                )}
 
-              <div>
-                <h3 className="font-semibold mb-1">Analyse Modes</h3>
-                <div className="space-y-2 text-muted-foreground">
-                  <p>
-                    <strong className="text-foreground">Stochastic Variation</strong> &mdash; Sends the same prompt multiple times to the same model to measure how outputs differ across runs. Reports word count variation, vocabulary diversity, and pairwise word overlap.
-                  </p>
-                  <p>
-                    <strong className="text-foreground">Temperature Gradient</strong> &mdash; Runs the prompt across a fixed sweep of temperatures (0.0&ndash;2.0) to show how sampling randomness affects output determinism and creativity.
-                  </p>
-                  <p>
-                    <strong className="text-foreground">Prompt Sensitivity</strong> &mdash; Auto-generates micro-variations of your prompt (adding &ldquo;please&rdquo;, rephrasing as a question, adding &ldquo;step by step&rdquo;, etc.) and ranks them by divergence from the base output.
-                  </p>
-                  <p>
-                    <strong className="text-foreground">Token Probabilities</strong> &mdash; A dedicated single-response logprob analysis mode. Components: TokenHeatmap (click to pin, ⌘/Ctrl+click for two-token comparison), EntropyHistogram (click any bin to list tokens in it), SentenceEntropyView (sentences colour-coded by mean entropy), and a full Uncertainty Deep Dive with hotspots and top alternatives. Requires Google Gemini (2.0), OpenAI, or OpenRouter (GPT-4o/Mini).
-                  </p>
-                  <p>
-                    <strong className="text-foreground">Cross-Model Divergence</strong> &mdash; Quantitative comparison with Jaccard similarity, vocabulary overlap, sentence-level structural analysis, and top word frequency bars side by side.
-                  </p>
-                </div>
-              </div>
+                {helpTab === "grammar" && (
+                  <div className="space-y-3">
+                    <h3 className="font-display text-display-sm font-semibold">Investigate: Grammar Probe</h3>
+                    <p className="text-muted-foreground">
+                      Investigates rhetorical constructions the model reaches for: five antithesis variants (<em>Not X but Y</em>, <em>Not just X but Y</em>, <em>It&rsquo;s not X, it&rsquo;s Y</em>, <em>While X, Y</em>, <em>What matters is not X but Y</em>), plus hedging triplets, tricolon and modal stacking. Five phases:
+                    </p>
+                    <div className="space-y-2 text-muted-foreground pl-3 border-l-2 border-parchment">
+                      <p><strong className="text-foreground">A. Prevalence.</strong> Batch-runs a prompt suite across temperatures and up to two models, counts hits, and renders a prompt &times; model &times; temperature heatmap with a verdict banner. The Deep Dive adds hit-rate charts, a hits-per-run histogram, a register heatmap, suite stratification and a co-occurrence matrix, each exportable as CSV.</p>
+                      <p><strong className="text-foreground">B. Continuation logprobs.</strong> Takes the pattern&rsquo;s canonical scaffolds (e.g. &ldquo;Democracy is not just a system of government, but a&rdquo;) and fetches the next-token distribution, highlighting the tokens the construction leans on, with three concentration metrics per scaffold: <strong className="text-foreground">top-1 p</strong>, <strong className="text-foreground">entropy H</strong> and <strong className="text-foreground">clich&eacute; share</strong>. High top-1, low entropy and a high clich&eacute; share mean the model is parked in the construction&rsquo;s groove.</p>
+                      <p><strong className="text-foreground">C. Forced continuation.</strong> For each scaffold probed in B, expands the top candidate Y tokens into short Y-phrases and tabulates scaffold &times; Y-token &times; Y-phrase.</p>
+                      <p><strong className="text-foreground">D. Perturbation.</strong> Runs each prompt under three framings (neutral, told not to use the construction, told it may) and reports hit-rate deltas with a verdict: <em>structural</em>, <em>stylistic</em> or <em>invitable</em>.</p>
+                      <p><strong className="text-foreground">E. Temperature sweep.</strong> Plots prevalence against <span className="font-mono">T &isin; {`{0, 0.3, 0.7, 1.0, 1.5}`}</span> per model. The <strong className="text-foreground">greediness index</strong>, <span className="font-mono">hitRate(T=0) &minus; mean hitRate(T&gt;0)</span>, reads positive when the construction is a reflex of the most likely path and negative when it emerges from sampling.</p>
+                    </div>
+                    <p className="text-muted-foreground">
+                      Ships with a pattern library and a <strong className="text-foreground">thematic suite library</strong> on two axes you can combine: purpose suites (<strong className="text-foreground">baseline</strong>, <strong className="text-foreground">invitation</strong>, <strong className="text-foreground">resistance</strong>, <strong className="text-foreground">adversarial</strong>) and domain suites (politics, technology, science, ethics, pedagogy, everyday). <strong className="text-foreground">Export run data</strong> writes every phase&rsquo;s observations to a portable JSON file. Add patterns or suites in <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">src/lib/grammar/</code>.
+                    </p>
+                    <p className="text-muted-foreground">
+                      Phases B and C need a logprobs-capable model.
+                    </p>
+                  </div>
+                )}
 
-              <div>
-                <h3 className="font-semibold mb-1">Investigate: Grammar Probe</h3>
-                <p className="text-muted-foreground mb-2">
-                  A pattern-specific investigation of rhetorical constructions the model reaches for &mdash; five antithesis variants (<em>Not X but Y</em>, <em>Not just X but Y</em>, <em>It&rsquo;s not X, it&rsquo;s Y</em>, <em>While X, Y</em>, <em>What matters is not X but Y</em>), plus hedging triplets, tricolon, and modal stacking. Phases A, B, and E ship; C and D planned:
-                </p>
-                <div className="space-y-1.5 text-muted-foreground pl-3 border-l-2 border-parchment mb-2">
-                  <p>
-                    <strong className="text-foreground">A. Prevalence.</strong> Batch-runs a 20-prompt suite across two temperatures and up to two models, regex-counts hits, and renders a prompt &times; model &times; temperature heatmap with per-register, per-model, per-temperature breakdowns and a low / moderate / high verdict banner. The <strong>Deep Dive</strong> opens six research panels computed across every selected construction: a per-construction hit-rate bar chart (model &times; temperature), a hits-per-run histogram, a register heatmap, a suite stratification table, an antithesis-style co-occurrence matrix, and Phase E temperature small multiples with an elasticity readout &mdash; every panel exports CSV.
-                  </p>
-                  <p>
-                    <strong className="text-foreground">B. Continuation logprobs.</strong> Picks the pattern&rsquo;s canonical scaffolds (e.g. &ldquo;Democracy is not just a system of government, but a &rdquo;) and fetches the top-K next-token distribution at position 0. Tokens the construction typically leans on (<em>not</em>, <em>just</em>, <em>merely</em>&hellip;) are highlighted in burgundy; Shannon entropy (bits) appears per card. Requires Gemini 2.0, OpenAI, OpenRouter, or Hugging Face.
-                  </p>
-                  <p>
-                    <strong className="text-foreground">B. Scaffold concentration.</strong> For each scaffold, three embedding-free concentration metrics computed from the top-K distribution: <strong>top-1 p</strong> (mass on the single most-likely token), <strong>H</strong> (Shannon entropy in bits over the returned top-K), and <strong>cliché share</strong> (summed probability of the pattern&rsquo;s expected slot fillers like <em>rather</em>, <em>merely</em>, <em>instead</em>). High top-1 + low entropy + high cliché share = the model is parked in the construction&rsquo;s groove. Paired with an <strong>Export run data</strong> action that writes all Phase A / B / C / D / E observations to a portable JSON file for archival and reproducibility. (Note: no geometry view here. The chat model whose generation we observe and any embedding model that would compute cosine similarity are different objects in different vector spaces — conflating them would describe the embedding model&rsquo;s geometry, not the chat model&rsquo;s. Grammar Probe stays on the generation surface.)
-                  </p>
-                  <p>
-                    <strong className="text-foreground">E. Temperature sweep.</strong> Runs the selected suite across <span className="font-mono">T &isin; {`{0, 0.3, 0.7, 1.0, 1.5}`}</span> and plots prevalence against T, one line per model. The headline is the <strong className="text-foreground">greediness index</strong> &mdash; <span className="font-mono">hitRate(T=0) &minus; mean hitRate(T&gt;0)</span>. Positive means the construction is a reflex of the argmax; near-zero means register-driven, not greedy; negative means the pattern emerges out of the sampler.
-                  </p>
-                </div>
-                <p className="text-muted-foreground mb-2">
-                  Ships with a four-preset pattern library (Not X but Y, Hyland hedges, tricolon, modal stacking) and a <strong className="text-foreground">thematic suite library</strong> with two axes you can combine: four <em>purpose</em> suites &mdash; <strong className="text-foreground">baseline</strong> (unprimed), <strong className="text-foreground">invitation</strong> (ceiling), <strong className="text-foreground">resistance</strong> (floor), <strong className="text-foreground">adversarial</strong> (lexical-cue stress test) &mdash; and six <em>domain</em> suites (politics, technology, science, ethics, pedagogy, everyday). Tick any combination; the heatmap stratifies by suite and the verdict tile reports per-suite hit rates. Add patterns or suites by editing <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">src/lib/grammar/</code>.
-                </p>
-                <p className="text-muted-foreground mb-1">
-                  <strong className="text-foreground">C. Forced continuation</strong> (new in v2.15.9). For each scaffold already probed in Phase B, takes the top-N highest-logprob candidate Y tokens and asks the model to expand each into a short Y-phrase. Renders a scaffold &times; Y-token &times; Y-phrase table with the extracted X shown per scaffold. The full Y-harvest is recorded in the exported run data as <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">forcedExpansions</code> &mdash; useful for archival and downstream linguistic / rhetorical analysis of what the chat model produced.
-                </p>
-                <p className="text-muted-foreground">
-                  <strong className="text-foreground">D. Perturbation</strong> (new in v2.15.10). Each selected prompt is run under three framings &mdash; neutral, anti-pattern (&ldquo;do not use the <em>Not X but Y</em> construction&rdquo;), pro-pattern (&ldquo;you may use it&rdquo;) &mdash; and hit rate is reported per construction per framing with deltas. A <strong className="text-foreground">verdict</strong> column summarises the reading: <em>structural</em> if |&Delta;anti| &lt; 10pp at non-trivial baseline, <em>stylistic</em> if &Delta;anti &lt; &minus;30pp, <em>invitable</em> if &Delta;pro &gt; 30pp.
-                </p>
-              </div>
+                {helpTab === "sampling" && (
+                  <div className="space-y-3">
+                    <h3 className="font-display text-display-sm font-semibold">Investigate: Sampling Probe</h3>
+                    <p className="text-muted-foreground">
+                      Autoregressive generation as data: one request per sampled token, with each step&rsquo;s full top-K distribution kept client-side so every control responds instantly. Needs a logprobs-capable model.
+                    </p>
+                    <div className="space-y-1.5 text-muted-foreground pl-3 border-l-2 border-parchment">
+                      <p><strong className="text-foreground">Per-step top-K.</strong> A bar chart of the real next-token distribution, re-softmaxed under your current <strong className="text-foreground">T</strong> and <strong className="text-foreground">top-p</strong> without a new request. The chosen token is highlighted in burgundy.</p>
+                      <p><strong className="text-foreground">Generation strip.</strong> The sequence inline, each token shaded by surprisal (&minus;log&#8322;p): green expected, burgundy rare. Click a token to rewind the inspector.</p>
+                      <p><strong className="text-foreground">Trajectory.</strong> Per-step entropy and chosen-token surprisal; click a bar to jump to that step.</p>
+                      <p><strong className="text-foreground">Counterfactual branches.</strong> Click any non-chosen candidate to fork a new branch from that step; forking reuses the cached distribution and costs nothing until you advance.</p>
+                      <p><strong className="text-foreground">Dual-panel A/B.</strong> Both slots predict against the same prefix, with Jaccard(A, B) and KL(A&#8214;B) per step.</p>
+                      <p><strong className="text-foreground">Export.</strong> <strong className="text-foreground">Bundle</strong> writes the full trace as <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">vector-lab.sampling-trace.v1</code> JSON; a trajectory CSV per branch.</p>
+                    </div>
+                  </div>
+                )}
 
-              <div>
-                <h3 className="font-semibold mb-1">Investigate: Sampling Probe</h3>
-                <p className="text-muted-foreground mb-2">
-                  Autoregressive generation as data. One HTTP call per sampled token; each step&rsquo;s full top-K distribution is stored client-side so every knob is instant. Requires a logprobs-capable slot (Gemini 2.0, OpenAI, OpenRouter, or Hugging Face).
-                </p>
-                <div className="space-y-1.5 text-muted-foreground pl-3 border-l-2 border-parchment mb-2">
-                  <p>
-                    <strong className="text-foreground">Per-step top-K.</strong> Bar chart of the real next-token distribution, re-softmaxed client-side under your current <strong className="text-foreground">T</strong> and <strong className="text-foreground">top-p</strong> so the chart updates without a new API call. Rows show rank, token, softmax probability, raw logprob. Chosen token highlighted in burgundy.
-                  </p>
-                  <p>
-                    <strong className="text-foreground">Generation strip.</strong> The sequence rendered inline, each token shaded by <strong className="text-foreground">surprisal</strong> (&minus;log&#8322;p): green = expected, burgundy = rare. Click a token to rewind the inspector.
-                  </p>
-                  <p>
-                    <strong className="text-foreground">Trajectory.</strong> Per-step entropy H (line, bits) and chosen-token surprisal (bars). Click any bar to jump to that step. Branch summary shows total surprisal and perplexity.
-                  </p>
-                  <p>
-                    <strong className="text-foreground">Counterfactual branches.</strong> Click any non-chosen top-K token to fork a new branch from that step. Raw logprobs are cached, so forking reuses the existing distribution and consumes no new API call until you advance.
-                  </p>
-                  <p>
-                    <strong className="text-foreground">Dual-panel A/B.</strong> Both slots predict the next token against the same prefix; <strong className="text-foreground">Jaccard(A, B)</strong> and <strong className="text-foreground">KL(A&#8214;B)</strong> reported per step; the Deep Dive flags steps where the two models chose different tokens.
-                  </p>
-                  <p>
-                    <strong className="text-foreground">Export.</strong> <strong className="text-foreground">Bundle</strong> writes the full trace as <code className="text-[11px] bg-muted/60 px-1 py-0.5 rounded">vector-lab.sampling-trace.v1</code> JSON (prompt, params, every branch&rsquo;s every step with raw top-K). Trajectory CSV per branch.
-                  </p>
-                </div>
+                {helpTab === "tips" && (
+                  <div className="space-y-3">
+                    <h3 className="font-display text-display-sm font-semibold">Tips</h3>
+                    <ul className="text-muted-foreground space-y-1.5 list-disc pl-4">
+                      <li>Hover any <strong className="text-foreground">?</strong> badge on a metric for what it measures.</li>
+                      <li>Every result has a collapsible <strong className="text-foreground">Deep Dive</strong> with per-run tables, entropy hotspots, vocabulary partitions and CSV export.</li>
+                      <li>In the entropy histogram, click any confidence band to list the tokens in it.</li>
+                      <li><strong className="text-foreground">No Markdown</strong> asks the model for plain text, which is cleaner for diffs and probability analysis.</li>
+                      <li>Comparisons save to browser storage; reload them via <strong className="text-foreground">History</strong>.</li>
+                      <li>Type <strong className="text-foreground">rabbit</strong> on the keyboard for a surprise.</li>
+                    </ul>
+                  </div>
+                )}
               </div>
+            </div>
 
-              <div>
-                <h3 className="font-semibold mb-1">Tips</h3>
-                <ul className="text-muted-foreground space-y-1 list-disc pl-4">
-                  <li>Hover any <strong>?</strong> badge on a metric for an explanation of what it measures.</li>
-                  <li>Every result has a collapsible <strong>Deep Dive</strong> with per-run tables, entropy hotspots, vocabulary partitions, and CSV export.</li>
-                  <li>In the entropy histogram, click any confidence band to list exactly which tokens fell there.</li>
-                  <li>The <strong>No Markdown</strong> toggle injects a system instruction telling the model to return plain text &mdash; cleaner for diffs and probability analysis.</li>
-                  <li>Comparisons save automatically to browser storage; reload them via the <strong>History</strong> button.</li>
-                  <li>Type <strong>rabbit</strong> on the keyboard for a surprise.</li>
-                </ul>
-              </div>
-
-              <div className="pt-3 border-t border-parchment/50 flex items-center gap-2">
-                <a
-                  href="https://vector-lab-tools.github.io"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-caption text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <Image src="/vector-lab-mark.svg" alt="" width={14} height={14} className="w-3.5 h-3.5 shrink-0" />
-                  Part of the Vector Lab
-                </a>
-                <span className="text-muted-foreground/40 text-caption">·</span>
-                <a
-                  href="https://github.com/vector-lab-tools/LLMbench"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-caption text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  github.com/vector-lab-tools/LLMbench
-                </a>
-              </div>
+            <div className="px-6 py-3 border-t border-parchment/60 flex items-center gap-2 shrink-0">
+              <a
+                href="https://vector-lab-tools.github.io/LLMbench/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-caption text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Full guide and FAQ
+              </a>
+              <span className="text-muted-foreground/40 text-caption">·</span>
+              <a
+                href="https://vector-lab-tools.github.io"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-caption text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Image src="/vector-lab-mark.svg" alt="" width={14} height={14} className="w-3.5 h-3.5 shrink-0" />
+                Part of the Vector Lab
+              </a>
+              <span className="text-muted-foreground/40 text-caption">·</span>
+              <a
+                href="https://github.com/vector-lab-tools/LLMbench"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-caption text-muted-foreground hover:text-foreground transition-colors"
+              >
+                GitHub
+              </a>
             </div>
           </div>
         </div>
