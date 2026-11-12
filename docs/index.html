@@ -509,6 +509,10 @@ npm run dev     # then open http://localhost:3000</pre>
           <p>Install Ollama, pull a model, and choose "Ollama (Local)" in Settings. It needs no key, keeps every prompt and response on your machine, and returns full token probabilities, so all modes work against it. It is the route for sensitive material and for open-weight models the hosted services do not expose.</p>
         </details>
         <details>
+          <summary>Which Ollama models are recommended, and do they return logprobs?</summary>
+          <p>On a current Ollama, every chat model returns full logprobs through the OpenAI-compatible endpoint LLMbench calls, so the Probs view and the Sampling and Grammar probes all work against any model you pull. For a fast local default, <span class="key">llama3.2</span> (3B) or <span class="key">gemma3</span> are light and quick; <span class="key">qwen3</span>, <span class="key">phi4</span> and <span class="key">mistral</span> are strong mid-size options; and with enough memory, <span class="key">llama3.3:70b</span> or <span class="key">qwen2.5:72b</span> approach the hosted models for quality. Pull one with <span class="key">ollama pull &lt;model&gt;</span>, then choose it in Settings. If the Probs view stays empty against a local model, update Ollama, since older builds predate logprobs support in the OpenAI-compatible endpoint.</p>
+        </details>
+        <details>
           <summary>I am driving a local Ollama from the deployed site and it will not connect.</summary>
           <p>Start Ollama with the deployed origin allowed, so the browser's cross-origin call is accepted:</p>
           <pre>OLLAMA_ORIGINS="https://llm-bench-mu.vercel.app,http://localhost:3000,http://127.0.0.1:3000" ollama serve</pre>
