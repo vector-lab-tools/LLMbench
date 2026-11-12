@@ -100,6 +100,16 @@ The views below use a single prompt, *"Tell me about Calvino's Cybernetics and G
 
 *Provider settings. Each panel is bound to a provider and model independently; API keys are stored in the browser only. (v2.2.26)*
 
+## Case studies
+
+Six disciplinary runs on an open-weight model show one pattern clearly: the first-token perplexity sorts the fields from near-deterministic to divergent, from the causes of the French Revolution (perplexity ≈ 1.00, two samples reproducing the identical textbook opening) to a modernist short story (≈ 2.03, two samples sharing only 14% of their words). A selection:
+
+- **History** — asked for the causes of the French Revolution, the model opens at a first-token probability of 100% and reproduces the same textbook sentence across runs; the bird's-eye map localises its uncertainty to the specific dates and named estates.
+- **Journalism** — asked for a neutral news lede, the model performs objectivity through hedging: half of its flagged register is modal hedges ("could see", "could deter"), set beside attributed balance.
+- **Literature** — two samples of a modernist opening share only 14% of their words, diverging into different imagery while both commit 77.6% to the first token; the uncertainty sits on the image-bearing words.
+
+All six, across Literature, Sociology, Media and Communications, Journalism, History and Philosophy, with screenshots and readings, are on the [case studies](https://vector-lab-tools.github.io/LLMbench/#cases) page.
+
 ## Scholarly Context
 
 LLMbench emerges from the convergence of three research programmes.
