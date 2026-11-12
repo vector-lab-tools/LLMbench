@@ -541,7 +541,7 @@ npm run dev     # then open http://localhost:3000</pre>
         </details>
         <details>
           <summary>Can I use my institution's own endpoint?</summary>
-          <p>Yes. Choose the OpenAI-compatible provider and give it a Base URL ending at <span class="key">/v1</span> with its key. Logprobs come through if that endpoint returns them. This is the route for a university gateway or a self-hosted model server.</p>
+          <p>Yes. Choose the OpenAI-compatible provider, set the Base URL to your endpoint (it should end at <span class="key">/v1</span>), and paste the key your institution issued. For example, if your university runs a gateway at <span class="key">https://ai.example.edu/v1</span>, you would set that as the Base URL, enter your institutional token, and type the model id the gateway exposes, such as <span class="key">gpt-4o</span> or a local model like <span class="key">llama-3.3-70b</span>. Any server that speaks the OpenAI <span class="key">/v1/chat/completions</span> API works this way, including a vLLM or LiteLLM proxy or a departmental gateway. The Probs view works if that endpoint returns logprobs.</p>
         </details>
         <details>
           <summary>Can I export an analysis?</summary>
