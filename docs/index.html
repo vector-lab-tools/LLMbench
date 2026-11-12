@@ -63,13 +63,22 @@
   .site-nav { display: flex; align-items: center; gap: 20px; }
   .site-nav a { color: var(--muted); text-decoration: none; font-size: 15px; }
   .site-nav a:hover { color: var(--accent-text); }
+  .site-nav a.up { color: var(--accent-text); white-space: nowrap; }
+  .site-nav a.up:hover { color: var(--accent-hover); }
   .theme-toggle { background: none; border: 1px solid var(--rule); border-radius: 8px; color: var(--muted); width: 36px; height: 34px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
   .theme-toggle:hover { color: var(--accent-text); border-color: var(--accent); }
   .theme-toggle svg { width: 18px; height: 18px; }
-  :root:not([data-theme="dark"]) .icon-sun, :root[data-theme="light"] .icon-sun { display: none; }
-  .icon-moon { display: none; }
-  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .icon-moon { display: block; } :root:not([data-theme="light"]) .icon-sun { display: none; } }
-  :root[data-theme="dark"] .icon-moon { display: block; } :root[data-theme="dark"] .icon-sun { display: none; }
+  /* Light (default): show moon (click to go dark). Dark: show sun. Exactly one is always visible. */
+  .icon-moon { display: block; }
+  .icon-sun { display: none; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .icon-moon { display: none; }
+    :root:not([data-theme="light"]) .icon-sun { display: block; }
+  }
+  :root[data-theme="light"] .icon-moon { display: block; }
+  :root[data-theme="light"] .icon-sun { display: none; }
+  :root[data-theme="dark"] .icon-moon { display: none; }
+  :root[data-theme="dark"] .icon-sun { display: block; }
   @media (max-width: 640px) { .hide-sm { display: none; } }
 
   /* Hero */
@@ -148,6 +157,7 @@
   footer a { color: var(--muted); text-decoration: none; font-family: var(--mono); font-size: 14px; }
   footer a:hover { color: var(--accent-text); }
   .foot-note { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+  .foot-ack { flex-basis: 100%; font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin: 10px 0 0; line-height: 1.5; max-width: 80ch; }
 
   /* FAQ */
   .faq { margin-top: 10px; border-top: 1px solid var(--rule); }
@@ -198,11 +208,12 @@
     <a class="brand" href="#top"><span class="dot" aria-hidden="true"></span>LLMbench</a>
     <nav class="site-nav" aria-label="Main">
       <a class="hide-sm" href="#example">Example</a>
-      <a href="#modes">Modes</a>
+      <a class="hide-sm" href="#modes">Modes</a>
       <a class="hide-sm" href="#cases">Studies</a>
       <a href="#setup">Setup</a>
-      <a href="#faq">FAQ</a>
-      <a href="https://github.com/vector-lab-tools/LLMbench">GitHub</a>
+      <a class="hide-sm" href="#faq">FAQ</a>
+      <a class="hide-sm" href="https://github.com/vector-lab-tools/LLMbench">GitHub</a>
+      <a class="up" href="https://vector-lab-tools.github.io">Vector Lab ↗</a>
       <button class="theme-toggle" type="button" aria-label="Toggle light and dark theme" title="Toggle theme">
         <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
@@ -279,7 +290,7 @@
         <p>LLMbench is a browser-based workbench for the comparative close reading of large language model outputs. It sends one prompt to two models at once, renders their replies side by side, and lets you annotate each panel and link annotations across them, so a difference between two models becomes a recorded reading rather than a passing impression.</p>
         <p>What sets it apart from a side-by-side viewer is that it reads beneath the text, to the probabilities from which each word was drawn. For every token a model returns its log-probability, the weight it gave the token it produced and the weights it gave the alternatives it set aside. LLMbench shades each token by that weight, so the points of confidence and the points of near-choice can be read on the surface of the page, and any position opens a deep dive reporting the full candidate distribution and the perplexity there.</p>
         <p>Keys live only in your browser's local storage; LLMbench keeps no accounts and no database, and stores no copy of them. With a local Ollama nothing leaves your machine at all. LLMbench is open source under the GPL-3.0-or-later licence and part of the <a href="https://vector-lab-tools.github.io">Vector Lab</a>.</p>
-        <p>LLMbench was created in Copenhagen in 2026 during an Otto Mønsted Visiting Professorship. The Otto Mønsted Foundation is gratefully acknowledged for its support.</p>
+        <p>Built at Copenhagen Business School, Denmark, during an Otto M&oslash;nsted Visiting Professorship in 2026. The support of the Otto M&oslash;nsted Fond (grant 25-12-1849) is gratefully acknowledged.</p>
       </div>
     </div>
   </section>
@@ -549,7 +560,7 @@ npm run dev     # then open http://localhost:3000</pre>
         </details>
         <details>
           <summary>When was LLMbench created, and who develops it?</summary>
-          <p>LLMbench began in February 2026, created in Copenhagen, Denmark during an Otto Mønsted Visiting Professorship, and is developed by David M. Berry as part of the <a href="https://vector-lab-tools.github.io">Vector Lab</a>. It started by adapting the annotation infrastructure of the <a href="https://github.com/dmberry/CCS-WB">Critical Code Studies Workbench</a>, then grew into a dedicated instrument for reading generated prose: the two-panel Compare mode first, then the Analyse probes (stochastic variation, temperature gradient, prompt sensitivity, token probabilities, cross-model divergence), and then the Investigate tier, the Grammar Probe and the Sampling Probe. Token probabilities became a first-class layer, and a browser-direct path to a local Ollama was added so a model on the researcher's own machine can be read with the same instrumentation as a hosted one. It was relicensed from MIT to GPL-3.0-or-later in July 2026 and is archived on Zenodo with a DOI. The full source, release history and issue tracker are on <a href="https://github.com/vector-lab-tools/LLMbench">GitHub</a>.</p>
+          <p>LLMbench began in February 2026 and is developed by David M. Berry as part of the <a href="https://vector-lab-tools.github.io">Vector Lab</a>. It started by adapting the annotation infrastructure of the <a href="https://github.com/dmberry/CCS-WB">Critical Code Studies Workbench</a>, then grew into a dedicated instrument for reading generated prose: the two-panel Compare mode first, then the Analyse probes (stochastic variation, temperature gradient, prompt sensitivity, token probabilities, cross-model divergence), and then the Investigate tier, the Grammar Probe and the Sampling Probe. Token probabilities became a first-class layer, and a browser-direct path to a local Ollama was added so a model on the researcher's own machine can be read with the same instrumentation as a hosted one. It was relicensed from MIT to GPL-3.0-or-later in July 2026 and is archived on Zenodo with a DOI. Built at Copenhagen Business School, Denmark, during an Otto M&oslash;nsted Visiting Professorship in 2026. The support of the Otto M&oslash;nsted Fond (grant 25-12-1849) is gratefully acknowledged. The full source, release history and issue tracker are on <a href="https://github.com/vector-lab-tools/LLMbench">GitHub</a>.</p>
         </details>
         <details>
           <summary>Something is not working and it is not on this page.</summary>
@@ -569,6 +580,7 @@ npm run dev     # then open http://localhost:3000</pre>
       <a href="https://github.com/vector-lab-tools/LLMbench">GitHub</a>
       <a href="https://vector-lab-tools.github.io">Vector Lab</a>
     </nav>
+    <p class="foot-ack">Built at Copenhagen Business School, Denmark, during an Otto M&oslash;nsted Visiting Professorship in 2026. The support of the Otto M&oslash;nsted Fond (grant 25-12-1849) is gratefully acknowledged.</p>
   </div>
 </footer>
 

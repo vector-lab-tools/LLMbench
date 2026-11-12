@@ -485,6 +485,8 @@ The architecture follows the Manifold Atlas pattern: a thin `page.tsx` manages m
 
 ## Acknowledgements
 
+Built at Copenhagen Business School, Denmark, during an Otto Mønsted Visiting Professorship in 2026. The support of the Otto Mønsted Fond (grant 25-12-1849) is gratefully acknowledged.
+
 LLMbench adapts the annotation infrastructure from the [Critical Code Studies Workbench](https://github.com/dmberry/CCS-WB) (CCS-WB). The editorial design system, CodeMirror annotation widgets, and display settings are shared between the two projects.
 
 ## Licence

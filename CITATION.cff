@@ -6,7 +6,9 @@ abstract: >
   LLMbench is a web-based research instrument for the comparative close reading
   of Large Language Model outputs, enabling researchers to subject AI-generated
   text to hermeneutic scrutiny. Part of the Vector Lab family of research
-  instruments for critical vector theory.
+  instruments for critical vector theory. Built at Copenhagen Business School,
+  Denmark, during an Otto Mønsted Visiting Professorship in 2026, with the
+  support of the Otto Mønsted Fond (grant 25-12-1849).
 authors:
   - family-names: Berry
     given-names: David M.
