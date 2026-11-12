@@ -180,6 +180,8 @@
   .case .tag { font-family: var(--mono); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--accent-text); margin: 14px 0 3px; }
   .case h3 { font-size: 22px; margin: 0 0 7px; }
   .case p { color: var(--muted); font-size: 16px; margin: 0; max-width: 54ch; }
+  .case .prompt { margin-top: 11px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); border-left: 2px solid var(--rule); padding-left: 11px; line-height: 1.5; }
+  .case .prompt span { color: var(--accent-text); text-transform: uppercase; letter-spacing: .06em; font-size: 10px; display: block; margin-bottom: 2px; }
 
   @media (max-width: 820px) {
     .hero .wrap { grid-template-columns: 1fr; gap: 32px; padding-block: 48px 40px; }
@@ -358,36 +360,42 @@
           <p class="tag">History · bird's-eye map · perplexity ≈ 1.00</p>
           <h3>A confident template</h3>
           <p>Both samples reproduce the identical textbook opening on the French Revolution, "began in 1789 and lasted for over a decade", at a first-token probability of 100 per cent. The bird's-eye map shows the low-confidence cells cluster on the specific facts, the dates and the named estates, not on the narration around them.</p>
+          <p class="prompt"><span>Prompt</span>"Write the opening of an essay explaining the main causes of the French Revolution."</p>
         </div>
         <div class="case">
           <figure><a href="screenshots/case-studies/cs-philosophy.png"><img src="screenshots/case-studies/web/cs-philosophy.webp" alt="Two near-identical free-will essay openings with an almost entirely pale, high-confidence heatmap." width="1600" height="1000" loading="lazy"></a></figure>
           <p class="tag">Philosophy · token probabilities · perplexity ≈ 1.01</p>
           <h3>Close to reflex</h3>
           <p>On whether free will is compatible with determinism the model opens at 99.94 per cent, and two independent runs produce near-identical boilerplate, "a longstanding and contentious issue in the realm of philosophy". The heatmap stays pale from end to end, so almost nothing is left to sampling.</p>
+          <p class="prompt"><span>Prompt</span>"Write the opening of a philosophical essay on whether free will is compatible with determinism."</p>
         </div>
         <div class="case">
           <figure><a href="screenshots/case-studies/cs-sociology.png"><img src="screenshots/case-studies/web/cs-sociology.webp" alt="Two social-mobility essay openings shaded by probability, with the deep-dive distribution for the first token." width="1600" height="1000" loading="lazy"></a></figure>
           <p class="tag">Sociology · token probabilities · perplexity ≈ 1.6</p>
           <h3>A critique it reaches for</h3>
           <p>Asked to open an essay on social mobility, two independent runs both produce a critique of meritocracy in almost the same words, that it "serves to mask and perpetuate existing social inequalities". The darkest-shaded tokens, the points of near-choice, fall on the evaluative verbs where the stance is made.</p>
+          <p class="prompt"><span>Prompt</span>"Write the opening paragraph of a scholarly essay on social mobility and whom it serves."</p>
         </div>
         <div class="case">
           <figure><a href="screenshots/case-studies/cs-literature.png"><img src="screenshots/case-studies/web/cs-literature.webp" alt="Two divergent modernist-story openings shaded by probability, with uncertainty on the image-bearing words." width="1600" height="1000" loading="lazy"></a></figure>
           <p class="tag">Literature · token probabilities · perplexity ≈ 2.03</p>
           <h3>The choice lives in the images</h3>
           <p>Two samples on the same modernist-story prompt share only 14 per cent of their words, opening on "a diseased thing" and "a tangle of worn desires", yet both commit 77.6 per cent to the first token. The heatmap puts the uncertainty on the image-bearing words, so the real choosing happens in the adjectives, not the sentence frame.</p>
+          <p class="prompt"><span>Prompt</span>"Write the first three sentences of a modernist literary short story. Use a distinctive voice."</p>
         </div>
         <div class="case">
           <figure><a href="screenshots/case-studies/cs-media.png"><img src="screenshots/case-studies/web/cs-media.webp" alt="Word-level diff of two definitions of content moderation, shared words plain, unique words coloured per panel." width="1600" height="1000" loading="lazy"></a></figure>
           <p class="tag">Media &amp; Communications · word-level diff</p>
           <h3>Same mechanics, different values</h3>
           <p>Llama and Qwen agree on what content moderation is, sharing 39 per cent of their words, but Llama adds a layer of value language, inclusivity, diversity, free speech, that Qwen leaves out and stays procedural. The diff isolates exactly the editorialising each model brings to a shared definition.</p>
+          <p class="prompt"><span>Prompt</span>"Write a short paragraph explaining what content moderation on social media is and why it matters."</p>
         </div>
         <div class="case">
           <figure><a href="screenshots/case-studies/cs-journalism.png"><img src="screenshots/case-studies/web/cs-journalism.webp" alt="Register view of a news lede with metadiscourse categories counted and highlighted, hedges dominating the balance." width="1600" height="1000" loading="lazy"></a></figure>
           <p class="tag">Journalism · register / tone view</p>
           <h3>Objectivity as hedging</h3>
           <p>Asked for a neutral news lede on a tuition-fee rise, the model performs objectivity through hedging: half of its flagged register is modal hedges, "could see", "could deter", "could have long-term consequences", set beside attributed balance. The tone view counts the register rather than taking the neutrality at face value.</p>
+          <p class="prompt"><span>Prompt</span>"Write the lede and first paragraph of a news report on a proposed rise in university tuition fees."</p>
         </div>
       </div>
     </div>
