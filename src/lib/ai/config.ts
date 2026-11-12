@@ -59,12 +59,10 @@ const DEFAULT_MODELS: Record<AIProvider, ModelConfig[]> = {
     { id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4", contextWindow: 200000, maxOutputTokens: 8192 },
   ],
   huggingface: [
-    { id: "meta-llama/Llama-3.3-70B-Instruct", name: "Llama 3.3 70B Instruct", contextWindow: 131072, maxOutputTokens: 4096 },
+    { id: "meta-llama/Llama-3.3-70B-Instruct", name: "Llama 3.3 70B Instruct (logprobs)", contextWindow: 131072, maxOutputTokens: 4096 },
     { id: "meta-llama/Llama-3.1-8B-Instruct", name: "Llama 3.1 8B Instruct (logprobs)", contextWindow: 131072, maxOutputTokens: 4096 },
     { id: "Qwen/Qwen3-32B", name: "Qwen3 32B", contextWindow: 40960, maxOutputTokens: 4096 },
     { id: "Qwen/Qwen3.5-27B", name: "Qwen3.5 27B", contextWindow: 262144, maxOutputTokens: 4096 },
-    { id: "Qwen/Qwen2.5-7B-Instruct", name: "Qwen2.5 7B Instruct (logprobs)", contextWindow: 32768, maxOutputTokens: 4096 },
-    { id: "Qwen/Qwen2.5-Coder-32B-Instruct", name: "Qwen2.5 Coder 32B (logprobs)", contextWindow: 131072, maxOutputTokens: 4096 },
     { id: "google/gemma-4-31B-it", name: "Gemma 4 31B", contextWindow: 262144, maxOutputTokens: 4096 },
     { id: "deepseek-ai/DeepSeek-R1", name: "DeepSeek R1", contextWindow: 163840, maxOutputTokens: 8192 },
     { id: "deepseek-ai/DeepSeek-V3", name: "DeepSeek V3", contextWindow: 131072, maxOutputTokens: 8192 },

@@ -244,7 +244,7 @@
       <p class="lead-in" style="margin-bottom:16px">Sampling and model versions vary, so your numbers will differ from these. The steps are what carry over, from a cold start to reading a model's discarded alternatives.</p>
       <ol class="steps">
         <li><b>Open the app.</b> Go to <a href="https://llm-bench-mu.vercel.app">llm-bench-mu.vercel.app</a>, or clone and run it locally (see <a href="#setup">Setup</a>).</li>
-        <li><b>Connect a model that returns token probabilities.</b> Add a key for one of the providers in <a href="#setup">Setup</a>, or start a local Ollama, which needs no key and keeps the text on your machine. A Qwen2.5-Coder model through Hugging Face, or any Ollama model, works.</li>
+        <li><b>Connect a model that returns token probabilities.</b> Add a key for one of the providers in <a href="#setup">Setup</a>, or start a local Ollama, which needs no key and keeps the text on your machine. An HF model that returns logprobs (currently <span class="key">Llama-3.3-70B-Instruct</span>), or any Ollama model, works.</li>
         <li><b>Run a Compare.</b> Set both panels to open-weight models, give each the same prompt to open an essay on Calvino's <em>Cybernetics and Ghosts</em>, and run them together.</li>
         <li><b>Read the first token.</b> Switch a panel to the Probs view and click the first token. The inspector lists the candidates it was drawn from, each with its probability and the perplexity at that step. Where the two models' first tokens differ, you have a divergence point of your own.</li>
       </ol>
@@ -347,7 +347,7 @@
 
         <div class="prov">
           <h4>Hugging Face <span class="pill yes">logprobs*</span></h4>
-          <p>Token at <a href="https://huggingface.co/settings/tokens">huggingface.co/settings/tokens</a>, begins <span class="key">hf_</span>. The router sends your request to a third-party provider whose logprobs support varies by model; the Qwen2.5-Coder models are the dependable choice. <b>Blocker:</b> the token needs inference permission (a fine-grained token with "Make calls to Inference Providers" enabled, or a classic read token), and the account needs inference credit.</p>
+          <p>Token at <a href="https://huggingface.co/settings/tokens">huggingface.co/settings/tokens</a>, begins <span class="key">hf_</span>. The router sends your request to a third-party backend whose logprobs support varies by model and shifts over time; <span class="key">meta-llama/Llama-3.3-70B-Instruct</span> currently returns full logprobs with the candidate distribution. <b>Blocker:</b> the token needs inference permission (a fine-grained token with "Make calls to Inference Providers" enabled, or a classic read token), and the account needs pre-paid credits or an HF PRO subscription.</p>
         </div>
 
         <div class="prov">
@@ -449,7 +449,7 @@ npm run dev     # then open http://localhost:3000</pre>
         </details>
         <details>
           <summary>Which Hugging Face models actually return logprobs?</summary>
-          <p>The Qwen2.5-Coder models, 32B and 7B, are the dependable choice. The router proxies your request to a third-party backend whose logprobs support varies by model, and the account needs inference credit.</p>
+          <p>HF's available models and their logprobs support shift over time, because the router hands your request to a third-party backend. As things stand, <span class="key">meta-llama/Llama-3.3-70B-Instruct</span> returns full logprobs including the candidate distribution. Some models return a token's own probability but no candidate list, and some return none. The account needs pre-paid credits or an HF PRO subscription, and the token needs inference permission. If one model returns nothing, try another, or use a local Ollama, which always returns them.</p>
         </details>
         <details>
           <summary>Can I use my institution's own endpoint?</summary>
