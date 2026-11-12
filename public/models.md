@@ -61,17 +61,14 @@ The first model in each list is the default.
 
 ## Hugging Face
 
-- `Qwen/Qwen2.5-Coder-32B-Instruct` - Qwen2.5 Coder 32B (logprobs)
-- `Qwen/Qwen2.5-Coder-7B-Instruct` - Qwen2.5 Coder 7B (logprobs)
-- `meta-llama/Llama-3.3-70B-Instruct` - Llama 3.3 70B Instruct
-- `meta-llama/Llama-3.1-8B-Instruct` - Llama 3.1 8B Instruct
+- `meta-llama/Llama-3.3-70B-Instruct` - Llama 3.3 70B Instruct (logprobs)
+- `google/gemma-4-31B-it` - Gemma 4 31B (logprobs)
+- `meta-llama/Llama-3.1-8B-Instruct` - Llama 3.1 8B Instruct (logprobs)
+- `Qwen/Qwen3.5-27B` - Qwen3.5 27B (logprobs)
 - `Qwen/Qwen2.5-72B-Instruct` - Qwen2.5 72B Instruct
-- `Qwen/Qwen2.5-7B-Instruct` - Qwen2.5 7B Instruct
 - `Qwen/Qwen3-32B` - Qwen3 32B
-- `Qwen/Qwen3.5-27B` - Qwen3.5 27B
-- `google/gemma-4-31B-it` - Gemma 4 31B
-- `deepseek-ai/DeepSeek-R1` - DeepSeek R1
 - `deepseek-ai/DeepSeek-V3` - DeepSeek V3
+- `deepseek-ai/DeepSeek-R1` - DeepSeek R1
 
 ## Custom Models
 

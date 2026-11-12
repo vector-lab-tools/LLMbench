@@ -9,7 +9,7 @@ import React, {
 } from "react";
 import type { ProviderSlot, ProviderSlots } from "@/types/ai-settings";
 import { DEFAULT_SLOT_A, DEFAULT_SLOT_B } from "@/types/ai-settings";
-import { getModelDisplayName } from "@/lib/ai/config";
+import { getModelDisplayName, getModelsForProvider } from "@/lib/ai/config";
 import type { UncertaintyUnit } from "@/lib/metrics/uncertainty";
 
 const STORAGE_KEY = "llmbench-provider-settings";
@@ -46,6 +46,21 @@ interface ProviderSettingsContextValue {
 const ProviderSettingsContext =
   createContext<ProviderSettingsContextValue | null>(null);
 
+// If a saved model id is no longer offered by its provider (for example a
+// hosted model that the provider has retired), fall back to that provider's
+// default so the tool never sits on a dead selection and every default-model
+// run keeps working. Custom models are left untouched.
+function reconcileSlotModel(slot: ProviderSlot): ProviderSlot {
+  if (slot.model && slot.model !== "custom") {
+    const models = getModelsForProvider(slot.provider);
+    if (!models.some((m) => m.id === slot.model)) {
+      const fallback = models.find((m) => m.id !== "custom");
+      if (fallback) return { ...slot, model: fallback.id };
+    }
+  }
+  return slot;
+}
+
 function loadSlots(): ProviderSlots {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -56,7 +71,7 @@ function loadSlots(): ProviderSlots {
       // Ensure enabled is always a boolean (old stored data may lack it)
       if (typeof slotA.enabled !== "boolean") slotA.enabled = true;
       if (typeof slotB.enabled !== "boolean") slotB.enabled = true;
-      return { A: slotA, B: slotB };
+      return { A: reconcileSlotModel(slotA), B: reconcileSlotModel(slotB) };
     }
   } catch {
     // Ignore storage errors
