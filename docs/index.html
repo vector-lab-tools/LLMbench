@@ -58,13 +58,16 @@
   /* Header */
   header.site { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--rule); }
   .site .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 12px; }
+  .brand-stack { display: flex; flex-direction: column; gap: 2px; }
+  .hub-back { font-family: var(--mono); font-size: 11px; letter-spacing: .03em; color: var(--muted); text-decoration: none; }
+  .hub-back:hover { color: var(--accent-text); }
   .brand { font-family: var(--mono); font-weight: 500; letter-spacing: .02em; font-size: 16px; color: var(--ink); text-decoration: none; display: inline-flex; align-items: center; gap: 9px; }
   .brand .dot { width: 11px; height: 11px; border-radius: 2px; background: linear-gradient(135deg, #f4d35e, #e8763a 55%, var(--accent)); box-shadow: 0 0 0 1px rgba(0,0,0,.06); }
   .site-nav { display: flex; align-items: center; gap: 20px; }
   .site-nav a { color: var(--muted); text-decoration: none; font-size: 15px; }
   .site-nav a:hover { color: var(--accent-text); }
-  .site-nav a.up { color: var(--accent-text); white-space: nowrap; }
-  .site-nav a.up:hover { color: var(--accent-hover); }
+  .eyebrow a { color: inherit; text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+  .eyebrow a:hover { color: var(--accent-hover); }
   .theme-toggle { background: none; border: 1px solid var(--rule); border-radius: 8px; color: var(--muted); width: 36px; height: 34px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
   .theme-toggle:hover { color: var(--accent-text); border-color: var(--accent); }
   .theme-toggle svg { width: 18px; height: 18px; }
@@ -205,15 +208,17 @@
 
 <header class="site">
   <div class="wrap">
-    <a class="brand" href="#top"><span class="dot" aria-hidden="true"></span>LLMbench</a>
+    <div class="brand-stack">
+      <a class="hub-back" href="https://vector-lab-tools.github.io">← Vector Lab</a>
+      <a class="brand" href="#top"><span class="dot" aria-hidden="true"></span>LLMbench</a>
+    </div>
     <nav class="site-nav" aria-label="Main">
       <a class="hide-sm" href="#example">Example</a>
       <a class="hide-sm" href="#modes">Modes</a>
       <a class="hide-sm" href="#cases">Studies</a>
       <a href="#setup">Setup</a>
-      <a class="hide-sm" href="#faq">FAQ</a>
+      <a href="#faq">FAQ</a>
       <a class="hide-sm" href="https://github.com/vector-lab-tools/LLMbench">GitHub</a>
-      <a class="up" href="https://vector-lab-tools.github.io">Vector Lab ↗</a>
       <button class="theme-toggle" type="button" aria-label="Toggle light and dark theme" title="Toggle theme">
         <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
@@ -227,7 +232,7 @@
   <div class="hero">
     <div class="wrap">
       <div class="hero-copy">
-        <p class="eyebrow">Vector Lab · a research instrument</p>
+        <p class="eyebrow"><a href="https://vector-lab-tools.github.io">Vector Lab</a> · a research instrument</p>
         <h1>LLM<em>bench</em></h1>
         <p class="lede">Close reading of generated prose.</p>
         <p class="sub">Two language models answer the same prompt side by side. Read the text closely, annotate it, and open the token probabilities beneath it. The sentence on screen is one path through a field of possibilities, and LLMbench makes that field readable.</p>
