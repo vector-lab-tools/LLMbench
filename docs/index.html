@@ -418,6 +418,10 @@ npm run dev     # then open http://localhost:3000</pre>
           <p>Keys live in your browser's local storage, one per provider. LLMbench keeps no accounts and no database, so nothing is held against your name. For a hosted provider the key is sent with each request to a serverless function that forwards it to the provider and keeps no copy of it. With a local Ollama the browser talks to Ollama directly, nothing passes through an LLMbench server, and no key is involved at all.</p>
         </details>
         <details>
+          <summary>What are logprobs, and why does LLMbench need them?</summary>
+          <p>At each step a language model does not pick a word outright. It produces a probability distribution over the possible next tokens and samples one from it. A token's log-probability, or logprob, is the weight the model gave the token it produced, and the top candidates are the alternatives it weighed and set aside. LLMbench reads these to shade each token by the model's confidence, to open the full candidate distribution at any position, and to measure perplexity and entropy across a passage. It puts that distribution back on the page, so the choices behind a finished sentence can be read. Providers that do not return logprobs still support Compare, the word-level diff, the tone view and the divergence metrics, but not the Probs view or the probability-based probes.</p>
+        </details>
+        <details>
           <summary>Which providers return token probabilities for the Probs view?</summary>
           <p>OpenAI, Google Gemini on the <span class="key">gemini-2.0-flash</span> model only, OpenRouter on its <span class="key">openai/*</span> routes, Hugging Face on the Qwen2.5-Coder models, and any local Ollama. Anthropic does not return logprobs, so Compare, the word-level diff, the tone view and the divergence metrics work with Claude, but the Probs view and the probability-based probes stay inactive.</p>
         </details>
