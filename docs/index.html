@@ -420,6 +420,10 @@ npm run dev     # then open http://localhost:3000</pre>
         <details>
           <summary>What are logprobs, and why does LLMbench need them?</summary>
           <p>At each step a language model does not pick a word outright. It produces a probability distribution over the possible next tokens and samples one from it. A token's log-probability, or logprob, is the weight the model gave the token it produced, and the top candidates are the alternatives it weighed and set aside. LLMbench reads these to shade each token by the model's confidence, to open the full candidate distribution at any position, and to measure perplexity and entropy across a passage. It puts that distribution back on the page, so the choices behind a finished sentence can be read. Providers that do not return logprobs still support Compare, the word-level diff, the tone view and the divergence metrics, but not the Probs view or the probability-based probes.</p>
+          <figure style="margin: 2px 0 16px; max-width: 640px;">
+            <a href="screenshots/02-probs-heatmap.png"><img src="screenshots/web/02-probs-heatmap.webp" alt="A passage with each token shaded by its probability, and an inspector showing the top candidates and their percentages at the selected token." width="1600" height="1000" loading="lazy"></a>
+            <figcaption>Each token is shaded by the probability the model gave it. The inspector opens one position and lists the candidates it was sampled from, each with its probability.</figcaption>
+          </figure>
         </details>
         <details>
           <summary>Which providers return token probabilities for the Probs view?</summary>
