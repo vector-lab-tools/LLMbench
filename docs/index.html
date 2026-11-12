@@ -168,6 +168,19 @@
   .note .key { font-family: var(--mono); font-size: 12.5px; color: var(--ink); background: var(--surface-alt); border-radius: 6px; padding: 1px 6px; }
   .prov b { color: var(--ink); }
 
+  /* Case studies */
+  .cs-spine { margin: 4px 0 32px; }
+  .cs-spine .bar { height: 8px; border-radius: 99px; background: linear-gradient(90deg, #fff6d8, #f6c445 25%, #ef8a3c 60%, #c8402a 88%, #8a1f1a); }
+  .cs-spine .marks { display: flex; justify-content: space-between; margin-top: 8px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); gap: 8px; }
+  .cs-spine .marks b { color: var(--ink); }
+  .cs-spine .ends { display: flex; justify-content: space-between; margin-top: 3px; font-family: var(--mono); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .cases { display: grid; grid-template-columns: repeat(2, 1fr); gap: 32px 28px; margin-top: 10px; }
+  @media (max-width: 760px) { .cases { grid-template-columns: 1fr; } }
+  .case figure img { aspect-ratio: 16 / 10; object-fit: cover; object-position: top center; width: 100%; }
+  .case .tag { font-family: var(--mono); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--accent-text); margin: 14px 0 3px; }
+  .case h3 { font-size: 22px; margin: 0 0 7px; }
+  .case p { color: var(--muted); font-size: 16px; margin: 0; max-width: 54ch; }
+
   @media (max-width: 820px) {
     .hero .wrap { grid-template-columns: 1fr; gap: 32px; padding-block: 48px 40px; }
     .mode, .mode.flip, .worked { grid-template-columns: 1fr; gap: 20px; }
@@ -184,6 +197,7 @@
     <nav class="site-nav" aria-label="Main">
       <a class="hide-sm" href="#example">Example</a>
       <a href="#modes">Modes</a>
+      <a class="hide-sm" href="#cases">Studies</a>
       <a href="#setup">Setup</a>
       <a href="#faq">FAQ</a>
       <a href="https://github.com/vector-lab-tools/LLMbench">GitHub</a>
@@ -322,9 +336,66 @@
     </div>
   </section>
 
+  <section id="cases">
+    <div class="wrap">
+      <p class="num">04 · Case studies</p>
+      <h2>Six fields, six readings.</h2>
+      <p class="lead-in">One prompt from each of six disciplines, run on an open-weight model (Llama 3.3 70B, with Qwen 2.5 72B alongside for the two cross-model comparisons). One pattern runs across them. The first-token perplexity, how spread the model's options are before it writes a word, sorts the disciplines into a spectrum: the causes of the French Revolution leave it almost deterministic, a modernist short story leaves it genuinely divergent. The same instrument reads one genre as reflex and another as real sampling. Each capture links to full resolution.</p>
+      <div class="cs-spine">
+        <div class="bar"></div>
+        <div class="marks">
+          <span><b>1.00</b> History</span>
+          <span><b>1.01</b> Philosophy</span>
+          <span><b>~1.6</b> Sociology</span>
+          <span><b>2.03</b> Literature</span>
+        </div>
+        <div class="ends"><span>near-deterministic</span><span>divergent</span></div>
+      </div>
+
+      <div class="cases">
+        <div class="case">
+          <figure><a href="screenshots/case-studies/cs-history.png"><img src="screenshots/case-studies/web/cs-history.webp" alt="Bird's-eye probability map of two French Revolution openings, low-confidence cells clustering on the specific facts." width="1600" height="1000" loading="lazy"></a></figure>
+          <p class="tag">History · bird's-eye map · perplexity ≈ 1.00</p>
+          <h3>A confident template</h3>
+          <p>Both samples reproduce the identical textbook opening on the French Revolution, "began in 1789 and lasted for over a decade", at a first-token probability of 100 per cent. The bird's-eye map shows the low-confidence cells cluster on the specific facts, the dates and the named estates, not on the narration around them.</p>
+        </div>
+        <div class="case">
+          <figure><a href="screenshots/case-studies/cs-philosophy.png"><img src="screenshots/case-studies/web/cs-philosophy.webp" alt="Two near-identical free-will essay openings with an almost entirely pale, high-confidence heatmap." width="1600" height="1000" loading="lazy"></a></figure>
+          <p class="tag">Philosophy · token probabilities · perplexity ≈ 1.01</p>
+          <h3>Close to reflex</h3>
+          <p>On whether free will is compatible with determinism the model opens at 99.94 per cent, and two independent runs produce near-identical boilerplate, "a longstanding and contentious issue in the realm of philosophy". The heatmap stays pale from end to end, so almost nothing is left to sampling.</p>
+        </div>
+        <div class="case">
+          <figure><a href="screenshots/case-studies/cs-sociology.png"><img src="screenshots/case-studies/web/cs-sociology.webp" alt="Two social-mobility essay openings shaded by probability, with the deep-dive distribution for the first token." width="1600" height="1000" loading="lazy"></a></figure>
+          <p class="tag">Sociology · token probabilities · perplexity ≈ 1.6</p>
+          <h3>A critique it reaches for</h3>
+          <p>Asked to open an essay on social mobility, two independent runs both produce a critique of meritocracy in almost the same words, that it "serves to mask and perpetuate existing social inequalities". The darkest-shaded tokens, the points of near-choice, fall on the evaluative verbs where the stance is made.</p>
+        </div>
+        <div class="case">
+          <figure><a href="screenshots/case-studies/cs-literature.png"><img src="screenshots/case-studies/web/cs-literature.webp" alt="Two divergent modernist-story openings shaded by probability, with uncertainty on the image-bearing words." width="1600" height="1000" loading="lazy"></a></figure>
+          <p class="tag">Literature · token probabilities · perplexity ≈ 2.03</p>
+          <h3>The choice lives in the images</h3>
+          <p>Two samples on the same modernist-story prompt share only 14 per cent of their words, opening on "a diseased thing" and "a tangle of worn desires", yet both commit 77.6 per cent to the first token. The heatmap puts the uncertainty on the image-bearing words, so the real choosing happens in the adjectives, not the sentence frame.</p>
+        </div>
+        <div class="case">
+          <figure><a href="screenshots/case-studies/cs-media.png"><img src="screenshots/case-studies/web/cs-media.webp" alt="Word-level diff of two definitions of content moderation, shared words plain, unique words coloured per panel." width="1600" height="1000" loading="lazy"></a></figure>
+          <p class="tag">Media &amp; Communications · word-level diff</p>
+          <h3>Same mechanics, different values</h3>
+          <p>Llama and Qwen agree on what content moderation is, sharing 39 per cent of their words, but Llama adds a layer of value language, inclusivity, diversity, free speech, that Qwen leaves out and stays procedural. The diff isolates exactly the editorialising each model brings to a shared definition.</p>
+        </div>
+        <div class="case">
+          <figure><a href="screenshots/case-studies/cs-journalism.png"><img src="screenshots/case-studies/web/cs-journalism.webp" alt="Register view of a news lede with metadiscourse categories counted and highlighted, hedges dominating the balance." width="1600" height="1000" loading="lazy"></a></figure>
+          <p class="tag">Journalism · register / tone view</p>
+          <h3>Objectivity as hedging</h3>
+          <p>Asked for a neutral news lede on a tuition-fee rise, the model performs objectivity through hedging: half of its flagged register is modal hedges, "could see", "could deter", "could have long-term consequences", set beside attributed balance. The tone view counts the register rather than taking the neutrality at face value.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section id="setup">
     <div class="wrap">
-      <p class="num">04 · Setup</p>
+      <p class="num">05 · Setup</p>
       <h2>Getting the API keys working.</h2>
       <p class="lead-in">Keys go in the Settings panel (the gear icon), not in a file. They are stored only in your browser, with no account and no database behind them. For a hosted provider the key is sent with each request through a serverless function that forwards it to the provider and keeps no copy; a local Ollama needs no key at all and nothing leaves your machine. You need a key for at least one provider, or a local Ollama. For the Probs view and the Sampling and Grammar probes, the provider also has to return token probabilities, which not all of them do.</p>
 
@@ -410,7 +481,7 @@ npm run dev     # then open http://localhost:3000</pre>
 
   <section id="faq">
     <div class="wrap">
-      <p class="num">05 · FAQ</p>
+      <p class="num">06 · FAQ</p>
       <h2>Questions that come up.</h2>
       <div class="faq">
         <details>
