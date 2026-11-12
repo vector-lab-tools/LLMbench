@@ -547,6 +547,10 @@ npm run dev     # then open http://localhost:3000</pre>
           <p>Yes. Comparisons export as structured JSON, formatted text, or a side-by-side landscape PDF with the annotations. The Probs view adds a dedicated export with the heatmap, the per-token statistics, the entropy curve and an annotated-token page.</p>
         </details>
         <details>
+          <summary>When was LLMbench created, and who develops it?</summary>
+          <p>LLMbench began in February 2026 and is developed by David M. Berry as part of the <a href="https://vector-lab-tools.github.io">Vector Lab</a>. It started by adapting the annotation infrastructure of the <a href="https://github.com/dmberry/CCS-WB">Critical Code Studies Workbench</a>, then grew into a dedicated instrument for reading generated prose: the two-panel Compare mode first, then the Analyse probes (stochastic variation, temperature gradient, prompt sensitivity, token probabilities, cross-model divergence), and then the Investigate tier, the Grammar Probe and the Sampling Probe. Token probabilities became a first-class layer, and a browser-direct path to a local Ollama was added so a model on the researcher's own machine can be read with the same instrumentation as a hosted one. It was relicensed from MIT to GPL-3.0-or-later in July 2026 and is archived on Zenodo with a DOI. The full source, release history and issue tracker are on <a href="https://github.com/vector-lab-tools/LLMbench">GitHub</a>.</p>
+        </details>
+        <details>
           <summary>Something is not working and it is not on this page.</summary>
           <p>If it is not on this page, open an issue on the <a href="https://github.com/vector-lab-tools/LLMbench/issues">LLMbench repository</a> to report the problem. If you have a fix, a pull request is welcome.</p>
         </details>
