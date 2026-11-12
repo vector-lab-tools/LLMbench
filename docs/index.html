@@ -149,6 +149,18 @@
   footer a:hover { color: var(--accent-text); }
   .foot-note { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
 
+  /* FAQ */
+  .faq { margin-top: 10px; border-top: 1px solid var(--rule); }
+  .faq details { border-bottom: 1px solid var(--rule); }
+  .faq summary { font-family: var(--display); font-size: 21px; line-height: 1.3; cursor: pointer; list-style: none; padding: 16px 40px 16px 0; position: relative; color: var(--ink); }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: "+"; position: absolute; right: 4px; top: 16px; font-family: var(--mono); font-size: 20px; color: var(--accent-text); }
+  .faq details[open] summary { color: var(--accent-text); }
+  .faq details[open] summary::after { content: "\2212"; }
+  .faq details p { color: var(--muted); font-size: 16.5px; max-width: 74ch; margin: 0 0 16px; }
+  .faq details .key { font-family: var(--mono); font-size: 12.5px; color: var(--ink); background: var(--surface-alt); border-radius: 6px; padding: 1px 6px; }
+  .faq details pre { margin: 0 0 16px; }
+
   @media (max-width: 820px) {
     .hero .wrap { grid-template-columns: 1fr; gap: 32px; padding-block: 48px 40px; }
     .mode, .mode.flip, .worked { grid-template-columns: 1fr; gap: 20px; }
@@ -163,9 +175,10 @@
   <div class="wrap">
     <a class="brand" href="#top"><span class="dot" aria-hidden="true"></span>LLMbench</a>
     <nav class="site-nav" aria-label="Main">
-      <a class="hide-sm" href="#about">About</a>
+      <a class="hide-sm" href="#example">Example</a>
       <a href="#modes">Modes</a>
       <a href="#setup">Setup</a>
+      <a href="#faq">FAQ</a>
       <a href="https://github.com/vector-lab-tools/LLMbench">GitHub</a>
       <button class="theme-toggle" type="button" aria-label="Toggle light and dark theme" title="Toggle theme">
         <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -200,21 +213,56 @@
     </div>
   </div>
 
+  <section id="example">
+    <div class="wrap">
+      <p class="num">01 · Worked example</p>
+      <h2>Two models part at the first word.</h2>
+      <p class="lead-in">Two open-weight models were given the same prompt to open an essay on Calvino's <em>Cybernetics and Ghosts</em>. Opening the token probabilities on the very first token shows them separating before either has written a word of its own.</p>
+      <div class="worked">
+        <div class="prose">
+          <p>The left model gave 78.5 per cent of its weight to the fragment beginning "Calvino" and 19.9 per cent to "It". Both openings were available, and sampling took one. LLMbench marks the position as a divergence point, because the right-hand model weighed the same candidates and resolved them the other way, opening on a quotation mark it rated at only 8.4 per cent.</p>
+          <p>Asked the identical question, the two models separate at their first token, and the opening each one discarded is still on the page with the probability it was given. LLMbench shows the divergence in the probability distribution under that first token, with the perplexity at the step.</p>
+        </div>
+        <div class="readout">
+          <h4>Position 1 · left model · perplexity ≈ 1.81</h4>
+          <div class="tok"><b>"Cal</b><span class="pct">78.5%</span></div>
+          <div class="bar"><span style="width:78.5%"></span></div>
+          <div class="tok"><b>"It</b><span class="pct">19.9%</span></div>
+          <div class="bar"><span style="width:19.9%"></span></div>
+          <div class="tok"><b>"Cy</b><span class="pct">0.99%</span></div>
+          <div class="bar"><span style="width:4%"></span></div>
+        </div>
+      </div>
+      <h3 style="margin-top:36px">Reproduce it in about twenty minutes</h3>
+      <p class="lead-in" style="margin-bottom:16px">Sampling and model versions vary, so your numbers will differ from these. The steps are what carry over, from a cold start to reading a model's discarded alternatives.</p>
+      <ol class="steps">
+        <li><b>Open the app.</b> Go to <a href="https://llm-bench-mu.vercel.app">llm-bench-mu.vercel.app</a>, or clone and run it locally (see <a href="#setup">Setup</a>).</li>
+        <li><b>Connect a model that returns token probabilities.</b> Add a key for one of the providers in <a href="#setup">Setup</a>, or start a local Ollama, which needs no key and keeps the text on your machine. A Qwen2.5-Coder model through Hugging Face, or any Ollama model, works.</li>
+        <li><b>Run a Compare.</b> Set both panels to open-weight models, give each the same prompt to open an essay on Calvino's <em>Cybernetics and Ghosts</em>, and run them together.</li>
+        <li><b>Read the first token.</b> Switch a panel to the Probs view and click the first token. The inspector lists the candidates it was drawn from, each with its probability and the perplexity at that step. Where the two models' first tokens differ, you have a divergence point of your own.</li>
+      </ol>
+      <figure style="margin-top:28px">
+        <a href="screenshots/01-compare.png"><img src="screenshots/web/01-compare.webp" alt="Two models answering the same Calvino prompt in side-by-side panels." width="1600" height="1000" loading="lazy"></a>
+        <figcaption>Compare mode: the two models side by side, before the Probs view opens the distribution beneath each token.</figcaption>
+      </figure>
+    </div>
+  </section>
+
   <section id="about">
     <div class="wrap">
-      <p class="num">01 · About</p>
+      <p class="num">02 · About</p>
       <h2>Machine-generated text repays close reading.</h2>
       <div class="prose">
         <p>LLMbench is a browser-based workbench for the comparative close reading of large language model outputs. It sends one prompt to two models at once, renders their replies side by side, and lets you annotate each panel and link annotations across them, so a difference between two models becomes a recorded reading rather than a passing impression.</p>
         <p>What sets it apart from a side-by-side viewer is that it reads beneath the text, to the probabilities from which each word was drawn. For every token a model returns its log-probability, the weight it gave the token it produced and the weights it gave the alternatives it set aside. LLMbench shades each token by that weight, so the points of confidence and the points of near-choice can be read on the surface of the page, and any position opens a deep dive reporting the full candidate distribution and the perplexity there.</p>
-        <p>Keys are entered in the browser and stored there. They are never sent to a server. LLMbench is open source under the GPL-3.0-or-later licence and part of the <a href="https://vector-lab-tools.github.io">Vector Lab</a>.</p>
+        <p>Keys live only in your browser's local storage; LLMbench keeps no accounts and no database, and stores no copy of them. With a local Ollama nothing leaves your machine at all. LLMbench is open source under the GPL-3.0-or-later licence and part of the <a href="https://vector-lab-tools.github.io">Vector Lab</a>.</p>
       </div>
     </div>
   </section>
 
   <section id="modes">
     <div class="wrap">
-      <p class="num">02 · Modes</p>
+      <p class="num">03 · Modes</p>
       <h2>Three tiers: Compare, Analyse, Investigate.</h2>
       <p class="lead-in">Each image links to a full-resolution screenshot. The views below use one prompt on Calvino's <em>Cybernetics and Ghosts</em> with two open-weight models.</p>
 
@@ -267,33 +315,11 @@
     </div>
   </section>
 
-  <section id="example">
-    <div class="wrap">
-      <p class="num">03 · A worked moment</p>
-      <h2>The road not taken, shown on the page.</h2>
-      <div class="worked">
-        <div class="prose">
-          <p>Open the first token of the Calvino comparison. The left model gave 78.5 per cent of its weight to the fragment that begins "Calvino" and 19.9 per cent to "It". Both were available, and sampling chose one.</p>
-          <p>LLMbench marks the position as a divergence point, because the right-hand model weighed the same candidates and resolved them the other way, opening on a quotation mark it gave only 8.4 per cent. The two essays part at their first token, and the alternative each model set aside is there in the inspector.</p>
-        </div>
-        <div class="readout" aria-hidden="false">
-          <h4>Position 1 · left model · perplexity ≈ 1.81</h4>
-          <div class="tok"><b>"Cal</b><span class="pct">78.5%</span></div>
-          <div class="bar"><span style="width:78.5%"></span></div>
-          <div class="tok"><b>"It</b><span class="pct">19.9%</span></div>
-          <div class="bar"><span style="width:19.9%"></span></div>
-          <div class="tok"><b>"Cy</b><span class="pct">0.99%</span></div>
-          <div class="bar"><span style="width:4%"></span></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <section id="setup">
     <div class="wrap">
       <p class="num">04 · Setup</p>
       <h2>Getting the API keys working.</h2>
-      <p class="lead-in">Keys go in the Settings panel (the gear icon), not in a file. They are stored in your browser and never sent to a server. You need a key for at least one provider, or a local Ollama, which needs none. For the Probs view and the Sampling and Grammar probes, the provider also has to return token probabilities, which not all of them do.</p>
+      <p class="lead-in">Keys go in the Settings panel (the gear icon), not in a file. They are stored only in your browser, with no account and no database behind them. For a hosted provider the key is sent with each request through a serverless function that forwards it to the provider and keeps no copy; a local Ollama needs no key at all and nothing leaves your machine. You need a key for at least one provider, or a local Ollama. For the Probs view and the Sampling and Grammar probes, the provider also has to return token probabilities, which not all of them do.</p>
 
       <div class="providers">
 
@@ -336,7 +362,7 @@
       <h3 style="margin-top:34px">Driving a local Ollama</h3>
       <p class="lead-in" style="margin-bottom:14px">The browser calls Ollama directly. This is where most people get stuck: the deployed site and your local Ollama are different origins, so Ollama has to be told to accept the call. That is the one command below.</p>
       <ol class="steps">
-        <li>Install Ollama from <a href="https://ollama.com">ollama.com</a> and pull a model, for example <span class="key">ollama pull gemma3</span>.</li>
+        <li>Install Ollama from <a href="https://ollama.com">ollama.com</a> and pull a model, for example <span class="key">ollama pull llama3.2</span>.</li>
         <li>Running LLMbench locally with <span class="key">npm run dev</span> on <span class="key">localhost:3000</span>? A plain <span class="key">ollama serve</span> is enough, since Ollama already allows localhost.</li>
         <li>Using the deployed app at <span class="key">llm-bench-mu.vercel.app</span>? Start Ollama with the origin allowed, so the browser's cross-origin call is accepted:
           <pre>OLLAMA_ORIGINS="https://llm-bench-mu.vercel.app,http://localhost:3000,http://127.0.0.1:3000" ollama serve</pre>
@@ -352,6 +378,53 @@
 cd LLMbench
 npm install
 npm run dev     # then open http://localhost:3000</pre>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="wrap">
+      <p class="num">05 · FAQ</p>
+      <h2>Questions that come up.</h2>
+      <div class="faq">
+        <details>
+          <summary>Where do my API keys go?</summary>
+          <p>Keys live in your browser's local storage, one per provider. LLMbench keeps no accounts and no database, so nothing is held against your name. For a hosted provider the key is sent with each request to a serverless function that forwards it to the provider and keeps no copy of it. With a local Ollama the browser talks to Ollama directly, nothing passes through an LLMbench server, and no key is involved at all.</p>
+        </details>
+        <details>
+          <summary>Which providers return token probabilities for the Probs view?</summary>
+          <p>OpenAI, Google Gemini on the <span class="key">gemini-2.0-flash</span> model only, OpenRouter on its <span class="key">openai/*</span> routes, Hugging Face on the Qwen2.5-Coder models, and any local Ollama. Anthropic does not return logprobs, so Compare, the word-level diff, the tone view and the divergence metrics work with Claude, but the Probs view and the probability-based probes stay inactive.</p>
+        </details>
+        <details>
+          <summary>My Gemini key works, but the Probs view is empty. Why?</summary>
+          <p>Use <span class="key">gemini-2.0-flash</span>. The 2.5 models do not return logprobs, so the Probs view has nothing to shade. Everything else works on either.</p>
+        </details>
+        <details>
+          <summary>How do I run a model with no API key, and keep my prompts private?</summary>
+          <p>Install Ollama, pull a model, and choose "Ollama (Local)" in Settings. It needs no key, keeps every prompt and response on your machine, and returns full token probabilities, so all modes work against it. It is the route for sensitive material and for open-weight models the hosted services do not expose.</p>
+        </details>
+        <details>
+          <summary>I am driving a local Ollama from the deployed site and it will not connect.</summary>
+          <p>Start Ollama with the deployed origin allowed, so the browser's cross-origin call is accepted:</p>
+          <pre>OLLAMA_ORIGINS="https://llm-bench-mu.vercel.app,http://localhost:3000,http://127.0.0.1:3000" ollama serve</pre>
+          <p>The Settings panel shows this command pre-filled with your current origin and a copy button.</p>
+        </details>
+        <details>
+          <summary>The local Ollama path works in Chrome but not Safari.</summary>
+          <p>Safari does not honour the localhost exemption for the browser-direct call. Use Chrome, Firefox, Edge, Arc or Brave when driving a local Ollama from the deployed site. Safari is fine for a locally-run LLMbench.</p>
+        </details>
+        <details>
+          <summary>Which Hugging Face models actually return logprobs?</summary>
+          <p>The Qwen2.5-Coder models, 32B and 7B, are the dependable choice. The router proxies your request to a third-party backend whose logprobs support varies by model, and the account needs inference credit.</p>
+        </details>
+        <details>
+          <summary>Can I use my institution's own endpoint?</summary>
+          <p>Yes. Choose the OpenAI-compatible provider and give it a Base URL ending at <span class="key">/v1</span> with its key. Logprobs come through if that endpoint returns them. This is the route for a university gateway or a self-hosted model server.</p>
+        </details>
+        <details>
+          <summary>Can I export an analysis?</summary>
+          <p>Yes. Comparisons export as structured JSON, formatted text, or a side-by-side landscape PDF with the annotations. The Probs view adds a dedicated export with the heatmap, the per-token statistics, the entropy curve and an annotated-token page.</p>
+        </details>
+      </div>
     </div>
   </section>
 
