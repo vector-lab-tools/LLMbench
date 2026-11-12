@@ -354,6 +354,10 @@
         <div class="ends"><span>near-deterministic</span><span>divergent</span></div>
       </div>
 
+      <div class="note" style="margin: 0 0 32px;">
+        <p><strong>Why the difference between disciplines?</strong> Perplexity here measures how flat the model's next-token distribution is, which is to say how templated the task is in its training. The causes of the French Revolution have a canonical expository form the corpus repeats thousands of times, so the model reproduces one near-fixed opening and its uncertainty falls only on the specific facts it has to supply. A modernist short story has no single correct output, and asking for a distinctive voice rewards the low-probability tail, so the distribution stays flat and sampling does real work. Read this way, the spectrum tracks how culturally sedimented a genre is, surfacing as low perplexity where the training text has converged on one form.</p>
+      </div>
+
       <div class="cases">
         <div class="case">
           <figure><a href="screenshots/case-studies/cs-history.png"><img src="screenshots/case-studies/web/cs-history.webp" alt="Bird's-eye probability map of two French Revolution openings, low-confidence cells clustering on the specific facts." width="1600" height="1000" loading="lazy"></a></figure>
